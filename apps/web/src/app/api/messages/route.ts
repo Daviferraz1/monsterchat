@@ -79,6 +79,43 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
       console.error('Error sending message:', error);
       status = 'failed';
+
+      // Token expirado (401) → resposta amigável para o usuário atualizar o token
+      const statusCode = error?.response?.status;
+      const isTokenError =
+        statusCode === 401 ||
+        (typeof error?.response?.data?.error?.message === 'string' &&
+          /token|expired|invalid_token|session/i.test(error.response.data.error.message));
+
+      if (isTokenError) {
+        const message = await createMessage({
+          conversationId: conversation_id,
+          direction: 'outbound',
+          senderType: 'agent',
+          senderId: sender_id,
+          contentType: 'text',
+          body: text,
+          externalId: undefined,
+          status: 'failed',
+        });
+        await supabaseAdmin
+          .from('conversations')
+          .update({
+            last_message_at: new Date().toISOString(),
+            last_message_preview: text,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', conversation_id);
+
+        return NextResponse.json(
+          {
+            error:
+              'Token do canal expirado. Atualize o token em Configurações → Canais.',
+            message,
+          },
+          { status: 401 }
+        );
+      }
     }
 
     // Criar mensagem no banco

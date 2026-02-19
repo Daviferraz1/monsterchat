@@ -22,11 +22,16 @@ export function useSendMessage() {
         }),
       });
 
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        const message =
+          typeof data?.error === 'string'
+            ? data.error
+            : 'Falha ao enviar mensagem.';
+        throw new Error(message);
       }
 
-      return await response.json();
+      return data;
     } catch (error) {
       console.error('Error sending message:', error);
       throw error;

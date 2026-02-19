@@ -5,7 +5,7 @@
 import { upsertContact } from '../services/contact';
 import { findOrCreateConversation, updateConversation } from '../services/conversation';
 import { createMessage, updateMessageStatus, getMessageByExternalId } from '../services/message';
-import { getChannelByExternalId } from '../services/channel';
+import { getChannelByExternalId, getChannelByExternalIdMaybeInactive } from '../services/channel';
 import { downloadWhatsAppMedia } from '../services/whatsapp-media';
 
 function isNetworkError(err: unknown): boolean {
@@ -96,13 +96,20 @@ export async function handleWhatsAppWebhook(body: any) {
           continue;
         }
 
-        // Buscar canal
-        const channel = await getChannelByExternalId('whatsapp', phoneNumberId);
+        // Buscar canal ativo
+        let channel = await getChannelByExternalId('whatsapp', phoneNumberId);
         if (!channel) {
-          console.error('[WhatsApp Webhook] Channel not found!', {
-            phoneNumberId,
-            hint: 'Verifique se o canal está cadastrado em /settings/channels com external_id = ' + phoneNumberId,
-          });
+          const inactive = await getChannelByExternalIdMaybeInactive('whatsapp', phoneNumberId);
+          if (inactive) {
+            console.warn('[WhatsApp Webhook] Canal existe mas está inativo. Ative em Configurações → Canais.', {
+              phoneNumberId,
+              channelId: inactive.id,
+            });
+          } else {
+            console.error('[WhatsApp Webhook] Canal não cadastrado. Cadastre em Configurações → Canais com external_id (Phone Number ID) = ' + phoneNumberId, {
+              phoneNumberId,
+            });
+          }
           continue;
         }
 

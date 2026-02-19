@@ -10,27 +10,38 @@ interface MessageInputProps {
 
 export function MessageInput({ conversationId }: MessageInputProps) {
   const [text, setText] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const { sendMessage, sending } = useSendMessage();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim() || sending) return;
+    setError(null);
 
     try {
       await sendMessage(conversationId, text);
       setText('');
-    } catch (error) {
-      console.error('Error sending message:', error);
+    } catch (err) {
+      console.error('Error sending message:', err);
+      setError(err instanceof Error ? err.message : 'Falha ao enviar mensagem.');
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="border-t p-4">
+      {error && (
+        <p className="mb-2 text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
       <div className="flex gap-2">
         <input
           type="text"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (error) setError(null);
+          }}
           placeholder="Digite uma mensagem..."
           className="flex-1 px-4 py-2 border rounded-lg bg-background"
           disabled={sending}
