@@ -47,3 +47,84 @@ export async function sendWhatsAppText(params: WhatsAppSendTextParams) {
 
   return response.data;
 }
+
+export interface WhatsAppSendMediaParams {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  mediaUrl: string;
+  caption?: string;
+  filename?: string;
+}
+
+export async function sendWhatsAppImage(params: WhatsAppSendMediaParams) {
+  const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const body: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+    to: params.to,
+    type: 'image',
+    image: { link: params.mediaUrl, caption: params.caption || undefined },
+  };
+  const response = await axios.post(url, body, {
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  return response.data as WhatsAppSendMessageResponse;
+}
+
+export async function sendWhatsAppVideo(params: WhatsAppSendMediaParams) {
+  const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const body: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+    to: params.to,
+    type: 'video',
+    video: { link: params.mediaUrl, caption: params.caption || undefined },
+  };
+  const response = await axios.post(url, body, {
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  return response.data as WhatsAppSendMessageResponse;
+}
+
+export async function sendWhatsAppAudio(params: WhatsAppSendMediaParams) {
+  const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const body: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+    to: params.to,
+    type: 'audio',
+    audio: { link: params.mediaUrl },
+  };
+  const response = await axios.post(url, body, {
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  return response.data as WhatsAppSendMessageResponse;
+}
+
+export async function sendWhatsAppDocument(params: WhatsAppSendMediaParams) {
+  const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const body: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+    to: params.to,
+    type: 'document',
+    document: {
+      link: params.mediaUrl,
+      caption: params.caption || undefined,
+      filename: params.filename || 'documento',
+    },
+  };
+  const response = await axios.post(url, body, {
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  return response.data as WhatsAppSendMessageResponse;
+}

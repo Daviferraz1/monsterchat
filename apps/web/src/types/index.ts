@@ -35,6 +35,7 @@ export interface Conversation {
   unread_count: number;
   last_message_at?: string;
   last_message_preview?: string;
+  last_agent_reply_at?: string;
   closed_at?: string;
   metadata: Record<string, any>;
   created_at: string;
@@ -49,6 +50,8 @@ export interface Contact {
   external_id: string;
   name?: string;
   phone?: string;
+  email?: string;
+  notes?: string;
   profile_pic_url?: string;
   metadata: Record<string, any>;
   created_at: string;

@@ -1,10 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSupabase } from './useSupabase';
 import type { Message } from '@/types';
+
+const POLL_INTERVAL_MS = 4000;
 
 export function useRealtimeMessages(conversationId: string | null) {
   const supabase = useSupabase();
   const [messages, setMessages] = useState<Message[]>([]);
+
+  const loadMessages = useCallback(async () => {
+    if (!conversationId) return;
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error loading messages:', error);
+      return;
+    }
+    setMessages(data || []);
+  }, [conversationId, supabase]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -12,25 +29,11 @@ export function useRealtimeMessages(conversationId: string | null) {
       return;
     }
 
-    // Carregar mensagens iniciais
-    const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Error loading messages:', error);
-        return;
-      }
-
-      setMessages(data || []);
-    };
-
     loadMessages();
 
-    // Inscrever em novas mensagens
+    // Fallback: refetch periódico caso o Realtime não entregue (ex.: primeiro acesso, RLS, etc.)
+    const interval = setInterval(loadMessages, POLL_INTERVAL_MS);
+
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
@@ -42,7 +45,12 @@ export function useRealtimeMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+          const newRow = (payload as { new?: Message }).new ?? (payload as { record?: Message }).record;
+          if (newRow) {
+            setMessages((prev) =>
+              prev.some((m) => m.id === newRow.id) ? prev : [...prev, newRow]
+            );
+          }
         }
       )
       .on(
@@ -54,19 +62,21 @@ export function useRealtimeMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === payload.new.id ? (payload.new as Message) : msg
-            )
-          );
+          const newRow = (payload as { new?: Message }).new ?? (payload as { record?: Message }).record;
+          if (newRow) {
+            setMessages((prev) =>
+              prev.map((msg) => (msg.id === newRow.id ? newRow : msg))
+            );
+          }
         }
       )
       .subscribe();
 
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [conversationId, supabase]);
+  }, [conversationId, supabase, loadMessages]);
 
   return messages;
 }

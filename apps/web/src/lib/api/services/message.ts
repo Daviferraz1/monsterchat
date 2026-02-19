@@ -63,6 +63,10 @@ export async function getMessageByExternalId(externalId: string) {
   return data;
 }
 
+/**
+ * Atualiza o status de uma mensagem pelo external_id.
+ * Retorna a mensagem atualizada ou null se não existir (ex.: status chegou antes da mensagem no banco).
+ */
 export async function updateMessageStatus(
   externalId: string,
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed',
@@ -76,7 +80,7 @@ export async function updateMessageStatus(
     })
     .eq('external_id', externalId)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('Error updating message status:', error);

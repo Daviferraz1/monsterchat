@@ -1,4 +1,8 @@
 import axios from 'axios';
+import { supabaseAdmin } from '../supabase';
+import { isSupabasePlaceholder } from '../env';
+
+const BUCKET = 'media';
 
 /**
  * Baixa informações da mídia do WhatsApp usando Graph API
@@ -22,4 +26,72 @@ export async function downloadWhatsAppMedia(
     mimeType: response.data.mime_type,
     sha256: response.data.sha256,
   };
+}
+
+function extFromMime(mimeType: string): string {
+  const map: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'video/mp4': 'mp4',
+    'video/3gpp': '3gp',
+    'audio/ogg': 'ogg',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/amr': 'amr',
+    'audio/aac': 'aac',
+  };
+  return map[mimeType?.toLowerCase()] || 'bin';
+}
+
+/**
+ * Baixa a mídia da URL temporária da Meta (com token) e faz upload no Supabase Storage.
+ * Retorna a URL pública permanente. Se Supabase não estiver configurado, retorna a URL temporária.
+ */
+export async function storeWhatsAppMediaInSupabase(
+  mediaId: string,
+  accessToken: string,
+  conversationId: string,
+  options: { mimeType?: string; contentType?: string; filename?: string }
+): Promise<{ url: string; mimeType: string }> {
+  const meta = await downloadWhatsAppMedia(mediaId, accessToken);
+  const mimeType = meta.mimeType || options.mimeType || 'application/octet-stream';
+
+  if (isSupabasePlaceholder()) {
+    return { url: meta.url, mimeType };
+  }
+
+  try {
+    const downloadRes = await axios.get<ArrayBuffer>(meta.url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      responseType: 'arraybuffer',
+      maxContentLength: 50 * 1024 * 1024,
+      timeout: 60000,
+    });
+
+    const buffer = downloadRes.data;
+    const ext = extFromMime(mimeType);
+    const safeName = (options.filename || `file`).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+    const path = `inbound/${conversationId}/${Date.now()}-${safeName}.${ext}`;
+
+    const { error } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .upload(path, buffer, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (error) {
+      console.error('Supabase upload error for WhatsApp media', error);
+      return { url: meta.url, mimeType };
+    }
+
+    const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+    return { url: urlData.publicUrl, mimeType };
+  } catch (err) {
+    console.error('Error downloading or storing WhatsApp media', err);
+    return { url: meta.url, mimeType };
+  }
 }

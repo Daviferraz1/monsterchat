@@ -6,7 +6,7 @@ import { upsertContact } from '../services/contact';
 import { findOrCreateConversation, updateConversation } from '../services/conversation';
 import { createMessage, updateMessageStatus, getMessageByExternalId } from '../services/message';
 import { getChannelByExternalId, getChannelByExternalIdMaybeInactive } from '../services/channel';
-import { downloadWhatsAppMedia } from '../services/whatsapp-media';
+import { storeWhatsAppMediaInSupabase } from '../services/whatsapp-media';
 
 function isNetworkError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -64,6 +64,7 @@ interface UnifiedInboundMessage {
   contentType: string;
   body?: string;
   mediaId?: string;
+  mediaFilename?: string;
   timestamp: string;
   rawPayload: any;
 }
@@ -200,9 +201,16 @@ async function processWhatsAppMessage(
 
     if (normalized.mediaId) {
       try {
-        const mediaInfo = await downloadWhatsAppMedia(normalized.mediaId, accessToken);
-        // Nota: Para produção, você precisaria fazer upload da mídia para Supabase Storage
-        // Por enquanto, apenas armazenamos a URL temporária da Meta
+        const mediaInfo = await storeWhatsAppMediaInSupabase(
+          normalized.mediaId,
+          accessToken,
+          conversation.id,
+          {
+            mimeType: undefined,
+            contentType: normalized.contentType,
+            filename: normalized.mediaFilename,
+          }
+        );
         mediaUrl = mediaInfo.url;
         mediaMimeType = mediaInfo.mimeType;
       } catch (error) {
@@ -260,6 +268,7 @@ function normalizeWhatsAppMessage(
   let contentType: string = 'text';
   let body: string | undefined;
   let mediaId: string | undefined;
+  let mediaFilename: string | undefined;
 
   if (message.text) {
     contentType = 'text';
@@ -279,7 +288,7 @@ function normalizeWhatsAppMessage(
     contentType = 'document';
     mediaId = message.document.id;
     body = message.document.caption;
-    // Filename pode estar em message.document.filename
+    mediaFilename = message.document.filename;
   } else if (message.sticker) {
     contentType = 'sticker';
     mediaId = message.sticker.id;
@@ -303,6 +312,7 @@ function normalizeWhatsAppMessage(
     contentType,
     body,
     mediaId,
+    mediaFilename,
     timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
     rawPayload: message,
   };
@@ -325,16 +335,19 @@ async function processWhatsAppStatus(status: any) {
       return;
     }
 
-    await updateMessageStatus(
+    const updated = await updateMessageStatus(
       status.id,
       newStatus,
       status.errors?.[0]?.message
     );
 
-    console.debug('WhatsApp message status updated', {
-      externalId: status.id,
-      status: newStatus,
-    });
+    if (updated) {
+      console.debug('WhatsApp message status updated', {
+        externalId: status.id,
+        status: newStatus,
+      });
+    }
+    // Se updated === null, a mensagem ainda não está no banco (ex.: status chegou antes) — ignorar em silêncio
   } catch (error) {
     console.error('Error processing WhatsApp status', error, {
       statusId: status.id,

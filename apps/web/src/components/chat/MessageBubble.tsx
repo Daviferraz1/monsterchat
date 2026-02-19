@@ -36,6 +36,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             url={message.media_url}
             mimeType={message.media_mime_type}
             filename={message.media_filename}
+            contentType={message.content_type}
           />
         )}
         <span className="text-xs opacity-70 mt-1 block">
