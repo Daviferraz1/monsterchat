@@ -7,19 +7,24 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-// GET para verificação do webhook
+// GET para verificação do webhook (Meta envia hub.mode, hub.verify_token, hub.challenge)
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  if (mode === 'subscribe' && token === apiEnv.META_WEBHOOK_VERIFY_TOKEN) {
-    console.log('WhatsApp webhook verified');
-    return new NextResponse(challenge, { status: 200 });
+  // Meta exige resposta 200 com o corpo = hub.challenge (texto puro)
+  if (mode === 'subscribe' && typeof challenge === 'string' && challenge.length > 0) {
+    const expectedToken = apiEnv.META_WEBHOOK_VERIFY_TOKEN;
+    if (token === expectedToken) {
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
   }
 
-  console.warn('WhatsApp webhook verification failed');
   return new NextResponse('Forbidden', { status: 403 });
 }
 

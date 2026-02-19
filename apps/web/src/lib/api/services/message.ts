@@ -48,3 +48,41 @@ export async function createMessage(data: MessageData) {
 
   return message;
 }
+
+export async function getMessageByExternalId(externalId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('messages')
+    .select('*')
+    .eq('external_id', externalId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data;
+}
+
+export async function updateMessageStatus(
+  externalId: string,
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed',
+  errorMessage?: string
+) {
+  const { data, error } = await supabaseAdmin
+    .from('messages')
+    .update({
+      status,
+      error_message: errorMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('external_id', externalId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating message status:', error);
+    throw error;
+  }
+
+  return data;
+}

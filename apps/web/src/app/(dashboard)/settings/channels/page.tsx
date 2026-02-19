@@ -1,0 +1,231 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { MessageCircle, Instagram, Plus, Loader2 } from 'lucide-react';
+
+interface Channel {
+  id: string;
+  type: 'whatsapp' | 'instagram';
+  name: string;
+  external_id: string;
+  business_account_id: string | null;
+  access_token: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export default function ChannelsPage() {
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    type: 'whatsapp' as 'whatsapp' | 'instagram',
+    name: '',
+    external_id: '',
+    business_account_id: '',
+    access_token: '',
+    is_active: true,
+  });
+
+  const loadChannels = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/channels');
+      if (!res.ok) throw new Error('Falha ao carregar canais');
+      const data = await res.json();
+      setChannels(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao carregar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadChannels();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    try {
+      const res = await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: form.type,
+          name: form.name,
+          external_id: form.external_id.trim(),
+          business_account_id: form.business_account_id.trim() || undefined,
+          access_token: form.access_token.trim(),
+          is_active: form.is_active,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      setSuccess('Canal cadastrado com sucesso!');
+      setForm({
+        type: 'whatsapp',
+        name: '',
+        external_id: '',
+        business_account_id: '',
+        access_token: '',
+        is_active: true,
+      });
+      loadChannels();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-auto">
+      <div className="p-6 max-w-2xl">
+        <h1 className="text-2xl font-bold mb-2">Canais</h1>
+        <p className="text-muted-foreground mb-6">
+          Cadastre seu canal do WhatsApp (e depois Instagram) para receber e enviar mensagens. Sem um canal ativo, o webhook não associa mensagens ao inbox.
+        </p>
+
+        {/* Formulário */}
+        <form onSubmit={handleSubmit} className="space-y-4 mb-8 p-4 border rounded-lg bg-muted/30">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Novo canal
+          </h2>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Tipo</label>
+            <select
+              value={form.type}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'whatsapp' | 'instagram' }))}
+              className="w-full px-3 py-2 border rounded-md bg-background"
+            >
+              <option value="whatsapp">WhatsApp</option>
+              <option value="instagram">Instagram</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Nome do canal</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Ex: WhatsApp Principal"
+              className="w-full px-3 py-2 border rounded-md bg-background"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              {form.type === 'whatsapp' ? 'ID do número de telefone (Phone Number ID)' : 'ID da página (Page ID)'}
+            </label>
+            <input
+              type="text"
+              value={form.external_id}
+              onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))}
+              placeholder={form.type === 'whatsapp' ? 'Ex: 247994065074259' : 'ID da página'}
+              className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
+              required
+            />
+          </div>
+
+          {form.type === 'whatsapp' && (
+            <div>
+              <label className="block text-sm font-medium mb-1">ID da conta Business (WABA ID) — opcional</label>
+              <input
+                type="text"
+                value={form.business_account_id}
+                onChange={(e) => setForm((f) => ({ ...f, business_account_id: e.target.value }))}
+                placeholder="Ex: 285585611312219"
+                className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Token de acesso (Access Token)</label>
+            <input
+              type="password"
+              value={form.access_token}
+              onChange={(e) => setForm((f) => ({ ...f, access_token: e.target.value }))}
+              placeholder="Cole o token gerado na Meta"
+              className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
+              required
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={form.is_active}
+              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+              className="rounded"
+            />
+            <label htmlFor="is_active" className="text-sm">Canal ativo</label>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600">{error}</p>
+          )}
+          {success && (
+            <p className="text-sm text-green-600">{success}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {saving ? 'Salvando...' : 'Cadastrar canal'}
+          </button>
+        </form>
+
+        {/* Lista de canais */}
+        <h2 className="font-semibold mb-3">Canais cadastrados</h2>
+        {loading ? (
+          <p className="text-muted-foreground">Carregando...</p>
+        ) : channels.length === 0 ? (
+          <p className="text-muted-foreground">Nenhum canal cadastrado. Cadastre um acima para começar.</p>
+        ) : (
+          <ul className="space-y-2">
+            {channels.map((ch) => (
+              <li
+                key={ch.id}
+                className="flex items-center gap-3 p-3 border rounded-lg bg-background"
+              >
+                <span className="flex items-center justify-center w-9 h-9 rounded-full bg-muted">
+                  {ch.type === 'whatsapp' ? (
+                    <MessageCircle className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <Instagram className="w-5 h-5 text-pink-500" />
+                  )}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium">{ch.name}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{ch.external_id}</p>
+                </div>
+                <span
+                  className={`text-xs px-2 py-1 rounded-full ${
+                    ch.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {ch.is_active ? 'Ativo' : 'Inativo'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
