@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSupabase } from './useSupabase';
 import type { Message } from '@/types';
 
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 1000;
 
 export function useRealtimeMessages(conversationId: string | null) {
   const supabase = useSupabase();
@@ -14,7 +14,8 @@ export function useRealtimeMessages(conversationId: string | null) {
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(10000);
 
     if (error) {
       console.error('Error loading messages:', error);
@@ -87,5 +88,5 @@ export function useRealtimeMessages(conversationId: string | null) {
     };
   }, [conversationId, supabase, loadMessages]);
 
-  return messages;
+  return { messages, refresh: loadMessages };
 }

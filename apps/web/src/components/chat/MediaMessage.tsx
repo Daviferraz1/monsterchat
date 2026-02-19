@@ -38,8 +38,11 @@ export function MediaMessage({ url, mimeType, filename, contentType }: MediaMess
 
   if (isUnavailable) {
     return (
-      <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-        Este áudio/imagem não está mais disponível para reprodução ou download (mensagem recebida antes do armazenamento no servidor). Novas mídias passam a ser salvas e ficam acessíveis.
+      <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground space-y-1">
+        <p>Este áudio/imagem não está disponível para reprodução ou download (o link exige autenticação da Meta).</p>
+        <p className="text-xs">
+          Para que <strong>novas</strong> mídias sejam salvas e fiquem acessíveis: na Vercel, em Environment Variables, defina <code className="bg-black/10 dark:bg-black/30 px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code> (chave service_role do Supabase). Depois faça um novo deploy.
+        </p>
       </div>
     );
   }

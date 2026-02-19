@@ -73,7 +73,7 @@ export function useConversations(filters?: {
 
     loadConversations(true);
 
-    const pollInterval = setInterval(() => loadConversations(false), 5000);
+    const pollInterval = setInterval(() => loadConversations(false), 2000);
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') loadConversations(false);

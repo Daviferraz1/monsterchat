@@ -10,14 +10,18 @@ export interface ContactData {
 }
 
 export async function upsertContact(data: ContactData) {
-  // Verificar se contato já existe
-  const { data: existing } = await supabaseAdmin
+  // Verificar se contato já existe (maybeSingle: 0 linhas não é erro)
+  const { data: existing, error: selectError } = await supabaseAdmin
     .from('contacts')
     .select('*')
     .eq('channel_type', data.channelType)
     .eq('external_id', data.externalId)
-    .single();
+    .maybeSingle();
 
+  if (selectError) {
+    console.error('[Contact] Erro ao buscar contato:', selectError);
+    throw selectError;
+  }
   if (existing) {
     // Atualizar contato existente
     const { data: updated, error } = await supabaseAdmin

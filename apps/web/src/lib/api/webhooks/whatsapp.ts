@@ -117,11 +117,14 @@ export async function handleWhatsAppWebhook(body: any) {
           if (inactive) {
             console.warn('[WhatsApp Webhook] Canal existe mas está inativo. Ative em Configurações → Canais.', {
               phoneNumberId,
+              displayPhoneNumber,
               channelId: inactive.id,
             });
           } else {
-            console.error('[WhatsApp Webhook] Canal não cadastrado. Cadastre em Configurações → Canais com external_id (Phone Number ID) = ' + phoneNumberId, {
+            console.error('[WhatsApp Webhook] Canal não encontrado — conversa não será salva. Cadastre em Configurações → Canais com external_id = Phone Number ID ou número de exibição.', {
               phoneNumberId,
+              displayPhoneNumber,
+              tried: ['whatsapp:' + phoneNumberId, displayPhoneNumber ? 'whatsapp:' + displayPhoneNumber : null],
             });
           }
           continue;
@@ -134,7 +137,7 @@ export async function handleWhatsAppWebhook(body: any) {
 
         // Processar mensagens recebidas
         if (value.messages && value.messages.length > 0) {
-          console.log('[WhatsApp Webhook] Processing', value.messages.length, 'message(s)');
+          console.log('[WhatsApp Webhook] Processing', value.messages.length, 'message(s), channelId:', channel.id);
           for (const message of value.messages) {
             try {
               await withRetry(
@@ -201,10 +204,12 @@ async function processWhatsAppMessage(
     });
 
     // Buscar ou criar conversa
+    console.log('[WhatsApp Webhook] Finding or creating conversation', { channelId, contactId: contactRecord.id });
     const conversation = await findOrCreateConversation({
       channelId,
       contactId: contactRecord.id,
     });
+    console.log('[WhatsApp Webhook] Conversation ready', { conversationId: conversation.id });
 
     // Processar mídia se houver
     let mediaUrl: string | undefined;

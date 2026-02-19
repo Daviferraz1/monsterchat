@@ -13,14 +13,18 @@ export interface ConversationUpdate {
 }
 
 export async function findOrCreateConversation(data: ConversationData) {
-  // Buscar conversa existente
-  const { data: existing } = await supabaseAdmin
+  // Buscar conversa existente (maybeSingle: 0 linhas não é erro)
+  const { data: existing, error: selectError } = await supabaseAdmin
     .from('conversations')
     .select('*')
     .eq('channel_id', data.channelId)
     .eq('contact_id', data.contactId)
-    .single();
+    .maybeSingle();
 
+  if (selectError) {
+    console.error('[Conversation] Erro ao buscar conversa:', selectError);
+    throw selectError;
+  }
   if (existing) {
     return existing;
   }

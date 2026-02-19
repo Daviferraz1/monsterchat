@@ -76,18 +76,24 @@ export async function POST(request: NextRequest) {
     const body = JSON.parse(rawBody);
 
     // Log para debug
-    console.log('[WhatsApp Webhook Route] Body parsed, starting async processing');
+    console.log('[WhatsApp Webhook Route] Body parsed, processing...');
 
-    // Processar webhook (assíncrono, não bloqueia resposta)
-    handleWhatsAppWebhook(body).catch((error) => {
+    // Processar webhook ANTES de responder — em serverless (Vercel) o processo pode encerrar
+    // após o return e o trabalho em background ser cortado, então a conversa não era salva
+    try {
+      await handleWhatsAppWebhook(body);
+      console.log('[WhatsApp Webhook Route] Processing finished OK');
+    } catch (error) {
       console.error('[WhatsApp Webhook Route] Error processing webhook:', error);
-      // Log stack trace completo
       if (error instanceof Error) {
         console.error('[WhatsApp Webhook Route] Stack:', error.stack);
       }
-    });
+      return NextResponse.json(
+        { error: 'Webhook processing failed' },
+        { status: 500 }
+      );
+    }
 
-    // Responder imediatamente
     return new NextResponse('OK', { status: 200 });
   } catch (error: any) {
     console.error('Error in WhatsApp webhook:', error);
