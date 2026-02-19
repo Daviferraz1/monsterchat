@@ -3,10 +3,38 @@
 // Usamos valores padrão para permitir que o build complete
 const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || !process.env.NEXT_PUBLIC_SUPABASE_URL;
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key';
+
+/** True se as credenciais do Supabase são placeholder (não configuradas). */
+export function isSupabasePlaceholder(): boolean {
+  const isPlaceholder = (
+    SUPABASE_URL === 'https://placeholder.supabase.co' ||
+    !SUPABASE_SERVICE_ROLE_KEY ||
+    SUPABASE_SERVICE_ROLE_KEY === 'placeholder-service-role-key'
+  );
+  
+  // Debug apenas em desenvolvimento
+  if (process.env.NODE_ENV === 'development' && isPlaceholder) {
+    console.warn('[Supabase] Usando valores placeholder:', {
+      SUPABASE_URL,
+      hasServiceKey: !!SUPABASE_SERVICE_ROLE_KEY,
+      serviceKeyIsPlaceholder: SUPABASE_SERVICE_ROLE_KEY === 'placeholder-service-role-key',
+      serviceKeyLength: SUPABASE_SERVICE_ROLE_KEY?.length,
+      env_NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      env_SUPABASE_SERVICE_ROLE_KEY_exists: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      env_SUPABASE_SERVICE_ROLE_KEY_length: process.env.SUPABASE_SERVICE_ROLE_KEY?.length,
+      allEnvKeys: Object.keys(process.env).filter(k => k.includes('SUPABASE')),
+    });
+  }
+  
+  return isPlaceholder;
+}
+
 export const apiEnv = {
   // Supabase
-  SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key',
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
   
   // Meta App
   META_APP_SECRET: process.env.META_APP_SECRET || 'placeholder-meta-secret',

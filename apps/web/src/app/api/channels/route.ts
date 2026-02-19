@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/api/supabase';
+import { isSupabasePlaceholder } from '@/lib/api/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -8,6 +9,15 @@ export const runtime = 'nodejs';
  * GET /api/channels - Lista todos os canais
  */
 export async function GET() {
+  if (isSupabasePlaceholder()) {
+    return NextResponse.json(
+      {
+        error: 'Supabase não configurado. Verifique se NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY estão no arquivo .env e reinicie o servidor Next.js (Ctrl+C e depois npm run dev).',
+        code: 'SUPABASE_NOT_CONFIGURED',
+      },
+      { status: 503 }
+    );
+  }
   try {
     const { data, error } = await supabaseAdmin
       .from('channels')
@@ -36,6 +46,15 @@ export async function GET() {
  * POST /api/channels - Cria um novo canal (WhatsApp ou Instagram)
  */
 export async function POST(request: NextRequest) {
+  if (isSupabasePlaceholder()) {
+    return NextResponse.json(
+      {
+        error: 'Supabase não configurado. Verifique se NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY estão no arquivo .env e reinicie o servidor Next.js (Ctrl+C e depois npm run dev).',
+        code: 'SUPABASE_NOT_CONFIGURED',
+      },
+      { status: 503 }
+    );
+  }
   try {
     const body = await request.json();
     const {

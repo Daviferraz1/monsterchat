@@ -34,9 +34,18 @@ export default function ChannelsPage() {
     setLoading(true);
     try {
       const res = await fetch('/api/channels');
-      if (!res.ok) throw new Error('Falha ao carregar canais');
-      const data = await res.json();
-      setChannels(data);
+      const text = await res.text();
+      let data: Channel[] | { error?: string; code?: string } = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        throw new Error(res.ok ? 'Resposta inválida' : 'Falha ao carregar canais');
+      }
+      if (!res.ok) {
+        const err = typeof data === 'object' && data && 'error' in data ? (data as { error: string }).error : res.statusText;
+        throw new Error(err || 'Falha ao carregar canais');
+      }
+      setChannels(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar');
     } finally {
@@ -66,8 +75,14 @@ export default function ChannelsPage() {
           is_active: form.is_active,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      const text = await res.text();
+      let data: { error?: string; id?: string } = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        if (!res.ok) throw new Error('Falha ao salvar. Verifique as variáveis de ambiente do Supabase.');
+      }
+      if (!res.ok) throw new Error((data && data.error) || 'Falha ao salvar');
       setSuccess('Canal cadastrado com sucesso!');
       setForm({
         type: 'whatsapp',
@@ -174,7 +189,15 @@ export default function ChannelsPage() {
           </div>
 
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <div className="text-sm text-red-600 space-y-1">
+              <p>{error}</p>
+              {error.includes('Supabase não configurado') && (
+                <div className="text-muted-foreground mt-2 space-y-1 text-xs">
+                  <p><strong>Desenvolvimento local:</strong> Verifique se o arquivo <code className="bg-muted px-1 rounded">apps/web/.env</code> tem NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY. Depois <strong>reinicie o servidor Next.js</strong> (Ctrl+C e depois <code className="bg-muted px-1 rounded">npm run dev</code>).</p>
+                  <p><strong>Vercel:</strong> Settings → Environment Variables → adicione as variáveis. Depois faça um novo deploy.</p>
+                </div>
+              )}
+            </div>
           )}
           {success && (
             <p className="text-sm text-green-600">{success}</p>
