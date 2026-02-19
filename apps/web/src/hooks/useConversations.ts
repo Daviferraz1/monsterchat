@@ -27,8 +27,8 @@ export function useConversations(filters?: {
   const repliedFilter = filters?.replied ?? 'all';
 
   useEffect(() => {
-    const loadConversations = async () => {
-      setLoading(true);
+    const loadConversations = async (showLoading = true) => {
+      if (showLoading) setLoading(true);
       let query = supabase
         .from('conversations')
         .select(`
@@ -71,9 +71,15 @@ export function useConversations(filters?: {
       setLoading(false);
     };
 
-    loadConversations();
+    loadConversations(true);
 
-    // Inscrever em atualizações de conversas
+    const pollInterval = setInterval(() => loadConversations(false), 5000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadConversations(false);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     const channel = supabase
       .channel('conversations')
       .on(
@@ -84,12 +90,14 @@ export function useConversations(filters?: {
           table: 'conversations',
         },
         () => {
-          loadConversations();
+          loadConversations(false);
         }
       )
       .subscribe();
 
     return () => {
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       supabase.removeChannel(channel);
     };
   }, [supabase, statusFilter, applyStatus, repliedFilter, filters?.assigned_to, filters?.channel_id, filters?.channel_type]);

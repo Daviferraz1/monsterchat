@@ -84,9 +84,11 @@ export async function handleWhatsAppWebhook(body: any) {
       for (const change of entry.changes) {
         const value = change.value;
         const phoneNumberId = value.metadata?.phone_number_id;
+        const displayPhoneNumber = value.metadata?.display_phone_number;
 
         console.log('[WhatsApp Webhook] Processing change:', {
           phoneNumberId,
+          displayPhoneNumber,
           hasMessages: !!(value.messages && value.messages.length > 0),
           hasStatuses: !!(value.statuses && value.statuses.length > 0),
           messageCount: value.messages?.length || 0,
@@ -97,10 +99,21 @@ export async function handleWhatsAppWebhook(body: any) {
           continue;
         }
 
-        // Buscar canal ativo
+        // Buscar canal ativo: primeiro por Phone Number ID, depois por número de exibição (fallback)
         let channel = await getChannelByExternalId('whatsapp', phoneNumberId);
+        if (!channel && displayPhoneNumber) {
+          channel = await getChannelByExternalId('whatsapp', displayPhoneNumber);
+          if (channel) {
+            console.warn('[WhatsApp Webhook] Canal encontrado pelo número de exibição. Para evitar problemas, atualize o canal em Configurações → Canais e defina external_id = Phone Number ID = ' + phoneNumberId, {
+              displayPhoneNumber,
+              phoneNumberId,
+              channelId: channel.id,
+            });
+          }
+        }
         if (!channel) {
-          const inactive = await getChannelByExternalIdMaybeInactive('whatsapp', phoneNumberId);
+          const inactive = await getChannelByExternalIdMaybeInactive('whatsapp', phoneNumberId)
+            || (displayPhoneNumber ? await getChannelByExternalIdMaybeInactive('whatsapp', displayPhoneNumber) : null);
           if (inactive) {
             console.warn('[WhatsApp Webhook] Canal existe mas está inativo. Ative em Configurações → Canais.', {
               phoneNumberId,

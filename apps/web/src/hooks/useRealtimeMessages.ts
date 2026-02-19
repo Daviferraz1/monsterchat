@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSupabase } from './useSupabase';
 import type { Message } from '@/types';
 
-const POLL_INTERVAL_MS = 4000;
+const POLL_INTERVAL_MS = 2000;
 
 export function useRealtimeMessages(conversationId: string | null) {
   const supabase = useSupabase();
@@ -31,8 +31,12 @@ export function useRealtimeMessages(conversationId: string | null) {
 
     loadMessages();
 
-    // Fallback: refetch periódico caso o Realtime não entregue (ex.: primeiro acesso, RLS, etc.)
     const interval = setInterval(loadMessages, POLL_INTERVAL_MS);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadMessages();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     const channel = supabase
       .channel(`messages:${conversationId}`)
@@ -45,8 +49,9 @@ export function useRealtimeMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          const newRow = (payload as { new?: Message }).new ?? (payload as { record?: Message }).record;
-          if (newRow) {
+          const raw = (payload as { new?: Record<string, unknown> }).new ?? (payload as { record?: Record<string, unknown> }).record;
+          if (raw && typeof raw.id === 'string') {
+            const newRow = raw as Message;
             setMessages((prev) =>
               prev.some((m) => m.id === newRow.id) ? prev : [...prev, newRow]
             );
@@ -62,18 +67,22 @@ export function useRealtimeMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          const newRow = (payload as { new?: Message }).new ?? (payload as { record?: Message }).record;
-          if (newRow) {
+          const raw = (payload as { new?: Record<string, unknown> }).new ?? (payload as { record?: Record<string, unknown> }).record;
+          if (raw && typeof raw.id === 'string') {
+            const newRow = raw as Message;
             setMessages((prev) =>
               prev.map((msg) => (msg.id === newRow.id ? newRow : msg))
             );
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') loadMessages();
+      });
 
     return () => {
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       supabase.removeChannel(channel);
     };
   }, [conversationId, supabase, loadMessages]);
