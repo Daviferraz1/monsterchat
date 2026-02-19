@@ -31,18 +31,25 @@ export async function GET(request: NextRequest) {
 // POST para receber webhooks
 export async function POST(request: NextRequest) {
   try {
-    // Obter assinatura do header
+    // META_APP_SECRET deve estar configurado (não pode ser placeholder)
+    if (!apiEnv.META_APP_SECRET || apiEnv.META_APP_SECRET === 'placeholder-meta-secret') {
+      console.error('[WhatsApp Webhook] META_APP_SECRET não configurado no Vercel');
+      return NextResponse.json(
+        {
+          error: 'META_APP_SECRET not configured',
+          hint: 'Add META_APP_SECRET in Vercel Environment Variables. Get it from Meta: App Dashboard > Settings > Basic > App Secret',
+        },
+        { status: 503 }
+      );
+    }
+
     const signature = request.headers.get('x-hub-signature-256');
-    
     if (!signature) {
       console.warn('Missing webhook signature');
       return new NextResponse('Missing signature', { status: 401 });
     }
 
-    // Obter body raw para verificação
     const rawBody = await request.text();
-    
-    // Verificar assinatura
     const isValid = verifyWebhookSignature(
       rawBody,
       signature,
@@ -50,8 +57,16 @@ export async function POST(request: NextRequest) {
     );
 
     if (!isValid) {
-      console.warn('Invalid webhook signature');
-      return new NextResponse('Invalid signature', { status: 401 });
+      console.error(
+        '[WhatsApp Webhook] Invalid signature. Check that META_APP_SECRET in Vercel matches exactly the App Secret in Meta: Developers > Your App > Settings > Basic > App Secret (click Show)'
+      );
+      return NextResponse.json(
+        {
+          error: 'Invalid webhook signature',
+          hint: 'META_APP_SECRET in Vercel must match the App Secret in Meta Developer Console: Settings > Basic > App Secret',
+        },
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
     // Parse do JSON após verificação
