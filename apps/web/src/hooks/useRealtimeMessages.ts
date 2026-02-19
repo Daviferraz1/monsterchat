@@ -51,7 +51,7 @@ export function useRealtimeMessages(conversationId: string | null) {
         (payload) => {
           const raw = (payload as { new?: Record<string, unknown> }).new ?? (payload as { record?: Record<string, unknown> }).record;
           if (raw && typeof raw.id === 'string') {
-            const newRow = raw as Message;
+            const newRow = raw as unknown as Message;
             setMessages((prev) =>
               prev.some((m) => m.id === newRow.id) ? prev : [...prev, newRow]
             );
@@ -69,7 +69,7 @@ export function useRealtimeMessages(conversationId: string | null) {
         (payload) => {
           const raw = (payload as { new?: Record<string, unknown> }).new ?? (payload as { record?: Record<string, unknown> }).record;
           if (raw && typeof raw.id === 'string') {
-            const newRow = raw as Message;
+            const newRow = raw as unknown as Message;
             setMessages((prev) =>
               prev.map((msg) => (msg.id === newRow.id ? newRow : msg))
             );

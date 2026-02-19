@@ -172,6 +172,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
                       className="p-1.5 text-xl hover:bg-muted rounded-md transition-colors"
                       onClick={() => insertEmoji(emoji)}
                       role="option"
+                      aria-selected={false}
                     >
                       {emoji}
                     </button>

@@ -33,6 +33,7 @@ export function MediaMessage({ url, mimeType, filename, contentType }: MediaMess
           rel="noopener noreferrer"
           className="block rounded overflow-hidden focus:outline-none focus:ring-2 focus:ring-primary"
         >
+          {/* eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase/Meta), next/image exige domínio configurado */}
           <img
             src={url}
             alt={filename || 'Imagem'}
