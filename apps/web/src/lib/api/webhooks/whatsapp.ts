@@ -44,35 +44,64 @@ interface UnifiedInboundMessage {
 }
 
 export async function handleWhatsAppWebhook(body: any) {
-  console.log('WhatsApp webhook received:', JSON.stringify(body, null, 2));
+  console.log('[WhatsApp Webhook] Received:', JSON.stringify(body, null, 2));
 
   try {
     const webhookBody = body as { entry?: WhatsAppWebhookEntry[] };
 
     if (!webhookBody.entry || webhookBody.entry.length === 0) {
-      console.warn('Empty WhatsApp webhook entry');
+      console.warn('[WhatsApp Webhook] Empty entry');
       return;
     }
 
     for (const entry of webhookBody.entry) {
       for (const change of entry.changes) {
         const value = change.value;
-        const phoneNumberId = value.metadata.phone_number_id;
+        const phoneNumberId = value.metadata?.phone_number_id;
+
+        console.log('[WhatsApp Webhook] Processing change:', {
+          phoneNumberId,
+          hasMessages: !!(value.messages && value.messages.length > 0),
+          hasStatuses: !!(value.statuses && value.statuses.length > 0),
+          messageCount: value.messages?.length || 0,
+        });
+
+        if (!phoneNumberId) {
+          console.warn('[WhatsApp Webhook] Missing phone_number_id in metadata');
+          continue;
+        }
 
         // Buscar canal
         const channel = await getChannelByExternalId('whatsapp', phoneNumberId);
         if (!channel) {
-          console.warn('Channel not found for WhatsApp webhook', {
+          console.error('[WhatsApp Webhook] Channel not found!', {
             phoneNumberId,
+            hint: 'Verifique se o canal está cadastrado em /settings/channels com external_id = ' + phoneNumberId,
           });
           continue;
         }
 
+        console.log('[WhatsApp Webhook] Channel found:', {
+          channelId: channel.id,
+          channelName: channel.name,
+        });
+
         // Processar mensagens recebidas
         if (value.messages && value.messages.length > 0) {
+          console.log('[WhatsApp Webhook] Processing', value.messages.length, 'message(s)');
           for (const message of value.messages) {
-            await processWhatsAppMessage(message, value, channel.id, channel.access_token);
+            try {
+              await processWhatsAppMessage(message, value, channel.id, channel.access_token);
+              console.log('[WhatsApp Webhook] Message processed successfully:', message.id);
+            } catch (error) {
+              console.error('[WhatsApp Webhook] Error processing message:', error, {
+                messageId: message.id,
+                from: message.from,
+              });
+            }
           }
+        } else {
+          console.log('[WhatsApp Webhook] No messages in this webhook');
         }
 
         // Processar status de mensagens

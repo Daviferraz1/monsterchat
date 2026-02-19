@@ -57,9 +57,16 @@ export async function POST(request: NextRequest) {
     // Parse do JSON após verificação
     const body = JSON.parse(rawBody);
 
+    // Log para debug
+    console.log('[WhatsApp Webhook Route] Body parsed, starting async processing');
+
     // Processar webhook (assíncrono, não bloqueia resposta)
     handleWhatsAppWebhook(body).catch((error) => {
-      console.error('Error processing WhatsApp webhook:', error);
+      console.error('[WhatsApp Webhook Route] Error processing webhook:', error);
+      // Log stack trace completo
+      if (error instanceof Error) {
+        console.error('[WhatsApp Webhook Route] Stack:', error.stack);
+      }
     });
 
     // Responder imediatamente
