@@ -42,12 +42,17 @@ export async function findOrCreateConversation(data: ConversationData) {
 }
 
 export async function updateConversation(conversationId: string, updates: ConversationUpdate) {
+  const payload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (updates.lastMessageAt !== undefined) payload.last_message_at = updates.lastMessageAt;
+  if (updates.lastMessagePreview !== undefined) payload.last_message_preview = updates.lastMessagePreview;
+  if (updates.unreadCount !== undefined) payload.unread_count = updates.unreadCount;
+  if (updates.status !== undefined) payload.status = updates.status;
+
   const { data, error } = await supabaseAdmin
     .from('conversations')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq('id', conversationId)
     .select()
     .single();
