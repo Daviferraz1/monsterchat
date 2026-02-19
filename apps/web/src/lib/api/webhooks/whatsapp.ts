@@ -8,6 +8,31 @@ import { createMessage, updateMessageStatus, getMessageByExternalId } from '../s
 import { getChannelByExternalId } from '../services/channel';
 import { downloadWhatsAppMedia } from '../services/whatsapp-media';
 
+function isNetworkError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /fetch failed|ECONNRESET|ETIMEDOUT|ECONNREFUSED|socket hang up/i.test(msg);
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { retries: number; isRetryable: (err: unknown) => boolean }
+): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i <= opts.retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (i < opts.retries && opts.isRetryable(e)) {
+        await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw last;
+}
+
 interface WhatsAppWebhookEntry {
   id: string;
   changes: Array<{
@@ -91,7 +116,10 @@ export async function handleWhatsAppWebhook(body: any) {
           console.log('[WhatsApp Webhook] Processing', value.messages.length, 'message(s)');
           for (const message of value.messages) {
             try {
-              await processWhatsAppMessage(message, value, channel.id, channel.access_token);
+              await withRetry(
+                () => processWhatsAppMessage(message, value, channel.id, channel.access_token),
+                { retries: 2, isRetryable: isNetworkError }
+              );
               console.log('[WhatsApp Webhook] Message processed successfully:', message.id);
             } catch (error) {
               console.error('[WhatsApp Webhook] Error processing message:', error, {

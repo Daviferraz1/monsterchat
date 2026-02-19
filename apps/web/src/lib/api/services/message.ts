@@ -73,7 +73,6 @@ export async function updateMessageStatus(
     .update({
       status,
       error_message: errorMessage,
-      updated_at: new Date().toISOString(),
     })
     .eq('external_id', externalId)
     .select()

@@ -50,20 +50,23 @@ export async function POST(request: NextRequest) {
     }
 
     const rawBody = await request.text();
-    const isValid = verifyWebhookSignature(
-      rawBody,
-      signature,
-      apiEnv.META_APP_SECRET
-    );
+
+    // Opcional: pular verificação de assinatura APENAS para diagnóstico (NUNCA em produção real)
+    const skipVerify = process.env.SKIP_WEBHOOK_SIGNATURE_VERIFICATION === 'true';
+    const isValid = skipVerify || verifyWebhookSignature(rawBody, signature, apiEnv.META_APP_SECRET);
+
+    if (skipVerify) {
+      console.warn('[WhatsApp Webhook] ATENÇÃO: Verificação de assinatura desativada (SKIP_WEBHOOK_SIGNATURE_VERIFICATION). Remova essa variável após testar.');
+    }
 
     if (!isValid) {
       console.error(
-        '[WhatsApp Webhook] Invalid signature. Check that META_APP_SECRET in Vercel matches exactly the App Secret in Meta: Developers > Your App > Settings > Basic > App Secret (click Show)'
+        '[WhatsApp Webhook] Invalid signature. Check that META_APP_SECRET in Vercel matches exactly the App Secret in Meta: Developers > Your App > Settings > Basic > App Secret (click Show). Redeploy after changing env vars.'
       );
       return NextResponse.json(
         {
           error: 'Invalid webhook signature',
-          hint: 'META_APP_SECRET in Vercel must match the App Secret in Meta Developer Console: Settings > Basic > App Secret',
+          hint: '1) META_APP_SECRET in Vercel = App Secret from Meta (Settings > Basic > App Secret). 2) Redeploy after adding/changing it. 3) To test without verification, set SKIP_WEBHOOK_SIGNATURE_VERIFICATION=true (remove after test).',
         },
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
