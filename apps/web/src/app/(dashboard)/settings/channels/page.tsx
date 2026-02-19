@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil } from 'lucide-react';
+import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 
 interface Channel {
   id: string;
@@ -19,6 +19,8 @@ export default function ChannelsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [updatingTokenId, setUpdatingTokenId] = useState<string | null>(null);
+  const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
+  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [editForm, setEditForm] = useState({ name: '', access_token: '', is_active: true });
   const [savingEdit, setSavingEdit] = useState(false);
@@ -170,6 +172,49 @@ export default function ChannelsPage() {
     }
   };
 
+  const handleToggleActive = async (ch: Channel) => {
+    setError(null);
+    setSuccess(null);
+    setTogglingActiveId(ch.id);
+    try {
+      const res = await fetch(`/api/channels/${ch.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !ch.is_active }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar');
+      setSuccess(ch.is_active ? 'Canal desativado.' : 'Canal ativado.');
+      setChannels((prev) =>
+        prev.map((c) => (c.id === ch.id ? { ...c, is_active: !c.is_active } : c))
+      );
+      if (editingChannel?.id === ch.id) setEditForm((f) => ({ ...f, is_active: !ch.is_active }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao atualizar');
+    } finally {
+      setTogglingActiveId(null);
+    }
+  };
+
+  const handleDeleteChannel = async (ch: Channel) => {
+    if (!window.confirm(`Excluir o canal "${ch.name}"? As conversas e mensagens vinculadas também serão removidas.`)) return;
+    setError(null);
+    setSuccess(null);
+    setDeletingChannelId(ch.id);
+    try {
+      const res = await fetch(`/api/channels/${ch.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao excluir canal');
+      setSuccess('Canal excluído.');
+      if (editingChannel?.id === ch.id) setEditingChannel(null);
+      loadChannels();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao excluir');
+    } finally {
+      setDeletingChannelId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="p-6 max-w-2xl">
@@ -307,13 +352,37 @@ export default function ChannelsPage() {
                   <p className="font-medium">{ch.name}</p>
                   <p className="text-sm text-muted-foreground font-mono">{ch.external_id}</p>
                 </div>
-                <span
-                  className={`text-xs px-2 py-1 rounded-full ${
-                    ch.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {ch.is_active ? 'Ativo' : 'Inativo'}
-                </span>
+                <div className="flex items-center gap-2">
+                  {togglingActiveId === ch.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" aria-hidden />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(ch)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                        ch.is_active ? 'bg-primary' : 'bg-muted'
+                      }`}
+                      role="switch"
+                      aria-checked={ch.is_active}
+                      aria-label={ch.is_active ? 'Desativar canal' : 'Ativar canal'}
+                      title={ch.is_active ? 'Desativar canal' : 'Ativar canal'}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                          ch.is_active ? 'translate-x-5' : 'translate-x-1'
+                        }`}
+                        style={{ marginTop: 2 }}
+                      />
+                    </button>
+                  )}
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full w-14 text-center ${
+                      ch.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {ch.is_active ? 'Ativo' : 'Inativo'}
+                  </span>
+                </div>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
@@ -334,6 +403,19 @@ export default function ChannelsPage() {
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <RefreshCw className="w-4 h-4" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteChannel(ch)}
+                    disabled={!!deletingChannelId}
+                    className="p-2 rounded-md border border-input bg-background hover:bg-red-50 text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                    title="Excluir canal"
+                  >
+                    {deletingChannelId === ch.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
                     )}
                   </button>
                 </div>

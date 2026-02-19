@@ -63,3 +63,46 @@ export async function PATCH(
     );
   }
 }
+
+/**
+ * DELETE /api/channels/[id] - Exclui um canal e suas conversas (mensagens são removidas em cascata)
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  if (isSupabasePlaceholder()) {
+    return NextResponse.json(
+      { error: 'Supabase não configurado.', code: 'SUPABASE_NOT_CONFIGURED' },
+      { status: 503 }
+    );
+  }
+
+  const id = params.id;
+  if (!id) {
+    return NextResponse.json({ error: 'Channel id required' }, { status: 400 });
+  }
+
+  try {
+    // Remove conversas do canal primeiro (mensagens são removidas em cascata)
+    await supabaseAdmin.from('conversations').delete().eq('channel_id', id);
+
+    const { error } = await supabaseAdmin.from('channels').delete().eq('id', id);
+
+    if (error) {
+      console.error('Error deleting channel:', error);
+      return NextResponse.json(
+        { error: error.message || 'Falha ao excluir canal' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error: unknown) {
+    console.error('Error in channels DELETE:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
