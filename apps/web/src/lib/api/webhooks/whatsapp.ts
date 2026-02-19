@@ -226,8 +226,15 @@ async function processWhatsAppMessage(
         );
         mediaUrl = mediaInfo.url;
         mediaMimeType = mediaInfo.mimeType;
+        const isSupabaseUrl = mediaUrl?.includes('supabase.co') && mediaUrl?.includes('/storage/');
+        if (!isSupabaseUrl) {
+          console.warn('[WhatsApp Webhook] Mídia não foi salva no Supabase; usando URL temporária da Meta (pode expirar).', {
+            mediaId: normalized.mediaId,
+            contentType: normalized.contentType,
+          });
+        }
       } catch (error) {
-        console.error('Error processing WhatsApp media', error, {
+        console.error('[WhatsApp Webhook] Erro ao processar mídia:', error, {
           mediaId: normalized.mediaId,
         });
       }

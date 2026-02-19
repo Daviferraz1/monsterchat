@@ -4,6 +4,18 @@ import { isSupabasePlaceholder } from '../env';
 
 const BUCKET = 'media';
 
+/** Garante que o bucket existe; cria se não existir (ignora erro "already exists"). */
+async function ensureBucketExists(): Promise<void> {
+  const { error } = await supabaseAdmin.storage.createBucket(BUCKET, {
+    public: true,
+    fileSizeLimit: 52428800,
+    allowedMimeTypes: ['image/*', 'video/*', 'audio/*', 'application/pdf', 'application/*'],
+  });
+  if (error && !String(error.message || '').toLowerCase().includes('already exists')) {
+    console.warn('[WhatsApp media] Bucket create (ignorando):', error.message);
+  }
+}
+
 /**
  * Baixa informações da mídia do WhatsApp usando Graph API
  */
@@ -60,10 +72,13 @@ export async function storeWhatsAppMediaInSupabase(
   const mimeType = meta.mimeType || options.mimeType || 'application/octet-stream';
 
   if (isSupabasePlaceholder()) {
+    console.warn('[WhatsApp media] Supabase não configurado (placeholder). Usando URL temporária da Meta.');
     return { url: meta.url, mimeType };
   }
 
   try {
+    await ensureBucketExists();
+
     const downloadRes = await axios.get<ArrayBuffer>(meta.url, {
       headers: { Authorization: `Bearer ${accessToken}` },
       responseType: 'arraybuffer',
@@ -84,14 +99,16 @@ export async function storeWhatsAppMediaInSupabase(
       });
 
     if (error) {
-      console.error('Supabase upload error for WhatsApp media', error);
+      console.error('[WhatsApp media] Erro ao fazer upload no Supabase:', error.message, { path, bucket: BUCKET });
       return { url: meta.url, mimeType };
     }
 
     const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+    console.log('[WhatsApp media] Mídia salva no Supabase:', path);
     return { url: urlData.publicUrl, mimeType };
   } catch (err) {
-    console.error('Error downloading or storing WhatsApp media', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[WhatsApp media] Erro ao baixar ou enviar mídia:', msg, err instanceof Error ? err : undefined);
     return { url: meta.url, mimeType };
   }
 }
