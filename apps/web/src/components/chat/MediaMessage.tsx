@@ -7,6 +7,16 @@ interface MediaMessageProps {
   contentType?: string;
 }
 
+/** URL temporária da Meta (WhatsApp) — exige token, retorna 401 no navegador. Não dá para tocar/baixar. */
+function isTemporaryMetaUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.hostname.includes('lookaside.fbsbx.com') || u.hostname.includes('facebook.com');
+  } catch {
+    return false;
+  }
+}
+
 function isImage(mime?: string, contentType?: string): boolean {
   if (mime?.startsWith('image/')) return true;
   if (contentType === 'image' || contentType === 'sticker') return true;
@@ -24,6 +34,16 @@ function isAudio(mime?: string, contentType?: string): boolean {
 }
 
 export function MediaMessage({ url, mimeType, filename, contentType }: MediaMessageProps) {
+  const isUnavailable = isTemporaryMetaUrl(url);
+
+  if (isUnavailable) {
+    return (
+      <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+        Este áudio/imagem não está mais disponível para reprodução ou download (mensagem recebida antes do armazenamento no servidor). Novas mídias passam a ser salvas e ficam acessíveis.
+      </div>
+    );
+  }
+
   if (isImage(mimeType, contentType)) {
     return (
       <div className="space-y-1">
