@@ -1,0 +1,12 @@
+-- Seed data (opcional)
+-- Exemplo de canal para desenvolvimento
+
+-- Inserir canal de exemplo (substituir com dados reais)
+-- insert into public.channels (type, name, external_id, access_token, is_active)
+-- values (
+--   'whatsapp',
+--   'WhatsApp Business',
+--   'your_phone_number_id',
+--   'your_access_token',
+--   true
+-- );
