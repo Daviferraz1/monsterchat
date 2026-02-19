@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageCircle, Instagram, Plus, Loader2 } from 'lucide-react';
+import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil } from 'lucide-react';
 
 interface Channel {
   id: string;
@@ -18,6 +18,10 @@ export default function ChannelsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [updatingTokenId, setUpdatingTokenId] = useState<string | null>(null);
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', access_token: '', is_active: true });
+  const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -97,6 +101,72 @@ export default function ChannelsPage() {
       setError(e instanceof Error ? e.message : 'Erro ao salvar');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEditModal = (ch: Channel) => {
+    setEditingChannel(ch);
+    setEditForm({
+      name: ch.name,
+      access_token: '',
+      is_active: ch.is_active,
+    });
+    setError(null);
+    setSuccess(null);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingChannel) return;
+    setError(null);
+    setSuccess(null);
+    setSavingEdit(true);
+    try {
+      const body: { name?: string; access_token?: string; is_active?: boolean } = {
+        name: editForm.name.trim(),
+        is_active: editForm.is_active,
+      };
+      if (editForm.access_token.trim()) body.access_token = editForm.access_token.trim();
+
+      const res = await fetch(`/api/channels/${editingChannel.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar canal');
+      setSuccess('Canal atualizado com sucesso.');
+      setEditingChannel(null);
+      loadChannels();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleUpdateToken = async (channelId: string) => {
+    const newToken = window.prompt(
+      'Cole o novo Access Token do WhatsApp (token expirado pode ser renovado em developers.facebook.com):'
+    );
+    if (!newToken?.trim()) return;
+    setError(null);
+    setSuccess(null);
+    setUpdatingTokenId(channelId);
+    try {
+      const res = await fetch(`/api/channels/${channelId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: newToken.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar token');
+      setSuccess('Token atualizado. Você já pode responder pelo Inbox.');
+      loadChannels();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao atualizar token');
+    } finally {
+      setUpdatingTokenId(null);
     }
   };
 
@@ -244,9 +314,102 @@ export default function ChannelsPage() {
                 >
                   {ch.is_active ? 'Ativo' : 'Inativo'}
                 </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(ch)}
+                    className="p-2 rounded-md border border-input bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
+                    title="Editar canal (nome, token, ativo)"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateToken(ch.id)}
+                    disabled={!!updatingTokenId}
+                    className="p-2 rounded-md border border-input bg-background hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    title="Atualizar token (use quando expirar ou der 401 ao responder)"
+                  >
+                    {updatingTokenId === ch.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Modal Editar canal */}
+        {editingChannel && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => setEditingChannel(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-channel-title"
+          >
+            <div
+              className="bg-background border rounded-lg shadow-lg w-full max-w-md p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="edit-channel-title" className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Pencil className="w-5 h-5" /> Editar canal
+              </h2>
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Nome do canal</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="Ex: WhatsApp Principal"
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Novo token (opcional)</label>
+                  <input
+                    type="password"
+                    value={editForm.access_token}
+                    onChange={(e) => setEditForm((f) => ({ ...f, access_token: e.target.value }))}
+                    placeholder="Deixe em branco para não alterar"
+                    className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit_is_active"
+                    checked={editForm.is_active}
+                    onChange={(e) => setEditForm((f) => ({ ...f, is_active: e.target.checked }))}
+                    className="rounded"
+                  />
+                  <label htmlFor="edit_is_active" className="text-sm">Canal ativo</label>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingChannel(null)}
+                    className="px-4 py-2 border rounded-md hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {savingEdit ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </div>
