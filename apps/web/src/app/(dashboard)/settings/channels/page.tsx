@@ -22,7 +22,7 @@ export default function ChannelsPage() {
   const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
   const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', access_token: '', is_active: true });
+  const [editForm, setEditForm] = useState({ name: '', access_token: '', is_active: true, external_id: '', business_account_id: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -112,6 +112,8 @@ export default function ChannelsPage() {
       name: ch.name,
       access_token: '',
       is_active: ch.is_active,
+      external_id: ch.external_id ?? '',
+      business_account_id: ch.business_account_id ?? '',
     });
     setError(null);
     setSuccess(null);
@@ -124,9 +126,11 @@ export default function ChannelsPage() {
     setSuccess(null);
     setSavingEdit(true);
     try {
-      const body: { name?: string; access_token?: string; is_active?: boolean } = {
+      const body: { name?: string; access_token?: string; is_active?: boolean; external_id?: string; business_account_id?: string } = {
         name: editForm.name.trim(),
         is_active: editForm.is_active,
+        external_id: editForm.external_id.trim() || undefined,
+        business_account_id: editForm.business_account_id.trim() || undefined,
       };
       if (editForm.access_token.trim()) body.access_token = editForm.access_token.trim();
 
@@ -255,16 +259,19 @@ export default function ChannelsPage() {
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              {form.type === 'whatsapp' ? 'ID do número de telefone (Phone Number ID)' : 'ID da página (Page ID)'}
+              {form.type === 'whatsapp' ? 'ID do número de telefone (Phone Number ID)' : 'ID da Página do Facebook (Page ID) — para enviar mensagens'}
             </label>
             <input
               type="text"
               value={form.external_id}
               onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))}
-              placeholder={form.type === 'whatsapp' ? 'Ex: 247994065074259' : 'ID da página'}
+              placeholder={form.type === 'whatsapp' ? 'Ex: 247994065074259' : 'Ex: 123456789012345'}
               className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
               required
             />
+            {form.type === 'instagram' && (
+              <p className="text-xs text-muted-foreground mt-1">Para <strong>enviar</strong> mensagens: use o <strong>ID da Página do Facebook</strong> (Page ID), não o ID da conta do Instagram. Encontre em: Página do Facebook → Configurações → Avançado.</p>
+            )}
           </div>
 
           {form.type === 'whatsapp' && (
@@ -277,6 +284,19 @@ export default function ChannelsPage() {
                 placeholder="Ex: 285585611312219"
                 className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
               />
+            </div>
+          )}
+          {form.type === 'instagram' && (
+            <div>
+              <label className="block text-sm font-medium mb-1">ID da conta do Instagram (recipient.id no webhook) — obrigatório para o webhook</label>
+              <input
+                type="text"
+                value={form.business_account_id}
+                onChange={(e) => setForm((f) => ({ ...f, business_account_id: e.target.value }))}
+                placeholder="Ex: 17841403342667626"
+                className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground mt-1">O ID que o webhook envia (pageId no log). Necessário para o canal ser encontrado ao receber mensagens. Não use o ID do app.</p>
             </div>
           )}
 
@@ -452,6 +472,31 @@ export default function ChannelsPage() {
                     required
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    {editingChannel.type === 'instagram' ? 'ID da Página do Facebook (Page ID) — para enviar' : 'External ID'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.external_id}
+                    onChange={(e) => setEditForm((f) => ({ ...f, external_id: e.target.value }))}
+                    placeholder={editingChannel.type === 'instagram' ? 'Page ID (Facebook)' : 'Page ID ou Phone Number ID'}
+                    className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
+                  />
+                </div>
+                {editingChannel.type === 'instagram' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">ID da conta do Instagram (para o webhook encontrar o canal)</label>
+                    <input
+                      type="text"
+                      value={editForm.business_account_id}
+                      onChange={(e) => setEditForm((f) => ({ ...f, business_account_id: e.target.value }))}
+                      placeholder="Ex: 17841403342667626"
+                      className="w-full px-3 py-2 border rounded-md bg-background font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">O pageId que aparece no log do webhook. Necessário para receber mensagens.</p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium mb-1">Novo token (opcional)</label>
                   <input

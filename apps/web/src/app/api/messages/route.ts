@@ -176,6 +176,19 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
+
+      // Instagram 400: "Application does not have the capability" → External ID deve ser Page ID (Facebook)
+      if (channel?.type === 'instagram' && statusCode === 400) {
+        const errMsg = String(error?.response?.data?.error?.message ?? error?.response?.data?.error?.error_user_msg ?? '');
+        if (/capability|invalid_request|does not have/i.test(errMsg)) {
+          return NextResponse.json(
+            {
+              error: 'Não foi possível enviar pelo Instagram. O External ID do canal deve ser o ID da Página do Facebook (Page ID), não o ID da conta do Instagram. Em Configurações → Canais, edite o canal: coloque o Page ID no campo "External ID" (encontre em: Página do Facebook → Configurações → Avançado). No campo "ID da conta do Instagram" mantenha o ID que aparece no webhook (ex.: 17841403342667626). O app também precisa da permissão instagram_manage_messages.',
+            },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const preview =

@@ -73,6 +73,9 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const contact = conversation.contact as Contact | undefined;
   const channel = conversation.channel as Channel | undefined;
   const displayName = contact?.name || contact?.phone || 'Contato sem nome';
+  const initials = displayName && displayName !== 'Contato sem nome'
+    ? displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
 
   return (
     <div ref={headerRef} className="relative">
@@ -81,6 +84,16 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
         onClick={() => setShowContactInfo((v) => !v)}
         className="h-16 border-b flex items-center gap-3 px-4 w-full text-left hover:bg-muted/50 transition-colors cursor-pointer"
       >
+        {contact?.profile_pic_url ? (
+          <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={contact.profile_pic_url} alt="" className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-semibold text-white bg-primary/80">
+            {initials}
+          </div>
+        )}
         {channel && <ChannelBadge type={channel.type} />}
         <div className="flex-1 min-w-0">
           <h2 className="font-semibold truncate">{displayName}</h2>

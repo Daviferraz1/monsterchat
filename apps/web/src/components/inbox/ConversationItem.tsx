@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { formatLastMessageTime } from '@/lib/utils';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation } from '@/types';
@@ -37,6 +38,8 @@ export function ConversationItem({ conversation }: ConversationItemProps) {
   const hasUnread = conversation.unread_count > 0;
   const isActive = pathname === `/inbox/${conversation.id}`;
   const colorIndex = (displayName?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length;
+  const [avatarError, setAvatarError] = useState(false);
+  const showProfilePic = contact?.profile_pic_url && !avatarError;
 
   return (
     <Link
@@ -48,12 +51,24 @@ export function ConversationItem({ conversation }: ConversationItemProps) {
       }}
     >
       <div className="relative flex-shrink-0 mt-0.5">
-        <div
-          className="flex items-center justify-center rounded-full w-10 h-10 text-white text-sm font-semibold"
-          style={{ background: AVATAR_COLORS[colorIndex] }}
-        >
-          {getInitials(displayName)}
-        </div>
+        {showProfilePic ? (
+          <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={contact.profile_pic_url!}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={() => setAvatarError(true)}
+            />
+          </div>
+        ) : (
+          <div
+            className="flex items-center justify-center rounded-full w-10 h-10 text-white text-sm font-semibold"
+            style={{ background: AVATAR_COLORS[colorIndex] }}
+          >
+            {getInitials(displayName)}
+          </div>
+        )}
         {channel && (
           <div className="absolute -bottom-0.5 -right-0.5 bg-[#0d0d1a] rounded-full p-0.5 ring-1 ring-white/10">
             <ChannelBadge type={channel.type} className="w-5 h-5 [&>svg]:w-3 [&>svg]:h-3" />

@@ -31,10 +31,12 @@ export async function PATCH(
     if (body.access_token !== undefined) updates.access_token = body.access_token;
     if (body.name !== undefined) updates.name = body.name;
     if (body.is_active !== undefined) updates.is_active = !!body.is_active;
+    if (body.external_id !== undefined) updates.external_id = body.external_id;
+    if (body.business_account_id !== undefined) updates.business_account_id = body.business_account_id || null;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
-        { error: 'Envie pelo menos um campo: access_token, name ou is_active' },
+        { error: 'Envie pelo menos um campo: access_token, name, is_active, external_id ou business_account_id' },
         { status: 400 }
       );
     }

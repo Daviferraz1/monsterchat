@@ -4,8 +4,9 @@
 import { upsertContact } from '../services/contact';
 import { findOrCreateConversation, updateConversation } from '../services/conversation';
 import { createMessage, getMessageByExternalId } from '../services/message';
-import { getChannelByExternalId, getChannelByExternalIdMaybeInactive } from '../services/channel';
+import { getInstagramChannelByRecipientId, getInstagramChannelMaybeInactiveByRecipientId } from '../services/channel';
 import { storeMetaUrlMediaInSupabase } from '../services/whatsapp-media';
+import { getInstagramUserProfile } from '../services/instagram';
 
 interface InstagramWebhookEntry {
   id: string;
@@ -63,13 +64,13 @@ export async function handleInstagramWebhook(body: unknown) {
         continue;
       }
 
-      let channel = await getChannelByExternalId('instagram', pageId);
+      let channel = await getInstagramChannelByRecipientId(pageId);
       if (!channel) {
-        const inactive = await getChannelByExternalIdMaybeInactive('instagram', pageId);
+        const inactive = await getInstagramChannelMaybeInactiveByRecipientId(pageId);
         if (inactive) {
           console.warn('[Instagram Webhook] Canal existe mas está inativo.', { pageId, channelId: inactive.id });
         } else {
-          console.error('[Instagram Webhook] Canal não encontrado. Cadastre em Configurações → Canais com external_id = Page ID (ID da página).', { pageId });
+          console.error('[Instagram Webhook] Canal não encontrado. Em Configurações → Canais, use External ID ou ID da conta de negócios = ' + pageId, { pageId });
         }
         continue;
       }
@@ -118,11 +119,16 @@ async function processInstagramMessage(
 
   const normalized = normalizeInstagramMessage(message, channelId, messaging.sender, messaging.timestamp);
 
+  const profile = await getInstagramUserProfile(senderId, accessToken);
+  const contactName = profile?.name || messaging.sender.username || profile?.username;
+  const contactProfilePic = profile?.profile_pic;
+
   const contactRecord = await upsertContact({
     channelType: 'instagram',
     externalId: senderId,
-    name: messaging.sender.username,
-    metadata: messaging.sender.username ? { username: messaging.sender.username } : undefined,
+    name: contactName,
+    profilePicUrl: contactProfilePic,
+    metadata: messaging.sender.username || profile?.username ? { username: messaging.sender.username || profile?.username } : undefined,
   });
 
   console.log('[Instagram Webhook] Finding or creating conversation', { channelId, contactId: contactRecord.id });
