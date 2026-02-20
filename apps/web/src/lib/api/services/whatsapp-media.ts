@@ -112,3 +112,57 @@ export async function storeWhatsAppMediaInSupabase(
     return { url: meta.url, mimeType };
   }
 }
+
+/**
+ * Baixa mídia de uma URL da Meta (ex.: anexo do Instagram) com Bearer token e faz upload no Supabase.
+ * Usado pelo webhook do Instagram onde a URL já vem no payload.
+ */
+export async function storeMetaUrlMediaInSupabase(
+  metaUrl: string,
+  accessToken: string,
+  conversationId: string,
+  options: { mimeType?: string; contentType?: string; filename?: string }
+): Promise<{ url: string; mimeType: string }> {
+  const mimeType = options.mimeType || options.contentType || 'application/octet-stream';
+
+  if (isSupabasePlaceholder()) {
+    console.warn('[Meta media] Supabase não configurado. Usando URL temporária da Meta.');
+    return { url: metaUrl, mimeType };
+  }
+
+  try {
+    await ensureBucketExists();
+
+    const downloadRes = await axios.get<ArrayBuffer>(metaUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      responseType: 'arraybuffer',
+      maxContentLength: 50 * 1024 * 1024,
+      timeout: 60000,
+    });
+
+    const buffer = downloadRes.data;
+    const ext = extFromMime(mimeType);
+    const safeName = (options.filename || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+    const path = `inbound/${conversationId}/${Date.now()}-${safeName}.${ext}`;
+
+    const { error } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .upload(path, buffer, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (error) {
+      console.error('[Meta media] Erro ao fazer upload no Supabase:', error.message, { path });
+      return { url: metaUrl, mimeType };
+    }
+
+    const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+    console.log('[Meta media] Mídia salva no Supabase:', path);
+    return { url: urlData.publicUrl, mimeType };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Meta media] Erro ao baixar ou enviar mídia:', msg);
+    return { url: metaUrl, mimeType };
+  }
+}
