@@ -51,11 +51,14 @@ export async function GET() {
 
     const results: Record<string, { ok: boolean; message?: string; detail?: unknown }> = {};
 
+    // Timeout generoso para a Graph API da Meta (pode ser lenta)
+    const META_API_TIMEOUT_MS = 30000;
+
     // 1) business_management — GET me/businesses
     try {
       const res = await axios.get(`${GRAPH_BASE}/me/businesses`, {
         headers: { Authorization: `Bearer ${accessToken}` },
-        timeout: 15000,
+        timeout: META_API_TIMEOUT_MS,
         validateStatus: () => true,
       });
       if (res.status === 200 && res.data?.data !== undefined) {
@@ -77,7 +80,7 @@ export async function GET() {
       try {
         const res = await axios.get(`${GRAPH_BASE}/${encodeURIComponent(wabaId.trim())}/subscribed_apps`, {
           headers: { Authorization: `Bearer ${accessToken}` },
-          timeout: 15000,
+          timeout: META_API_TIMEOUT_MS,
           validateStatus: () => true,
         });
         if (res.status === 200) {
