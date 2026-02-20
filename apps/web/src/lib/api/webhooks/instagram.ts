@@ -123,11 +123,15 @@ async function processInstagramMessage(
   const contactName = profile?.name || messaging.sender.username || profile?.username;
   const contactProfilePic = profile?.profile_pic;
 
+  // A API do Instagram não expõe email do usuário; extrair da mensagem se o texto parecer um email
+  const extractedEmail = extractEmailFromText(normalized.body);
+
   const contactRecord = await upsertContact({
     channelType: 'instagram',
     externalId: senderId,
     name: contactName,
     profilePicUrl: contactProfilePic,
+    email: extractedEmail,
     metadata: messaging.sender.username || profile?.username ? { username: messaging.sender.username || profile?.username } : undefined,
   });
 

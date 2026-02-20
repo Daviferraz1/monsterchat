@@ -5,6 +5,7 @@ export interface ContactData {
   externalId: string;
   name?: string;
   phone?: string;
+  email?: string;
   profilePicUrl?: string;
   metadata?: Record<string, any>;
 }
@@ -23,16 +24,20 @@ export async function upsertContact(data: ContactData) {
     throw selectError;
   }
   if (existing) {
-    // Atualizar contato existente
+    // Atualizar contato existente (email: atualiza se enviado, senão mantém)
+    const updatePayload: Record<string, unknown> = {
+      name: data.name || existing.name,
+      phone: data.phone ?? existing.phone,
+      profile_pic_url: data.profilePicUrl || existing.profile_pic_url,
+      metadata: data.metadata || existing.metadata,
+      updated_at: new Date().toISOString(),
+    };
+    if (data.email !== undefined) {
+      updatePayload.email = data.email || null;
+    }
     const { data: updated, error } = await supabaseAdmin
       .from('contacts')
-      .update({
-        name: data.name || existing.name,
-        phone: data.phone || existing.phone,
-        profile_pic_url: data.profilePicUrl || existing.profile_pic_url,
-        metadata: data.metadata || existing.metadata,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', existing.id)
       .select()
       .single();
@@ -49,6 +54,7 @@ export async function upsertContact(data: ContactData) {
       external_id: data.externalId,
       name: data.name,
       phone: data.phone,
+      email: data.email || null,
       profile_pic_url: data.profilePicUrl,
       metadata: data.metadata || {},
     })

@@ -135,12 +135,26 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     }, 0);
   };
 
+  const metaDebugUrl = error && /https:\/\/www\.meta\.com\/debug/.test(error)
+    ? error.match(/https:\/\/www\.meta\.com\/debug[^\s)]*/)?.[0]
+    : null;
+
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="border-t p-4">
       {error && (
-        <p className="mb-2 text-sm text-red-600 whitespace-pre-line" role="alert">
-          {error}
-        </p>
+        <div className="mb-2 text-sm text-red-600" role="alert">
+          <p className="whitespace-pre-line">{error}</p>
+          {metaDebugUrl && (
+            <a
+              href={metaDebugUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-block text-red-700 underline hover:text-red-800"
+            >
+              Abrir detalhes no Meta Debug
+            </a>
+          )}
+        </div>
       )}
       <div className="flex gap-2 items-end">
         <div className="flex flex-col flex-1 min-w-0 relative">

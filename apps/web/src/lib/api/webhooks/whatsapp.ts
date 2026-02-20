@@ -3,6 +3,7 @@
 // https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview/
 
 import { upsertContact } from '../services/contact';
+import { extractEmailFromText } from '../utils';
 import { findOrCreateConversation, updateConversation } from '../services/conversation';
 import { createMessage, updateMessageStatus, getMessageByExternalId } from '../services/message';
 import { getChannelByExternalId, getChannelByExternalIdMaybeInactive } from '../services/channel';
@@ -195,12 +196,16 @@ async function processWhatsAppMessage(
     // Normalizar mensagem
     const normalized = normalizeWhatsAppMessage(message, channelId, contact);
 
+    // A API não expõe email; extrair da mensagem se o texto parecer um email
+    const extractedEmail = extractEmailFromText(normalized.body);
+
     // Upsert contato
     const contactRecord = await upsertContact({
       channelType: 'whatsapp',
       externalId: from,
       name: contact?.profile?.name,
       phone: from,
+      email: extractedEmail,
     });
 
     // Buscar ou criar conversa

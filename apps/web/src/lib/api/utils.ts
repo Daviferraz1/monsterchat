@@ -34,3 +34,14 @@ export function verifyWebhookSignature(
     return false;
   }
 }
+
+/**
+ * Extrai o primeiro endereço de email encontrado no texto.
+ * Útil quando o contato envia o email na conversa (ex.: Instagram/WhatsApp).
+ */
+export function extractEmailFromText(text: string | undefined): string | undefined {
+  if (!text || typeof text !== 'string') return undefined;
+  const trimmed = text.trim();
+  const match = trimmed.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0].toLowerCase() : undefined;
+}

@@ -198,16 +198,23 @@ export async function POST(request: NextRequest) {
         const metaError = data?.error;
         const metaMsg = typeof metaError?.message === 'string' ? metaError.message : '';
         const metaCode = metaError?.code ?? '';
-        const debugLink = error?.response?.headers?.['debug-link'] ?? error?.response?.headers?.get?.('debug-link');
-        console.error('[Instagram send] Meta 500:', JSON.stringify({ metaMsg, metaCode, error: metaError, fullBody: data }));
+        const fbtraceId = metaError?.fbtrace_id ?? (typeof metaError === 'object' && metaError && 'fbtrace_id' in metaError ? (metaError as { fbtrace_id?: string }).fbtrace_id : undefined);
+        const headerDebug = error?.response?.headers?.['debug-link'] ?? error?.response?.headers?.get?.('debug-link');
+        const debugUrl =
+          typeof headerDebug === 'string'
+            ? headerDebug
+            : fbtraceId
+              ? `https://www.meta.com/debug/?mid=${encodeURIComponent(fbtraceId)}`
+              : undefined;
+        console.error('[Instagram send] Meta 500:', JSON.stringify({ metaMsg, metaCode, fbtraceId, error: metaError, fullBody: data }));
         const hintParts = [
           'A API do Instagram retornou erro interno (500).',
           metaMsg ? `Meta: "${metaMsg}"` : null,
-          debugLink ? `Detalhes: ${debugLink}` : null,
+          debugUrl ? `Detalhes: ${debugUrl}` : null,
           'Confira: 1) No Instagram (app móvel): Configurações → Mensagens e respostas a stories → Controles de mensagem → Ferramentas conectadas → ative "Permitir acesso às mensagens". 2) Só é possível enviar mensagem para quem te enviou uma mensagem nas últimas 24h. 3) Se o app está em modo Desenvolvimento, o destinatário precisa ser adicionado como testador no app. 4) Tente novamente em alguns minutos.',
         ].filter(Boolean);
         return NextResponse.json(
-          { error: 'Erro ao enviar pelo Instagram.', hint: hintParts.join(' ') },
+          { error: 'Erro ao enviar pelo Instagram.', hint: hintParts.join(' '), debugUrl: debugUrl ?? undefined },
           { status: 502 }
         );
       }
