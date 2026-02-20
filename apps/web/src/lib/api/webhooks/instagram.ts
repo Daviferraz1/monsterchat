@@ -116,7 +116,7 @@ async function processInstagramMessage(
     return;
   }
 
-  const normalized = normalizeInstagramMessage(message, channelId, messaging.sender);
+  const normalized = normalizeInstagramMessage(message, channelId, messaging.sender, messaging.timestamp);
 
   const contactRecord = await upsertContact({
     channelType: 'instagram',
@@ -179,7 +179,8 @@ async function processInstagramMessage(
 function normalizeInstagramMessage(
   message: InstagramMessage,
   channelId: string,
-  sender: { id: string; username?: string }
+  sender: { id: string; username?: string },
+  timestampMs?: number
 ): UnifiedInboundMessage {
   let contentType = 'text';
   let body: string | undefined;
@@ -210,6 +211,9 @@ function normalizeInstagramMessage(
     body = JSON.stringify(message);
   }
 
+  const ts = timestampMs != null ? Number(timestampMs) : Date.now();
+  const date = ts < 1e12 ? new Date(ts * 1000) : new Date(ts);
+
   return {
     channelType: 'instagram',
     channelId,
@@ -218,7 +222,7 @@ function normalizeInstagramMessage(
     messageExternalId: message.mid,
     contentType,
     body,
-    timestamp: new Date(message.timestamp ? Number(message.timestamp) : Date.now()).toISOString(),
+    timestamp: date.toISOString(),
     rawPayload: message,
   };
 }
