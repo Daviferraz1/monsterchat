@@ -138,7 +138,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="border-t p-4">
       {error && (
-        <p className="mb-2 text-sm text-red-600" role="alert">
+        <p className="mb-2 text-sm text-red-600 whitespace-pre-line" role="alert">
           {error}
         </p>
       )}

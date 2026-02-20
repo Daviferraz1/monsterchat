@@ -41,10 +41,9 @@ export function useSendMessage() {
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const message =
-          typeof data?.error === 'string'
-            ? data.error
-            : 'Falha ao enviar mensagem.';
+        const errText = typeof data?.error === 'string' ? data.error : 'Falha ao enviar mensagem.';
+        const hintText = typeof data?.hint === 'string' ? data.hint : '';
+        const message = hintText ? `${errText}\n\n${hintText}` : errText;
         throw new Error(message);
       }
 

@@ -181,9 +181,11 @@ export async function POST(request: NextRequest) {
       if (channel?.type === 'instagram' && statusCode === 400) {
         const errMsg = String(error?.response?.data?.error?.message ?? error?.response?.data?.error?.error_user_msg ?? '');
         if (/capability|invalid_request|does not have/i.test(errMsg)) {
+          const usedId = channel?.external_id || '';
           return NextResponse.json(
             {
-              error: 'Não foi possível enviar pelo Instagram. O External ID do canal deve ser o ID da Página do Facebook (Page ID), não o ID da conta do Instagram. Em Configurações → Canais, edite o canal: coloque o Page ID no campo "External ID" (encontre em: Página do Facebook → Configurações → Avançado). No campo "ID da conta do Instagram" mantenha o ID que aparece no webhook (ex.: 17841403342667626). O app também precisa da permissão instagram_manage_messages.',
+              error: 'Não foi possível enviar pelo Instagram.',
+              hint: `O canal está usando o ID "${usedId}" para enviar. Se for 17841403342667626, esse é o ID da CONTA do Instagram (Contas do Instagram). Para ENVIAR mensagens a API exige o ID da PÁGINA do Facebook: no Meta Business Suite (business.facebook.com) vá em Configurações → Contas → Páginas (não "Contas do Instagram"), abra a página vinculada à sua conta Instagram e copie o ID dessa página. Em Configurações → Canais, edite o canal e coloque esse ID da Página no campo "External ID". Mantenha 17841403342667626 no campo "ID da conta do Instagram" (para receber).`,
             },
             { status: 400 }
           );

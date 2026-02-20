@@ -270,7 +270,10 @@ export default function ChannelsPage() {
               required
             />
             {form.type === 'instagram' && (
-              <p className="text-xs text-muted-foreground mt-1">Para <strong>enviar</strong> mensagens: use o <strong>ID da Página do Facebook</strong> (Page ID), não o ID da conta do Instagram. Encontre em: Página do Facebook → Configurações → Avançado.</p>
+              <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                <p>Para <strong>enviar</strong> mensagens use o ID da <strong>Página do Facebook</strong> (não o de &quot;Contas do Instagram&quot;).</p>
+                <p>No Meta Business Suite: <strong>Configurações → Contas → Páginas</strong> (não &quot;Contas do Instagram&quot;) → abra a página vinculada ao Instagram → o ID dessa página vai no campo acima.</p>
+              </div>
             )}
           </div>
 
