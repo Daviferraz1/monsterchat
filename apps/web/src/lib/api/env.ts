@@ -45,7 +45,8 @@ export const apiEnv = {
   WHATSAPP_ACCESS_TOKEN: process.env.WHATSAPP_ACCESS_TOKEN,
   WHATSAPP_WABA_ID: process.env.WHATSAPP_WABA_ID,
   
-  // Instagram
+  // Instagram (se for um app diferente do WhatsApp, use INSTAGRAM_APP_SECRET = Chave secreta do app do Instagram)
+  INSTAGRAM_APP_SECRET: process.env.INSTAGRAM_APP_SECRET,
   INSTAGRAM_PAGE_ID: process.env.INSTAGRAM_PAGE_ID,
   INSTAGRAM_PAGE_ACCESS_TOKEN: process.env.INSTAGRAM_PAGE_ACCESS_TOKEN,
   INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID,

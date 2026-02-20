@@ -30,12 +30,14 @@ export async function GET(request: NextRequest) {
 // POST para receber webhooks
 export async function POST(request: NextRequest) {
   try {
-    if (!apiEnv.META_APP_SECRET || apiEnv.META_APP_SECRET === 'placeholder-meta-secret') {
-      console.error('[Instagram Webhook] META_APP_SECRET não configurado no Vercel');
+    // Instagram pode usar app próprio (Zap-IG): assinatura é com a Chave secreta do app do Instagram
+    const instagramSecret = apiEnv.INSTAGRAM_APP_SECRET?.trim() || apiEnv.META_APP_SECRET;
+    if (!instagramSecret || instagramSecret === 'placeholder-meta-secret') {
+      console.error('[Instagram Webhook] Nenhum secret configurado. Defina INSTAGRAM_APP_SECRET (app Zap-IG) ou META_APP_SECRET.');
       return NextResponse.json(
         {
-          error: 'META_APP_SECRET not configured',
-          hint: 'Add META_APP_SECRET in Vercel Environment Variables (same as WhatsApp).',
+          error: 'App secret not configured',
+          hint: 'If Instagram uses a separate app (e.g. Zap-IG): add INSTAGRAM_APP_SECRET in Vercel = "Chave secreta do app do Instagram" from Meta. Otherwise set META_APP_SECRET.',
         },
         { status: 503 }
       );
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const rawBody = await request.text();
     const skipVerify = process.env.SKIP_WEBHOOK_SIGNATURE_VERIFICATION === 'true';
-    const isValid = skipVerify || verifyWebhookSignature(rawBody, signature, apiEnv.META_APP_SECRET);
+    const isValid = skipVerify || verifyWebhookSignature(rawBody, signature, instagramSecret);
 
     if (skipVerify) {
       console.warn('[Instagram Webhook] Verificação de assinatura desativada (SKIP_WEBHOOK_SIGNATURE_VERIFICATION).');
