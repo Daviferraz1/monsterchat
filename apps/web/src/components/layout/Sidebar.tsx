@@ -7,6 +7,7 @@ import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
 import { MessageSquare, Settings, Users } from 'lucide-react';
+import { UserProfile } from './UserProfile';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -65,6 +66,7 @@ export function Sidebar() {
           channelTypeFilter={filters.channel_type}
         />
       </div>
+      <UserProfile />
     </div>
   );
 }

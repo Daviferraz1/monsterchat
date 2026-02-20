@@ -191,6 +191,26 @@ export async function POST(request: NextRequest) {
           );
         }
       }
+
+      // Instagram 500 da Meta: "An unknown error has occurred"
+      if (channel?.type === 'instagram' && statusCode === 500) {
+        const data = error?.response?.data;
+        const metaError = data?.error;
+        const metaMsg = typeof metaError?.message === 'string' ? metaError.message : '';
+        const metaCode = metaError?.code ?? '';
+        const debugLink = error?.response?.headers?.['debug-link'] ?? error?.response?.headers?.get?.('debug-link');
+        console.error('[Instagram send] Meta 500:', JSON.stringify({ metaMsg, metaCode, error: metaError, fullBody: data }));
+        const hintParts = [
+          'A API do Instagram retornou erro interno (500).',
+          metaMsg ? `Meta: "${metaMsg}"` : null,
+          debugLink ? `Detalhes: ${debugLink}` : null,
+          'Confira: 1) No Instagram (app móvel): Configurações → Mensagens e respostas a stories → Controles de mensagem → Ferramentas conectadas → ative "Permitir acesso às mensagens". 2) Só é possível enviar mensagem para quem te enviou uma mensagem nas últimas 24h. 3) Se o app está em modo Desenvolvimento, o destinatário precisa ser adicionado como testador no app. 4) Tente novamente em alguns minutos.',
+        ].filter(Boolean);
+        return NextResponse.json(
+          { error: 'Erro ao enviar pelo Instagram.', hint: hintParts.join(' ') },
+          { status: 502 }
+        );
+      }
     }
 
     const preview =

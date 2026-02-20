@@ -98,14 +98,14 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
         <div className="flex-1 min-w-0">
           <h2 className="font-semibold truncate">{displayName}</h2>
           <p className="text-sm text-muted-foreground truncate">
-            {channel?.name || 'Canal desconhecido'}
+            {contact?.phone || contact?.external_id || '—'}
           </p>
         </div>
       </button>
 
       {showContactInfo && contact && (
         <div
-          className="absolute right-0 top-full z-50 mt-0 w-[min(320px,100%)] bg-popover border rounded-b-lg rounded-tl-lg shadow-lg p-4"
+          className="absolute right-0 top-full z-[200] mt-0 w-[min(320px,100%)] bg-popover border rounded-b-lg rounded-tl-lg shadow-lg p-4"
           role="dialog"
           aria-label="Informações do contato"
         >
