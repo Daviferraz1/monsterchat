@@ -151,10 +151,17 @@ Vendas que existem só na Guru (anteriores ao webhook ou que não dispararam o w
 Na página **Últimas vendas** → **Importar vendas antigas** há a opção **Buscar vendas na Guru**: informe e-mail ou telefone e clique em **Buscar na Guru**. Se o servidor estiver configurado, as vendas retornadas pela API da Guru aparecem e você pode clicar em **Importar estas X vendas**.
 
 **Requer no servidor (Vercel / .env):**
-- `DIGITAL_GURU_USER_TOKEN` – User Token da Guru (Meu Perfil → Tokens API), usado como `Authorization: Bearer ...` na chamada à API da Guru.
-- `DIGITAL_GURU_API_BASE_URL` – URL do endpoint de listagem de transações da Guru (ex.: `https://api.digitalmanager.guru/v1/transactions`). A documentação atual da Guru informa a URL e os parâmetros (ex.: `?email=...` ou `?phone=...`).
 
-Se essas variáveis não estiverem configuradas, a busca retorna instruções e você pode usar a opção 2.
+- **`DIGITAL_GURU_USER_TOKEN`** – User Token da Guru. Em **Meu Perfil** → **Tokens API** → **Adicionar**; copie o token (só é exibido uma vez). É diferente do *Account Token* usado no webhook.
+- **`DIGITAL_GURU_API_BASE_URL`** – URL **completa** do endpoint de listagem de transações da Guru. A documentação oficial define o path e os parâmetros:
+  - **[Transactions (API)](https://docs.digitalmanager.guru/developers/transactions)** – consulte a página para a URL exata (ex.: `https://api.digitalmanager.guru/v1/transactions` ou outro path como `/myorders`).
+  - A autenticação é `Authorization: Bearer {User Token}`.
+
+**Se não conseguir puxar transações antigas:**
+
+1. Confirme que está usando o **User Token** (Meu Perfil → Tokens API), não o Account Token do webhook.
+2. Confirme que **DIGITAL_GURU_API_BASE_URL** é a URL completa do endpoint (incluindo path), como indicado na [documentação Transactions](https://docs.digitalmanager.guru/developers/transactions). Se a Guru usar outro path (ex.: `/myorders`, `/orders`), use essa URL.
+3. Se a API usar parâmetros diferentes de `email` e `phone`, será preciso obter o JSON manualmente (Postman/curl conforme a doc) e usar a **Opção 2** abaixo (colar o JSON na importação).
 
 ### 2. Importar colando o JSON
 

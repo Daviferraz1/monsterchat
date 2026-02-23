@@ -268,13 +268,18 @@ export default function SalesPage() {
       if (email) params.set('email', email);
       if (phone) params.set('phone', phone);
       const res = await fetch(`/api/integrations/digital-guru/fetch-from-guru?${params.toString()}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.status === 501) {
         setFetchGuruResult({ error: data.message || data.error, configured: false });
         return;
       }
       if (!res.ok) {
-        setFetchGuruResult({ error: data.error || data.detail || 'Erro ao buscar na Guru.' });
+        setFetchGuruResult({ error: data.error || data.detail || `Erro ${res.status} ao buscar na Guru.` });
+        return;
+      }
+      if (data.ok === false) {
+        const msg = [data.error, data.detail, data.hint].filter(Boolean).join(' — ');
+        setFetchGuruResult({ error: msg || 'A API da Guru respondeu com erro.' });
         return;
       }
       setFetchGuruResult({
