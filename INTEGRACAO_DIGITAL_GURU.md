@@ -161,7 +161,7 @@ Na página **Últimas vendas** → **Importar vendas antigas** há a opção **B
 
 1. Confirme que está usando o **User Token** (Meu Perfil → Tokens API), não o Account Token do webhook.
 2. Confirme que **DIGITAL_GURU_API_BASE_URL** é a URL completa do endpoint (incluindo path), como indicado na [documentação Transactions](https://docs.digitalmanager.guru/developers/transactions). Se a Guru usar outro path (ex.: `/myorders`, `/orders`), use essa URL.
-3. A API da Guru exige pelo menos um de: `ordered_at_ini`, `ordered_at_end`, `contact_id`, etc. O MonsterChat envia automaticamente **ordered_at_ini** (2 anos atrás) e **ordered_at_end** (hoje) quando você busca só por e-mail/telefone, obtém as transações do período e filtra por contato no próprio sistema.
+3. A API da Guru exige pelo menos um de: `ordered_at_ini`, `ordered_at_end`, `contact_id`, etc., e **não permite período maior que 180 dias**. O MonsterChat envia automaticamente **ordered_at_ini** (180 dias atrás) e **ordered_at_end** (hoje) quando você busca só por e-mail/telefone, obtém as transações do período e filtra por contato no próprio sistema. Para períodos maiores, use várias buscas com intervalos de 180 dias ou a Opção 2 (colar JSON).
 4. Se a API usar parâmetros ou formato de data diferente, obtenha o JSON manualmente (Postman/curl conforme a doc) e use a **Opção 2** abaixo (colar o JSON na importação).
 
 ### 2. Importar colando o JSON

@@ -10,6 +10,7 @@ export const runtime = 'nodejs';
  * Busca vendas na API da Guru. A API exige pelo menos um de: ordered_at_ini, confirmed_at_ini,
  * cancelled_at_ini, contact_id, subscription_id, invoice_id. Quando o usuário envia só email/phone,
  * usamos intervalo de datas (ordered_at_ini / ordered_at_end) e filtramos por email/telefone no nosso código.
+ * A API da Guru não permite período maior que 180 dias — usamos 180 dias quando não há datas na query.
  *
  * DOC GURU: https://docs.digitalmanager.guru/developers/transactions
  */
@@ -73,7 +74,10 @@ export async function GET(request: NextRequest) {
   const contactId = searchParams.get('contact_id')?.trim() || '';
 
   const endDate = orderedAtEnd || toDateOnly(new Date());
-  const startDate = orderedAtIni || toDateOnly(new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000));
+  const maxDays = 180;
+  const defaultStart = new Date();
+  defaultStart.setDate(defaultStart.getDate() - maxDays);
+  const startDate = orderedAtIni || toDateOnly(defaultStart);
 
   try {
     const params = new URLSearchParams();
@@ -112,15 +116,19 @@ export async function GET(request: NextRequest) {
 
     if (!res.ok) {
       const detail = typeof data === 'object' && data && 'message' in (data as object) ? (data as { message?: string }).message : text.slice(0, 500);
+      const bodyStr = JSON.stringify(data);
+      const is180DaysError = /180\s*days|period\s*greater/i.test(bodyStr);
       console.error('[Digital Guru fetch] API respondeu:', res.status, '(URL omitida)', detail?.slice(0, 200));
       return NextResponse.json({
         ok: false,
         error: 'A API da Guru respondeu com erro',
         guru_status: res.status,
         detail: detail || `HTTP ${res.status}`,
-        hint: res.status === 401
-          ? 'User Token inválido ou expirado. Gere um novo em Meu Perfil → Tokens API na Guru e atualize DIGITAL_GURU_USER_TOKEN.'
-          : 'Confira DIGITAL_GURU_API_BASE_URL (URL exata do endpoint) e DIGITAL_GURU_USER_TOKEN (User Token, não Account Token). Docs: https://docs.digitalmanager.guru/developers/transactions',
+        hint: is180DaysError
+          ? 'A API da Guru não permite período maior que 180 dias. Use intervalos de até 180 dias (ordered_at_ini e ordered_at_end) ou importe colando o JSON.'
+          : res.status === 401
+            ? 'User Token inválido ou expirado. Gere um novo em Meu Perfil → Tokens API na Guru e atualize DIGITAL_GURU_USER_TOKEN.'
+            : 'Confira DIGITAL_GURU_API_BASE_URL (URL exata do endpoint) e DIGITAL_GURU_USER_TOKEN (User Token, não Account Token). Docs: https://docs.digitalmanager.guru/developers/transactions',
         transactions: [],
       });
     }
