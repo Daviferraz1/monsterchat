@@ -123,7 +123,12 @@ async function processInstagramMessage(
   const normalized = normalizeInstagramMessage(message, channelId, messaging.sender, messaging.timestamp);
 
   const profile = await getInstagramUserProfile(senderId, accessToken);
-  const contactName = profile?.name || messaging.sender.username || profile?.username;
+  // Nome: perfil da API > @username do payload > fallback único (evita "Contato sem nome" quando a API de perfil falha, ex. 803)
+  const contactName =
+    profile?.name ||
+    (messaging.sender.username ? `@${messaging.sender.username}` : null) ||
+    profile?.username ||
+    `Instagram ${senderId.slice(-6)}`;
   const contactProfilePic = profile?.profile_pic;
 
   // A API do Instagram não expõe email do usuário; extrair da mensagem se o texto parecer um email

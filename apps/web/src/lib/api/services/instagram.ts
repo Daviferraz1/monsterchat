@@ -49,6 +49,12 @@ export interface InstagramSendTextParams {
   accessToken: string;
   recipientId: string;
   text: string;
+  /**
+   * Quando true, envia com messaging_type MESSAGE_TAG e tag HUMAN_AGENT.
+   * Use para respostas fora da janela de 24h (até 7 dias), para que a Meta registre uso do recurso Human Agent.
+   * Dentro da janela de 24h o envio usa RESPONSE (padrão).
+   */
+  useHumanAgentTag?: boolean;
 }
 
 export interface InstagramSendMessageResponse {
@@ -58,17 +64,20 @@ export interface InstagramSendMessageResponse {
 
 export async function sendInstagramText(params: InstagramSendTextParams) {
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${params.pageId}/messages`;
-  
+  const payload: Record<string, unknown> = {
+    recipient: { id: params.recipientId },
+    message: { text: params.text },
+  };
+  if (params.useHumanAgentTag) {
+    payload.messaging_type = 'MESSAGE_TAG';
+    payload.tag = 'HUMAN_AGENT';
+  } else {
+    payload.messaging_type = 'RESPONSE';
+  }
+
   const response = await axios.post<InstagramSendMessageResponse>(
     url,
-    {
-      recipient: {
-        id: params.recipientId,
-      },
-      message: {
-        text: params.text,
-      },
-    },
+    payload,
     {
       headers: {
         Authorization: `Bearer ${params.accessToken}`,

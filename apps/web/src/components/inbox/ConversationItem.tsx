@@ -34,7 +34,12 @@ export function ConversationItem({ conversation }: ConversationItemProps) {
   const pathname = usePathname();
   const contact = conversation.contact;
   const channel = conversation.channel;
-  const displayName = contact?.name || contact?.phone || 'Contato sem nome';
+  const instagramUsername = channel?.type === 'instagram' && contact?.metadata?.username;
+  const displayName =
+    contact?.name ||
+    contact?.phone ||
+    (instagramUsername ? `@${contact.metadata.username}` : null) ||
+    'Contato sem nome';
   const hasUnread = conversation.unread_count > 0;
   const isActive = pathname === `/inbox/${conversation.id}`;
   const colorIndex = (displayName?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length;

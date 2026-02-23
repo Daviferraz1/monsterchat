@@ -72,7 +72,12 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
 
   const contact = conversation.contact as Contact | undefined;
   const channel = conversation.channel as Channel | undefined;
-  const displayName = contact?.name || contact?.phone || 'Contato sem nome';
+  const instagramUsername = channel?.type === 'instagram' && contact?.metadata?.username;
+  const displayName =
+    contact?.name ||
+    contact?.phone ||
+    (instagramUsername ? `@${contact.metadata.username}` : null) ||
+    'Contato sem nome';
   const initials = displayName && displayName !== 'Contato sem nome'
     ? displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';

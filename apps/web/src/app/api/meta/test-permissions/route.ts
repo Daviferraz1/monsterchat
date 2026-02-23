@@ -15,26 +15,35 @@ const GRAPH_BASE = 'https://graph.facebook.com/v21.0';
  * Dispara as chamadas de API que a Meta exige para aprovar permissões no App Review:
  * - business_management: GET me/businesses
  * - whatsapp_business_manage_events: GET {waba_id}/subscribed_apps
- *
- * Usa o token do primeiro canal WhatsApp ativo (ou WHATSAPP_ACCESS_TOKEN) e
- * WABA ID do canal ou WHATSAPP_WABA_ID.
+ * - Instagram (se houver canal ativo): GET me?fields=id,name,instagram_business_account (pages + instagram_basic)
  */
 export async function GET() {
   try {
     let accessToken: string | null = apiEnv.WHATSAPP_ACCESS_TOKEN || null;
     let wabaId: string | null = apiEnv.WHATSAPP_WABA_ID || null;
+    let instagramToken: string | null = null;
 
     if (!isSupabasePlaceholder()) {
-      const { data: channels } = await supabaseAdmin
+      const { data: whatsappChannels } = await supabaseAdmin
         .from('channels')
         .select('access_token, business_account_id')
         .eq('type', 'whatsapp')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(1);
-      if (channels?.[0]) {
-        accessToken = accessToken || channels[0].access_token || null;
-        wabaId = wabaId || channels[0].business_account_id || null;
+      if (whatsappChannels?.[0]) {
+        accessToken = accessToken || whatsappChannels[0].access_token || null;
+        wabaId = wabaId || whatsappChannels[0].business_account_id || null;
+      }
+      const { data: igChannels } = await supabaseAdmin
+        .from('channels')
+        .select('access_token')
+        .eq('type', 'instagram')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (igChannels?.[0]?.access_token) {
+        instagramToken = igChannels[0].access_token;
       }
     }
 
@@ -105,6 +114,33 @@ export async function GET() {
         message: 'WABA ID não configurado',
         detail: 'Defina WHATSAPP_WABA_ID ou preencha "ID da conta Business (WABA ID)" no canal em Configurações → Canais.',
       };
+    }
+
+    // 3) Instagram — pages_read_engagement, instagram_basic / instagram_business_basic (token do canal = Page token; me = página)
+    if (instagramToken && instagramToken.trim() !== '') {
+      try {
+        const res = await axios.get(`${GRAPH_BASE}/me`, {
+          params: { fields: 'id,name,instagram_business_account' },
+          headers: { Authorization: `Bearer ${instagramToken}` },
+          timeout: META_API_TIMEOUT_MS,
+          validateStatus: () => true,
+        });
+        if (res.status === 200 && res.data?.id) {
+          results.instagram_pages_basic = {
+            ok: true,
+            message: 'Chamada registrada (me?fields=id,name,instagram_business_account) — pages + instagram_basic',
+          };
+        } else {
+          results.instagram_pages_basic = {
+            ok: false,
+            message: res.data?.error?.message || `HTTP ${res.status}`,
+            detail: res.data?.error || { status: res.status },
+          };
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        results.instagram_pages_basic = { ok: false, message: msg, detail: undefined };
+      }
     }
 
     const allOk = Object.values(results).every((r) => r.ok);
