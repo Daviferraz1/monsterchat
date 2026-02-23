@@ -35,7 +35,8 @@ function parseGuruWebhook(body: Record<string, unknown>): {
   const email = normalizeEmail(contact.email as string | undefined);
   const localCode = String(contact.phone_local_code ?? '').replace(/\D/g, '');
   const phoneNum = String(contact.phone_number ?? '').replace(/\D/g, '');
-  const phone = normalizePhone(localCode + phoneNum || contact.phone_number);
+  const rawPhone = (localCode + phoneNum).trim() || String(contact.phone_number ?? '');
+  const phone = normalizePhone(rawPhone);
 
   if (!email && !phone) return null;
 

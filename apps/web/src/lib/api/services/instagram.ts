@@ -99,8 +99,9 @@ export async function sendInstagramText(params: InstagramSendTextParams) {
 
     return response.data;
   } catch (err) {
-    const fullBody = axios.isAxiosError(err) ? err.response?.data : undefined;
-    console.error('[Instagram send] Erro completo da API:', JSON.stringify({ status: err?.response?.status, data: fullBody }));
+    const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+    const data = axios.isAxiosError(err) ? err.response?.data : undefined;
+    console.error('[Instagram send] Erro completo da API:', JSON.stringify({ status, data }));
     throw err;
   }
 }
