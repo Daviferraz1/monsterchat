@@ -7,14 +7,36 @@ export const runtime = 'nodejs';
 /**
  * GET /api/integrations/digital-guru/fetch-from-guru
  *
- * Busca vendas diretamente na API da Guru por e-mail e/ou telefone.
- * Requer: DIGITAL_GURU_USER_TOKEN e DIGITAL_GURU_API_BASE_URL.
+ * Busca vendas na API da Guru. A API exige pelo menos um de: ordered_at_ini, confirmed_at_ini,
+ * cancelled_at_ini, contact_id, subscription_id, invoice_id. Quando o usuário envia só email/phone,
+ * usamos intervalo de datas (ordered_at_ini / ordered_at_end) e filtramos por email/telefone no nosso código.
  *
  * DOC GURU: https://docs.digitalmanager.guru/developers/transactions
- * - Autenticação: Authorization: Bearer {User Token} (Meu Perfil → Tokens API)
- * - DIGITAL_GURU_API_BASE_URL: URL completa do endpoint (ex.: https://api.digitalmanager.guru/v1/transactions)
- *   Se a Guru usar outro path (ex.: /myorders, /orders), configure a URL completa.
  */
+function toDateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function normalizeEmailForMatch(email: string | null | undefined): string {
+  if (!email || typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+}
+function normalizePhoneForMatch(phone: string | null | undefined): string {
+  if (!phone || typeof phone !== 'string') return '';
+  return phone.replace(/\D/g, '');
+}
+
+function transactionMatchesContact(t: unknown, email: string, phone: string): boolean {
+  if (!t || typeof t !== 'object') return false;
+  const o = t as Record<string, unknown>;
+  const contact = o.contact as Record<string, unknown> | undefined;
+  if (!contact || typeof contact !== 'object') return false;
+  const cEmail = normalizeEmailForMatch(contact.email as string);
+  const cPhone = normalizePhoneForMatch(contact.phone_full_number as string || contact.phone_number as string);
+  if (email && cEmail && cEmail === email) return true;
+  if (phone && cPhone && (cPhone === phone || cPhone === phone.replace(/^55/, '') || cPhone === `55${phone}`)) return true;
+  return false;
+}
 export async function GET(request: NextRequest) {
   const userToken = apiEnv.DIGITAL_GURU_USER_TOKEN;
   let baseUrl = apiEnv.DIGITAL_GURU_API_BASE_URL?.trim().replace(/\/$/, '');
@@ -46,13 +68,22 @@ export async function GET(request: NextRequest) {
     phone = `55${phone}`;
   }
 
+  const orderedAtIni = searchParams.get('ordered_at_ini')?.trim() || '';
+  const orderedAtEnd = searchParams.get('ordered_at_end')?.trim() || '';
+  const contactId = searchParams.get('contact_id')?.trim() || '';
+
+  const endDate = orderedAtEnd || toDateOnly(new Date());
+  const startDate = orderedAtIni || toDateOnly(new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000));
+
   try {
     const params = new URLSearchParams();
-    if (email) {
-      params.set('email', email);
-    }
-    if (phone) {
-      params.set('phone', phone);
+    if (contactId) {
+      params.set('contact_id', contactId);
+      if (email) params.set('email', email);
+      if (phone) params.set('phone', phone);
+    } else {
+      params.set('ordered_at_ini', startDate);
+      params.set('ordered_at_end', endDate);
     }
 
     const separator = baseUrl.includes('?') ? '&' : '?';
@@ -104,6 +135,10 @@ export async function GET(request: NextRequest) {
       else if (Array.isArray(obj.results)) transactions = obj.results;
       else if (Array.isArray(obj.orders)) transactions = obj.orders;
       else if (Array.isArray(obj.items)) transactions = obj.items;
+    }
+
+    if ((email || phone) && transactions.length > 0) {
+      transactions = transactions.filter((t) => transactionMatchesContact(t, email, phone));
     }
 
     return NextResponse.json({
