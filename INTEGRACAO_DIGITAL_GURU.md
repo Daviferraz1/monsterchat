@@ -66,3 +66,48 @@ Se você enviar um POST manual ou de outro sistema (sem o formato Guru), use:
 ```
 
 Pelo menos um de `email` ou `phone` e o campo `product_name` são obrigatórios.
+
+## Como saber se está funcionando
+
+1. **Status da integração**  
+   Abra no navegador:  
+   `GET https://seu-dominio/api/integrations/digital-guru`  
+   A resposta inclui:
+   - `webhook_configured: true/false` — indica se `DIGITAL_GURU_ACCOUNT_TOKEN` está definido.
+   - `how_to_verify` — passos para conferir.
+
+2. **Depois de uma venda na Guru**  
+   No MonsterChat, abra um contato que tenha o **mesmo e-mail ou telefone** do comprador. No painel **Informações do contato** (ícone no header do chat) deve aparecer o bloco **Digital Guru** com situação “Aluno” e os produtos comprados.
+
+3. **Logs na Vercel**  
+   Em **Vercel → Projeto → Logs** (ou Functions), filtre por `[Digital Guru]` para ver erros ou confirmação de processamento.
+
+## Dados antigos (importar transações já existentes na Guru)
+
+O **webhook só envia vendas novas**. Para trazer transações antigas:
+
+1. **Opção A – Sync em lote (recomendado)**  
+   Use a API da Guru para listar transações ([Transactions](https://docs.digitalmanager.guru/developers/transactions) ou [Myorders](https://docs.digitalmanager.guru/developers/myorders)) com seu **User Token** (Bearer). Para cada transação retornada (mesmo formato do webhook), monte um array e envie:
+
+   ```http
+   POST https://seu-dominio/api/integrations/digital-guru/sync
+   Content-Type: application/json
+
+   {
+     "api_token": "seu_account_token_guru",
+     "transactions": [
+       { "id": "...", "contact": { "email": "...", "phone_number": "...", ... }, "product": { "name": "..." }, "status": "approved", "dates": { ... }, ... },
+       ...
+     ]
+   }
+   ```
+
+   Cada item de `transactions` deve estar no **mesmo formato** que a Guru envia no webhook (incluindo `contact`, `product` ou `items`, `status`, `dates`, etc.). O endpoint `/sync` processa cada um e atualiza os contatos no MonsterChat.
+
+2. **Opção B – Exportar da Guru e enviar**  
+   Se a Guru permitir exportar transações (CSV/JSON), converta para o formato do webhook e use o mesmo `POST /api/integrations/digital-guru/sync` com o array em `transactions`.
+
+Resposta esperada do `/sync`:
+- `processed`: quantas transações foram processadas.
+- `contacts_updated`: quantos contatos foram atualizados no total.
+- `errors`: lista de erros por transação (se houver).
