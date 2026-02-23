@@ -6,7 +6,20 @@ import type { DigitalGuruMetadata, DigitalGuruProduct } from '@/types';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-/** Normaliza telefone: só dígitos (para comparar com contatos). */
+/** GET: apenas informativo; o webhook da Guru usa POST. */
+export async function GET() {
+  return NextResponse.json(
+    {
+      integration: 'digital-guru',
+      method: 'POST',
+      message: 'Envie um POST com o payload do webhook de transações do Digital Manager Guru.',
+      docs: 'https://docs.digitalmanager.guru/developers/webhook-para-transacoes',
+    },
+    { status: 200 }
+  );
+}
+
+/** Normaliza telefone: só dígitos (para comparar com contatos). */ só dígitos (para comparar com contatos). */
 function normalizePhone(phone: string | null | undefined): string {
   if (!phone || typeof phone !== 'string') return '';
   return phone.replace(/\D/g, '');
