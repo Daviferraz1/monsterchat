@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSupabase } from './useSupabase';
 import type { Conversation } from '@/types';
 
@@ -13,6 +13,7 @@ export function useConversations(filters?: {
   channel_id?: string;
   channel_type?: ChannelTypeFilter;
   replied?: RepliedFilter;
+  search?: string;
 }) {
   const supabase = useSupabase();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -25,6 +26,7 @@ export function useConversations(filters?: {
     VALID_STATUSES.includes(statusFilter as (typeof VALID_STATUSES)[number]);
 
   const repliedFilter = filters?.replied ?? 'all';
+  const searchQuery = (filters?.search ?? '').trim().toLowerCase();
 
   useEffect(() => {
     const loadConversations = async (showLoading = true) => {
@@ -102,5 +104,24 @@ export function useConversations(filters?: {
     };
   }, [supabase, statusFilter, applyStatus, repliedFilter, filters?.assigned_to, filters?.channel_id, filters?.channel_type]);
 
-  return { conversations, loading };
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery) return conversations;
+    const needle = searchQuery;
+    return conversations.filter((c) => {
+      const name = c.contact?.name ?? '';
+      const phone = c.contact?.phone ?? '';
+      const externalId = c.contact?.external_id ?? '';
+      const username = (c.contact?.metadata as { username?: string } | undefined)?.username ?? '';
+      const preview = c.last_message_preview ?? '';
+      return (
+        name.toLowerCase().includes(needle) ||
+        phone.includes(needle) ||
+        externalId.includes(needle) ||
+        username.toLowerCase().includes(needle) ||
+        preview.toLowerCase().includes(needle)
+      );
+    });
+  }, [conversations, searchQuery]);
+
+  return { conversations: filteredConversations, loading };
 }

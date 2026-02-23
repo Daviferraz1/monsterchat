@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/api/supabase';
 import { isSupabasePlaceholder } from '@/lib/api/env';
+import { sanitizeTokenForHeader } from '@/lib/api/utils';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,7 +29,7 @@ export async function PATCH(
     const body = await request.json();
     const updates: Record<string, unknown> = {};
 
-    if (body.access_token !== undefined) updates.access_token = body.access_token;
+    if (body.access_token !== undefined) updates.access_token = sanitizeTokenForHeader(body.access_token);
     if (body.name !== undefined) updates.name = body.name;
     if (body.is_active !== undefined) updates.is_active = !!body.is_active;
     if (body.external_id !== undefined) updates.external_id = body.external_id;

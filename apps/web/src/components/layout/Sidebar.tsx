@@ -17,6 +17,7 @@ export function Sidebar() {
     channel_id?: string;
     channel_type?: 'all' | 'whatsapp' | 'instagram';
     replied?: 'all' | 'replied' | 'not_replied';
+    search?: string;
   }>({});
   const { conversations, loading } = useConversations(filters);
 

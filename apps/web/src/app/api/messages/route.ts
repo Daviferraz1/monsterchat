@@ -137,14 +137,33 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
       status = 'failed';
 
-      // Token expirado (401) → resposta amigável para o usuário atualizar o token
       const statusCode = error?.response?.status;
-      const isTokenError =
-        statusCode === 401 ||
-        (typeof error?.response?.data?.error?.message === 'string' &&
-          /token|expired|invalid_token|session/i.test(error.response.data.error.message));
+      const errorMessage = typeof error?.response?.data?.error?.message === 'string'
+        ? error.response.data.error.message
+        : '';
+      const errMsg = typeof error?.message === 'string' ? error.message : '';
 
-      if (isTokenError) {
+      // Invalid character in header (token colado com quebra de linha ou caractere inválido)
+      if (/Invalid character in header content|Authorization/i.test(errMsg)) {
+        return NextResponse.json(
+          {
+            error: 'Token do canal com caractere inválido no cabeçalho.',
+            hint: 'O token pode ter sido colado com quebra de linha ou espaço extra. Em Configurações → Canais, edite o canal, copie o token de novo (uma linha só, sem quebras) e salve. O app também tenta corrigir isso automaticamente.',
+          },
+          { status: 400 }
+        );
+      }
+
+      // 401 ou mensagem que mencione token inválido/expirado → uma única mensagem (evita "expirado" quando o token é permanente mas há outro problema)
+      const isTokenRelated =
+        statusCode === 401 ||
+        /invalid.*token|invalid_token|access token|token.*invalid|expired|token has expired|session expired|expirado/i.test(errorMessage);
+
+      if (isTokenRelated) {
+        console.warn('[Send message] Erro de token/401:', { statusCode, errorMessage, channelType: channel?.type, externalId: channel?.external_id });
+        const tokenMessage =
+          'Token do canal inválido ou sem permissão. Em Configurações → Canais, confira: 1) Use um token permanente (Usuário do sistema ou token da Página) com permissões de mensagens. 2) Instagram: External ID = ID da Página do Facebook vinculada ao Instagram; WhatsApp: External ID = Phone Number ID. Se acabou de colar um token novo, salve o canal e tente enviar de novo.';
+
         const message = await createMessage({
           conversationId: conversation_id,
           direction: 'outbound',
@@ -168,15 +187,40 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(
           {
-            error:
-              'Token do canal expirado. Atualize o token em Configurações → Canais.',
+            error: tokenMessage,
             message,
           },
           { status: 401 }
         );
       }
 
-      // Instagram 400: "Application does not have the capability" → External ID deve ser Page ID (Facebook)
+      // Instagram + (#100) "messaging_product is required" → o External ID está como Phone Number ID (WhatsApp), não Page ID
+      if (channel?.type === 'instagram' && statusCode === 400 && /messaging_product is required/i.test(errorMessage)) {
+        const usedId = channel?.external_id || '';
+        return NextResponse.json(
+          {
+            error: 'Canal Instagram com External ID incorreto.',
+            hint: `A API está tratando o envio como WhatsApp porque o "External ID" do canal (${usedId}) é um Phone Number ID, não o ID da Página do Facebook. Em Configurações → Canais, edite o canal Instagram e no campo "External ID" coloque o ID da PÁGINA do Facebook vinculada ao Instagram (em business.facebook.com → Configurações → Contas → Páginas → abra a página → copie o ID). Não use o Phone Number ID do WhatsApp. Mantenha o "ID da conta do Instagram" como está (para receber mensagens).`,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Instagram: janela de 24h expirada ou fora da sessão (API nova ou antiga)
+      if (channel?.type === 'instagram' && (statusCode === 400 || statusCode === 403)) {
+        const errMsg = String(error?.response?.data?.error?.message ?? error?.response?.data?.error?.error_user_msg ?? errorMessage);
+        if (/24.?hour|24h|window|session|outside|expirada|janela|template/i.test(errMsg)) {
+          return NextResponse.json(
+            {
+              error: 'Não é possível enviar essa mensagem agora.',
+              hint: 'Só é possível enviar para quem te enviou uma mensagem nas últimas 24 horas. Peça ao contato para enviar uma nova mensagem e responda em seguida. Fora da janela de 24h só são permitidos Message Templates (se aprovados no app).',
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Instagram 400: "Application does not have the capability" (API antiga via Page ID)
       if (channel?.type === 'instagram' && statusCode === 400) {
         const errMsg = String(error?.response?.data?.error?.message ?? error?.response?.data?.error?.error_user_msg ?? '');
         if (/capability|invalid_request|does not have/i.test(errMsg)) {
@@ -228,10 +272,31 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Erro não tratado acima: log completo e resposta genérica
-      console.error('Error sending message:', error?.response?.status ?? error?.message ?? error);
+      // Erro não tratado acima: log completo e resposta com detalhe da Meta quando houver
+      const data = error?.response?.data;
+      const metaError = data?.error;
+      const metaMsg =
+        typeof metaError?.message === 'string'
+          ? metaError.message
+          : typeof metaError?.error_user_msg === 'string'
+            ? metaError.error_user_msg
+            : typeof data?.message === 'string'
+              ? data.message
+              : metaError && typeof metaError === 'object'
+                ? JSON.stringify(metaError)
+                : undefined;
+      console.error('Error sending message:', {
+        status: statusCode,
+        statusText: error?.response?.statusText,
+        metaMessage: metaMsg,
+        channelType: channel?.type,
+        externalId: channel?.external_id,
+      });
+      const hint = metaMsg
+        ? `Detalhe da API: ${metaMsg}`
+        : `HTTP ${statusCode ?? 'erro'}. Verifique Configurações → Canais (token, External ID) e os logs do servidor.`;
       return NextResponse.json(
-        { error: 'Falha ao enviar mensagem.', hint: error?.response?.data?.error?.message ?? undefined },
+        { error: 'Falha ao enviar mensagem.', hint },
         { status: 502 }
       );
     }

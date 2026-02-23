@@ -45,3 +45,12 @@ export function extractEmailFromText(text: string | undefined): string | undefin
   const match = trimmed.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   return match ? match[0].toLowerCase() : undefined;
 }
+
+/**
+ * Remove caracteres inválidos do token para uso no header Authorization.
+ * Evita "Invalid character in header content" quando o token foi colado com quebra de linha ou espaços extras.
+ */
+export function sanitizeTokenForHeader(token: string | null | undefined): string {
+  if (token == null) return '';
+  return String(token).replace(/\s+/g, ' ').trim();
+}

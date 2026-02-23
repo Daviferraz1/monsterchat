@@ -1,6 +1,6 @@
 'use client';
 
-import { MessageCircle, Instagram } from 'lucide-react';
+import { MessageCircle, Instagram, Search } from 'lucide-react';
 import type { ChannelTypeFilter, RepliedFilter } from '@/hooks/useConversations';
 
 interface InboxFiltersProps {
@@ -10,6 +10,7 @@ interface InboxFiltersProps {
     channel_id?: string;
     channel_type?: ChannelTypeFilter;
     replied?: RepliedFilter;
+    search?: string;
   };
   onFiltersChange: (filters: InboxFiltersProps['filters']) => void;
 }
@@ -18,9 +19,28 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
   const channelType = filters.channel_type ?? 'all';
   const status = filters.status ?? '';
   const replied = filters.replied ?? 'all';
+  const search = filters.search ?? '';
 
   return (
     <div className="p-4 border-b border-white/5 space-y-3 bg-[#0f0f1e]">
+      {/* Pesquisar conversa */}
+      <div>
+        <label htmlFor="inbox-search" className="sr-only">
+          Pesquisar conversa
+        </label>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" aria-hidden />
+          <input
+            id="inbox-search"
+            type="search"
+            placeholder="Pesquisar por nome, telefone, @..."
+            value={search}
+            onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
+            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#8b5cf6] focus:border-[#8b5cf6]"
+          />
+        </div>
+      </div>
+
       {/* Abas por canal */}
       <div>
         <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">Canal</p>

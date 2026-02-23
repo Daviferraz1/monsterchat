@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/api/supabase';
 import { isSupabasePlaceholder } from '@/lib/api/env';
+import { sanitizeTokenForHeader } from '@/lib/api/utils';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
         name,
         external_id,
         business_account_id: business_account_id || null,
-        access_token,
+        access_token: sanitizeTokenForHeader(access_token),
         webhook_verify_token: webhook_verify_token || null,
         is_active: !!is_active,
       })

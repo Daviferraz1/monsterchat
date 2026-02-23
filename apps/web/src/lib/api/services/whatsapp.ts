@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { sanitizeTokenForHeader } from '../utils';
 
 export interface WhatsAppSendTextParams {
   phoneNumberId: string;
@@ -33,7 +34,7 @@ export async function sendWhatsAppText(params: WhatsAppSendTextParams) {
     },
     {
       headers: {
-        Authorization: `Bearer ${params.accessToken}`,
+        Authorization: `Bearer ${sanitizeTokenForHeader(params.accessToken)}`,
         'Content-Type': 'application/json',
       },
     }
@@ -67,7 +68,7 @@ export async function sendWhatsAppImage(params: WhatsAppSendMediaParams) {
   };
   const response = await axios.post(url, body, {
     headers: {
-      Authorization: `Bearer ${params.accessToken}`,
+      Authorization: `Bearer ${sanitizeTokenForHeader(params.accessToken)}`,
       'Content-Type': 'application/json',
     },
   });
@@ -84,7 +85,7 @@ export async function sendWhatsAppVideo(params: WhatsAppSendMediaParams) {
   };
   const response = await axios.post(url, body, {
     headers: {
-      Authorization: `Bearer ${params.accessToken}`,
+      Authorization: `Bearer ${sanitizeTokenForHeader(params.accessToken)}`,
       'Content-Type': 'application/json',
     },
   });
@@ -101,7 +102,7 @@ export async function sendWhatsAppAudio(params: WhatsAppSendMediaParams) {
   };
   const response = await axios.post(url, body, {
     headers: {
-      Authorization: `Bearer ${params.accessToken}`,
+      Authorization: `Bearer ${sanitizeTokenForHeader(params.accessToken)}`,
       'Content-Type': 'application/json',
     },
   });
@@ -122,7 +123,7 @@ export async function sendWhatsAppDocument(params: WhatsAppSendMediaParams) {
   };
   const response = await axios.post(url, body, {
     headers: {
-      Authorization: `Bearer ${params.accessToken}`,
+      Authorization: `Bearer ${sanitizeTokenForHeader(params.accessToken)}`,
       'Content-Type': 'application/json',
     },
   });

@@ -100,9 +100,47 @@ Quando a API devolve **500** sem detalhe:
 
 ---
 
-## 8. Checklist rápido
+## 8. Instagram vinculado a **outra** Página do Facebook (portfólio diferente)
+
+Se o seu Instagram está conectado a **outra** Página do Facebook (outro portfólio ou outra empresa), o envio de mensagens pode falhar mesmo com token e IDs corretos no MonsterChat.
+
+**Por quê:**  
+Para **enviar** mensagem, a API da Meta exige o **Page Access Token** e o **Page ID** da **mesma Página do Facebook que está vinculada** à conta do Instagram onde a conversa acontece. Se no MonsterChat você configurou uma Página/portfólio diferente, a Meta pode rejeitar o envio (erro 500 ou “unknown error”).
+
+**Como corrigir (uma das duas):**
+
+### Opção A – Usar no MonsterChat a Página que já está ligada ao Instagram
+
+1. Descubra **qual Página do Facebook** está vinculada ao seu Instagram:  
+   [business.facebook.com](https://business.facebook.com) → **Configurações** → **Contas** → **Contas do Instagram** → veja qual conta Instagram está conectada e a **qual Página**.
+2. Anote o **ID dessa Página** (em Contas → **Páginas** → abra a página → copie o ID).
+3. Gere um **Page Access Token** **dessa** Página (com permissões de mensagens do Instagram).
+4. Em **Configurações → Canais**, edite o canal Instagram:
+   - **External ID** = ID dessa Página (a que está ligada ao Instagram).
+   - **Token** = Page Access Token dessa mesma Página.
+   - **ID da conta do Instagram** = mantém o ID da conta Instagram (ex.: `17841403342667626`).
+
+Assim o MonsterChat usa a Página certa para enviar.
+
+### Opção B – Vincular o Instagram à Página que você usa no MonsterChat
+
+Se você **prefere** usar no MonsterChat uma Página que já tem (outro portfólio):
+
+1. No **Meta Business Suite** / [business.facebook.com](https://business.facebook.com):  
+   Configurações → **Contas** → **Contas do Instagram**.
+2. **Desvincule** o Instagram da Página atual (se permitido pelas regras da Meta).
+3. **Vincule** a conta do Instagram à **Página** da qual você já tem o token e o Page ID usados no MonsterChat.
+
+Depois disso, no canal do MonsterChat mantenha **External ID** = ID dessa Página e o token dessa Página.
+
+**Resumo:** O **External ID** e o **token** no canal devem ser sempre da **Página do Facebook que está vinculada** à conta do Instagram. Se o Instagram está em outro portfólio, use essa Página (e o token dela) no MonsterChat ou mude o vínculo do Instagram para a Página que você já usa no app.
+
+---
+
+## 9. Checklist rápido
 
 - [ ] Canal Instagram em **Configurações → Canais** com **External ID** = **Page ID** (Facebook).
+- [ ] A Página desse **External ID** é a **mesma** que está vinculada à conta do Instagram (não outra Página/portfólio).
 - [ ] **ID da conta do Instagram** = valor de `recipient.id` do webhook (ex.: `17841403342667626`).
 - [ ] **Token** = Page Access Token dessa Página, com permissões de mensagens.
 - [ ] Destinatário te enviou mensagem nas **últimas 24h**.
