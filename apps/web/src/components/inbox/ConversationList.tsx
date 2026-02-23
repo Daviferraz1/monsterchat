@@ -2,7 +2,7 @@
 
 import { ConversationItem } from './ConversationItem';
 import { ChannelBadge } from '../layout/ChannelBadge';
-import type { Conversation } from '@/types';
+import type { Conversation, ChannelType } from '@/types';
 import type { ChannelTypeFilter } from '@/hooks/useConversations';
 
 interface ConversationListProps {
@@ -12,18 +12,17 @@ interface ConversationListProps {
   channelTypeFilter?: ChannelTypeFilter;
 }
 
-function groupByChannel(conversations: Conversation[]): { channelId: string; channelName: string; channelType: 'whatsapp' | 'instagram'; items: Conversation[] }[] {
+function groupByChannel(conversations: Conversation[]): { channelId: string; channelName: string; channelType: ChannelType; items: Conversation[] }[] {
   const map = new Map<string, Conversation[]>();
-  const channelMeta = new Map<string, { name: string; type: 'whatsapp' | 'instagram' }>();
+  const channelMeta = new Map<string, { name: string; type: ChannelType }>();
 
   for (const c of conversations) {
     const id = c.channel_id;
     if (!map.has(id)) {
+      const type = (c.channel?.type || 'whatsapp') as ChannelType;
+      const name = c.channel?.name || (type === 'whatsapp' ? 'WhatsApp' : type === 'instagram' ? 'Instagram' : 'Guru (vendas)');
       map.set(id, []);
-      channelMeta.set(id, {
-        name: c.channel?.name || (c.channel?.type === 'whatsapp' ? 'WhatsApp' : 'Instagram'),
-        type: c.channel?.type || 'whatsapp',
-      });
+      channelMeta.set(id, { name, type });
     }
     map.get(id)!.push(c);
   }
