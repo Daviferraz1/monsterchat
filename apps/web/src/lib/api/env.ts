@@ -50,4 +50,7 @@ export const apiEnv = {
   INSTAGRAM_PAGE_ID: process.env.INSTAGRAM_PAGE_ID,
   INSTAGRAM_PAGE_ACCESS_TOKEN: process.env.INSTAGRAM_PAGE_ACCESS_TOKEN,
   INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID,
+
+  // Digital Manager Guru – webhook de transações (Account Token para validar api_token)
+  DIGITAL_GURU_ACCOUNT_TOKEN: process.env.DIGITAL_GURU_ACCOUNT_TOKEN,
 } as const;

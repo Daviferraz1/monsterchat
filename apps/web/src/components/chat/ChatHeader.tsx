@@ -4,7 +4,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
-import { User, Phone, Mail, FileText, X, MessageCircle, Calendar } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info } from 'lucide-react';
+import type { DigitalGuruMetadata } from '@/types';
 
 function formatDateTime(iso?: string | null): string {
   if (!iso) return '—';
@@ -72,6 +73,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
 
   const contact = conversation.contact as Contact | undefined;
   const channel = conversation.channel as Channel | undefined;
+  const dg = contact?.metadata?.digital_guru as DigitalGuruMetadata | undefined;
   const instagramUsername = channel?.type === 'instagram' && contact?.metadata?.username;
   const displayName =
     contact?.name ||
@@ -174,7 +176,54 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                 Canal: {channel.name} ({channel.type})
               </div>
             )}
-            {!contact.name && !contact.phone && !contact.email && !contact.notes && (
+            {dg && (
+              <div className="pt-3 border-t space-y-2">
+                <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  Digital Guru
+                </h4>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Situação:</span>
+                    <span className={dg.is_student ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}>
+                      {dg.is_student ? 'Aluno' : 'Não identificado como aluno'}
+                    </span>
+                  </div>
+                  {dg.situation && (
+                    <div className="flex items-start gap-2 text-muted-foreground">
+                      <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span className="text-xs">{dg.situation}</span>
+                    </div>
+                  )}
+                  {dg.products && dg.products.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5" />
+                        Produtos comprados
+                      </span>
+                      <ul className="list-disc list-inside text-xs space-y-0.5">
+                        {dg.products.map((p, i) => (
+                          <li key={i}>
+                            {p.name}
+                            {p.purchased_at && (
+                              <span className="text-muted-foreground ml-1">
+                                ({formatDateTime(p.purchased_at)})
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {dg.last_sync_at && (
+                    <p className="text-[10px] text-muted-foreground pt-1">
+                      Última atualização: {formatDateTime(dg.last_sync_at)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            {!contact.name && !contact.phone && !contact.email && !contact.notes && !dg && (
               <p className="text-sm text-muted-foreground">
                 Nenhuma informação adicional.
               </p>

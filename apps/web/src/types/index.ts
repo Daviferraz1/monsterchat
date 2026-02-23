@@ -58,6 +58,22 @@ export interface Contact {
   updated_at: string;
 }
 
+/** Dados do Digital Guru no metadata do contato (vendas processadas → identificar aluno e produtos). */
+export interface DigitalGuruProduct {
+  name: string;
+  product_id?: string;
+  order_id?: string;
+  purchased_at?: string;
+}
+
+export interface DigitalGuruMetadata {
+  is_student: boolean;
+  customer_id?: string;
+  products: DigitalGuruProduct[];
+  situation?: string;
+  last_sync_at?: string;
+}
+
 export interface Channel {
   id: string;
   type: ChannelType;
