@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+const GRAPH_API_VERSION = 'v23.0';
+
 /** Resposta da API de perfil do usuário Instagram (User Profile API). */
 export interface InstagramUserProfile {
   name?: string;
@@ -10,23 +12,32 @@ export interface InstagramUserProfile {
 /**
  * Busca nome e foto do perfil do usuário Instagram (requer consentimento após ele enviar mensagem).
  * https://developers.facebook.com/docs/messenger-platform/instagram/features/user-profile
+ *
+ * Erro 803 "IGSID not found": a Meta não consegue devolver o perfil. Causas comuns:
+ * - Token não é Page Access Token da Página vinculada ao Instagram (ou sem permissões instagram_basic + instagram_manage_messages).
+ * - Usuário bloqueou a empresa no Instagram.
+ * - App em modo Desenvolvimento e usuário não é testador.
+ * A mensagem continua sendo processada; o contato fica só com o ID (sem nome/foto da API).
  */
 export async function getInstagramUserProfile(
   igScopedUserId: string,
   accessToken: string
 ): Promise<InstagramUserProfile | null> {
   try {
-    const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(igScopedUserId)}`;
+    const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(igScopedUserId)}`;
     const { data } = await axios.get<InstagramUserProfile>(url, {
       params: { fields: 'name,username,profile_pic', access_token: accessToken },
       timeout: 10000,
     });
     return data;
   } catch (err) {
-    const msg = axios.isAxiosError(err) ? err.response?.data?.error?.message : null;
-    if (msg && /consent|required|blocked/i.test(String(msg))) {
-      console.debug('[Instagram] Perfil não disponível (consentimento ou bloqueio):', msg);
-    } else {
+    const data = axios.isAxiosError(err) ? err.response?.data?.error : undefined;
+    const msg = typeof data?.message === 'string' ? data.message : null;
+    const code = data?.code;
+    // 803 = IGSID not found (perfil não disponível para este ID/token); consent/bloqueio = esperado
+    if (code === 803 || (msg && /IGSID not found|consent|required|blocked/i.test(String(msg)))) {
+      console.debug('[Instagram] Perfil não disponível:', msg || `code ${code}`);
+    } else if (msg || err) {
       console.warn('[Instagram] Erro ao buscar perfil:', msg || err);
     }
     return null;
@@ -46,7 +57,7 @@ export interface InstagramSendMessageResponse {
 }
 
 export async function sendInstagramText(params: InstagramSendTextParams) {
-  const url = `https://graph.facebook.com/v21.0/${params.pageId}/messages`;
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${params.pageId}/messages`;
   
   const response = await axios.post<InstagramSendMessageResponse>(
     url,

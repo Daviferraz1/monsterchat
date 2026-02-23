@@ -192,31 +192,41 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Instagram 500 da Meta: "An unknown error has occurred"
+      // Instagram 500 da Meta: "An unknown error has occurred" — sempre devolver JSON amigável, não relançar
       if (channel?.type === 'instagram' && statusCode === 500) {
-        const data = error?.response?.data;
-        const metaError = data?.error;
-        const metaMsg = typeof metaError?.message === 'string' ? metaError.message : '';
-        const metaCode = metaError?.code ?? '';
-        const fbtraceId = metaError?.fbtrace_id ?? (typeof metaError === 'object' && metaError && 'fbtrace_id' in metaError ? (metaError as { fbtrace_id?: string }).fbtrace_id : undefined);
-        const headerDebug = error?.response?.headers?.['debug-link'] ?? error?.response?.headers?.get?.('debug-link');
-        const debugUrl =
-          typeof headerDebug === 'string'
-            ? headerDebug
-            : fbtraceId
-              ? `https://www.meta.com/debug/?mid=${encodeURIComponent(fbtraceId)}`
-              : undefined;
-        console.error('[Instagram send] Meta 500:', JSON.stringify({ metaMsg, metaCode, fbtraceId, error: metaError, fullBody: data }));
-        const hintParts = [
-          'A API do Instagram retornou erro interno (500).',
-          metaMsg ? `Meta: "${metaMsg}"` : null,
-          debugUrl ? `Detalhes: ${debugUrl}` : null,
-          'Confira: 1) No Instagram (app móvel): Configurações → Mensagens e respostas a stories → Controles de mensagem → Ferramentas conectadas → ative "Permitir acesso às mensagens". 2) Só é possível enviar mensagem para quem te enviou uma mensagem nas últimas 24h. 3) Se o app está em modo Desenvolvimento, o destinatário precisa ser adicionado como testador no app. 4) Tente novamente em alguns minutos.',
-        ].filter(Boolean);
-        return NextResponse.json(
-          { error: 'Erro ao enviar pelo Instagram.', hint: hintParts.join(' '), debugUrl: debugUrl ?? undefined },
-          { status: 502 }
-        );
+        try {
+          const data = error?.response?.data;
+          const metaError = data?.error;
+          const metaMsg = typeof metaError?.message === 'string' ? metaError.message : '';
+          const metaCode = metaError?.code ?? '';
+          const fbtraceId = metaError?.fbtrace_id ?? (typeof metaError === 'object' && metaError && 'fbtrace_id' in metaError ? (metaError as { fbtrace_id?: string }).fbtrace_id : undefined);
+          const headers = error?.response?.headers;
+          const headerDebugLink =
+            (typeof headers?.get === 'function' ? headers.get('debug-link') : null) ??
+            headers?.['debug-link'];
+          const errorMid = typeof headers?.get === 'function' ? headers.get('error-mid') : headers?.['error-mid'];
+          const debugUrl =
+            (typeof headerDebugLink === 'string' && headerDebugLink.startsWith('http') ? headerDebugLink : null) ??
+            (typeof errorMid === 'string' && errorMid ? `https://www.meta.com/debug/?mid=${encodeURIComponent(errorMid)}` : null) ??
+            (fbtraceId ? `https://www.meta.com/debug/?mid=${encodeURIComponent(fbtraceId)}` : undefined);
+          console.error('[Instagram send] Meta 500:', JSON.stringify({ metaMsg, metaCode, fbtraceId, error: metaError, fullBody: data }));
+          const hintParts = [
+            'A API do Instagram retornou erro interno (500).',
+            metaMsg ? `Meta: "${metaMsg}"` : null,
+            debugUrl ? `Detalhes: ${debugUrl}` : null,
+            'Confira: 1) No Instagram (app móvel): Configurações → Mensagens e respostas a stories → Controles de mensagem → Ferramentas conectadas → ative "Permitir acesso às mensagens". 2) Só é possível enviar mensagem para quem te enviou uma mensagem nas últimas 24h. 3) Se o app está em modo Desenvolvimento, o destinatário precisa ser adicionado como testador no app. 4) Tente novamente em alguns minutos.',
+          ].filter(Boolean);
+          return NextResponse.json(
+            { error: 'Erro ao enviar pelo Instagram.', hint: hintParts.join(' '), debugUrl: debugUrl ?? undefined },
+            { status: 502 }
+          );
+        } catch (innerErr) {
+          console.error('[Instagram send] Erro ao montar resposta 502:', innerErr);
+          return NextResponse.json(
+            { error: 'Erro ao enviar pelo Instagram.', hint: 'A API da Meta retornou 500. Confira as permissões do canal, janela de 24h e se o destinatário é testador (app em desenvolvimento). Detalhes: https://www.meta.com/debug/' },
+            { status: 502 }
+          );
+        }
       }
     }
 
