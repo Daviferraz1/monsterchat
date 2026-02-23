@@ -59,9 +59,11 @@ export async function handleInstagramWebhook(body: unknown) {
   for (const entry of webhookBody.entry) {
     const messagingList = entry.messaging || [];
     for (const messaging of messagingList) {
-      const pageId = messaging.recipient?.id;
+      // Em mensagens normais (usuário → negócio): recipient.id = conta Instagram. Em echo (negócio → usuário): sender.id = conta Instagram.
+      const isEcho = messaging.message?.is_echo === true;
+      const pageId = isEcho ? messaging.sender?.id : messaging.recipient?.id;
       if (!pageId) {
-        console.warn('[Instagram Webhook] Missing recipient.id');
+        console.warn('[Instagram Webhook] Missing recipient.id or sender.id');
         continue;
       }
 

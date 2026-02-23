@@ -135,7 +135,6 @@ export async function POST(request: NextRequest) {
         );
       }
     } catch (error: any) {
-      console.error('Error sending message:', error);
       status = 'failed';
 
       // Token expirado (401) → resposta amigável para o usuário atualizar o token
@@ -228,6 +227,13 @@ export async function POST(request: NextRequest) {
           );
         }
       }
+
+      // Erro não tratado acima: log completo e resposta genérica
+      console.error('Error sending message:', error?.response?.status ?? error?.message ?? error);
+      return NextResponse.json(
+        { error: 'Falha ao enviar mensagem.', hint: error?.response?.data?.error?.message ?? undefined },
+        { status: 502 }
+      );
     }
 
     const preview =
