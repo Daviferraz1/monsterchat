@@ -6,6 +6,7 @@ import {
   normalizeEmail,
   parseGuruWebhook,
   applyParsedTransactionToContacts,
+  insertGuruSale,
 } from '@/lib/api/integrations/digital-guru';
 
 export const dynamic = 'force-dynamic';
@@ -96,6 +97,22 @@ export async function POST(request: NextRequest) {
 
     const result = await applyParsedTransactionToContacts(parsed);
 
+    const productNames = parsed.products.map((p) => p.name).join(', ');
+    const soldAt = parsed.products[0]?.purchased_at ?? new Date().toISOString();
+    const contactName =
+      (isGuruWebhook && body.contact && typeof body.contact === 'object' && (body.contact as Record<string, unknown>).name) ||
+      (typeof body.name === 'string' ? body.name : null);
+    await insertGuruSale({
+      transaction_id: typeof body.id === 'string' ? body.id : null,
+      contact_email: parsed.email,
+      contact_phone: parsed.phone,
+      contact_name: typeof contactName === 'string' ? contactName : null,
+      product_names: productNames,
+      status: parsed.situation || null,
+      sold_at: soldAt,
+      contact_id: result.contact_ids[0] ?? null,
+    });
+
     if (result.updated === 0) {
       return NextResponse.json(
         {
@@ -108,12 +125,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const productNames = parsed.products.map((p) => p.name).join(', ');
+    const productNamesForMessage = parsed.products.map((p) => p.name).join(', ');
     return NextResponse.json({
       ok: true,
       updated: result.updated,
       contact_ids: result.contact_ids,
-      message: `Contato(s) atualizado(s) como aluno. Produto(s): ${productNames}`,
+      message: `Contato(s) atualizado(s) como aluno. Produto(s): ${productNamesForMessage}`,
     });
   } catch (error) {
     console.error('[Digital Guru] Erro:', error);

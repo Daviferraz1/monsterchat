@@ -111,3 +111,14 @@ Resposta esperada do `/sync`:
 - `processed`: quantas transações foram processadas.
 - `contacts_updated`: quantos contatos foram atualizados no total.
 - `errors`: lista de erros por transação (se houver).
+
+## Últimas vendas (painel do atendente)
+
+Cada venda recebida (webhook ou sync) é registrada na tabela **`guru_sales`** no banco. O atendente pode ver as últimas vendas sem sair do sistema:
+
+- No menu lateral: **Últimas vendas** → lista data, cliente, contato, produto(s), status.
+- Se o comprador já tiver conversado no chat, aparece **Abrir conversa** → abre a conversa no Inbox.
+
+**Migration:** rode a migration `015_guru_sales.sql` no Supabase (ou `supabase db push`) para criar a tabela `guru_sales`.
+
+**API:** `GET /api/integrations/digital-guru/sales?limit=50&offset=0` retorna as vendas com `conversation_id` quando houver conversa do contato.

@@ -6,7 +6,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
-import { MessageSquare, Settings, Users } from 'lucide-react';
+import { MessageSquare, Settings, Users, ShoppingBag } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 
 export function Sidebar() {
@@ -46,6 +46,16 @@ export function Sidebar() {
             }`}
           >
             <Users className="w-4 h-4" /> Contatos
+          </Link>
+          <Link
+            href="/sales"
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+              pathname?.startsWith('/sales')
+                ? 'bg-[rgba(139,92,246,0.25)] text-[#a78bfa]'
+                : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4" /> Últimas vendas
           </Link>
           <Link
             href="/settings/channels"

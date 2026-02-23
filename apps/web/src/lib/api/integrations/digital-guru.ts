@@ -144,3 +144,31 @@ export async function applyParsedTransactionToContacts(
 
   return { updated: updatedIds.length, contact_ids: updatedIds };
 }
+
+export interface GuruSaleInsert {
+  transaction_id: string | null;
+  contact_email: string;
+  contact_phone: string;
+  contact_name: string | null;
+  product_names: string;
+  status: string | null;
+  sold_at: string;
+  contact_id: string | null;
+}
+
+/** Registra uma venda na tabela guru_sales (para o painel "Últimas vendas"). */
+export async function insertGuruSale(row: GuruSaleInsert): Promise<void> {
+  const { error } = await supabaseAdmin.from('guru_sales').insert({
+    transaction_id: row.transaction_id || null,
+    contact_email: row.contact_email,
+    contact_phone: row.contact_phone,
+    contact_name: row.contact_name || null,
+    product_names: row.product_names,
+    status: row.status || null,
+    sold_at: row.sold_at,
+    contact_id: row.contact_id || null,
+  });
+  if (error) {
+    console.error('[Digital Guru] Erro ao inserir guru_sales:', error);
+  }
+}

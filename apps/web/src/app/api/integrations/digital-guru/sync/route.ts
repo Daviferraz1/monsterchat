@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiEnv } from '@/lib/api/env';
-import { parseGuruWebhook, applyParsedTransactionToContacts } from '@/lib/api/integrations/digital-guru';
+import { parseGuruWebhook, applyParsedTransactionToContacts, insertGuruSale } from '@/lib/api/integrations/digital-guru';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -47,6 +47,20 @@ export async function POST(request: NextRequest) {
         const result = await applyParsedTransactionToContacts(parsed);
         processed += 1;
         updated += result.updated;
+        const productNames = parsed.products.map((p) => p.name).join(', ');
+        const soldAt = parsed.products[0]?.purchased_at ?? new Date().toISOString();
+        const contact = payload.contact as Record<string, unknown> | undefined;
+        const contactName = contact && typeof contact.name === 'string' ? contact.name : null;
+        await insertGuruSale({
+          transaction_id: typeof payload.id === 'string' ? payload.id : null,
+          contact_email: parsed.email,
+          contact_phone: parsed.phone,
+          contact_name: contactName,
+          product_names: productNames,
+          status: parsed.situation || null,
+          sold_at: soldAt,
+          contact_id: result.contact_ids[0] ?? null,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`Transação ${i + 1}: ${msg}`);
