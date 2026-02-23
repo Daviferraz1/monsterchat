@@ -7,6 +7,7 @@ import { createMessage, getMessageByExternalId } from '../services/message';
 import { getInstagramChannelByRecipientId, getInstagramChannelMaybeInactiveByRecipientId } from '../services/channel';
 import { storeMetaUrlMediaInSupabase } from '../services/whatsapp-media';
 import { getInstagramUserProfile } from '../services/instagram';
+import { extractEmailFromText } from '../utils';
 
 interface InstagramWebhookEntry {
   id: string;
