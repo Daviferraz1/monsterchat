@@ -53,4 +53,7 @@ export const apiEnv = {
 
   // Digital Manager Guru – webhook de transações (Account Token para validar api_token)
   DIGITAL_GURU_ACCOUNT_TOKEN: process.env.DIGITAL_GURU_ACCOUNT_TOKEN,
+  // Opcional: para buscar vendas na Guru (User Token + URL base da API)
+  DIGITAL_GURU_USER_TOKEN: process.env.DIGITAL_GURU_USER_TOKEN,
+  DIGITAL_GURU_API_BASE_URL: process.env.DIGITAL_GURU_API_BASE_URL,
 } as const;

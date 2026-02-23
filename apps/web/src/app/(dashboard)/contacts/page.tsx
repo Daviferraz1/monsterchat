@@ -5,7 +5,7 @@ import { useContacts } from '@/hooks/useContacts';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '@/components/layout/ChannelBadge';
 import { Mail, FileText, Loader2, Search } from 'lucide-react';
-import type { Contact } from '@/types';
+import type { Contact, ChannelType } from '@/types';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -124,7 +124,7 @@ export default function ContactsPage() {
                       </div>
                       <div className="absolute -bottom-0.5 -right-0.5 bg-[#0d0d1a] rounded-full p-0.5 ring-1 ring-white/10">
                         <ChannelBadge
-                          type={c.channel_type as 'whatsapp' | 'instagram'}
+                          type={c.channel_type as ChannelType}
                           className="w-5 h-5 [&>svg]:w-3 [&>svg]:h-3"
                         />
                       </div>

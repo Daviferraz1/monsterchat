@@ -8,29 +8,66 @@ export const runtime = 'nodejs';
  * GET /api/integrations/digital-guru/sales
  *
  * Retorna as últimas vendas registradas (para o painel do atendente).
- * Query: limit (default 50), offset (default 0), status (opcional: approved, paid, pending, refused, cancelled, refused_or_cancelled).
+ * Query: limit (default 50), offset (default 0), status (opcional), search (opcional: busca por e-mail, telefone ou nome).
  * Inclui conversation_id quando o comprador tem contato no MonsterChat (uma conversa qualquer do contato).
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(Number(searchParams.get('limit')) || 50, 100);
+    const limitParam = searchParams.get('limit');
+    const statusParam = (searchParams.get('status') ?? '').toLowerCase().trim();
+    const searchParam = searchParams.get('search')?.trim() || '';
+    const contactIdParam = searchParams.get('contact_id')?.trim() || '';
+
+    // Sem filtro de status ("Todos"): limite maior para mostrar aprovados e demais. Com filtro: 50.
+    const limit = statusParam
+      ? Math.min(Number(limitParam) || 50, 100)
+      : Math.min(Number(limitParam) || 100, 200);
     const offset = Number(searchParams.get('offset')) || 0;
-    const statusParam = searchParams.get('status')?.toLowerCase().trim() || '';
+
+    const columnsBase = 'id, transaction_id, contact_email, contact_phone, contact_name, product_names, status, sold_at, contact_id, created_at';
+    const columnsWithDetails = `${columnsBase}, payment_method, payment_total, address_full`;
 
     let query = supabaseAdmin
       .from('guru_sales')
-      .select('id, transaction_id, contact_email, contact_phone, contact_name, product_names, status, sold_at, contact_id, created_at');
+      .select(columnsWithDetails);
 
-    if (statusParam === 'refused_or_cancelled') {
-      query = query.in('status', ['refused', 'cancelled']);
-    } else if (statusParam) {
-      query = query.eq('status', statusParam);
+    let sales: Array<Record<string, unknown>> | null = null;
+    let salesError: { message: string } | null = null;
+    let useDetails = true;
+
+    const runQuery = async (cols: string) => {
+      let q = supabaseAdmin.from('guru_sales').select(cols);
+      if (statusParam === 'refused_or_cancelled') {
+        q = q.in('status', ['refused', 'cancelled']);
+      } else if (statusParam && statusParam !== 'all') {
+        q = q.ilike('status', statusParam);
+      }
+      if (contactIdParam) q = q.eq('contact_id', contactIdParam);
+      if (searchParam.length >= 2) {
+        const escaped = searchParam.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+        const digits = searchParam.replace(/\D/g, '');
+        const orParts = [
+          `contact_email.ilike.%${escaped}%`,
+          `contact_name.ilike.%${escaped}%`,
+          `contact_phone.ilike.%${escaped}%`,
+        ];
+        if (digits.length >= 2) orParts.push(`contact_phone.ilike.%${digits}%`);
+        q = q.or(orParts.join(','));
+      }
+      return q.order('sold_at', { ascending: false }).range(offset, offset + limit - 1);
+    };
+
+    const result = await runQuery(columnsWithDetails);
+    sales = result.data as Array<Record<string, unknown>> | null;
+    salesError = result.error;
+
+    if (salesError && /column|does not exist/i.test(String((salesError as { message?: string }).message ?? ''))) {
+      const fallback = await runQuery(columnsBase);
+      sales = fallback.data as Array<Record<string, unknown>> | null;
+      salesError = fallback.error;
+      useDetails = false;
     }
-
-    const { data: sales, error: salesError } = await query
-      .order('sold_at', { ascending: false })
-      .range(offset, offset + limit - 1);
 
     if (salesError) {
       console.error('[Digital Guru sales] Erro:', salesError);
@@ -66,7 +103,10 @@ export async function GET(request: NextRequest) {
       status: s.status,
       sold_at: s.sold_at,
       contact_id: s.contact_id,
-      conversation_id: s.contact_id ? conversationByContact[s.contact_id] ?? null : null,
+      payment_method: useDetails ? (s.payment_method ?? null) : null,
+      payment_total: useDetails ? (s.payment_total ?? null) : null,
+      address_full: useDetails ? (s.address_full ?? null) : null,
+      conversation_id: s.contact_id ? conversationByContact[s.contact_id as string] ?? null : null,
       created_at: s.created_at,
     }));
 

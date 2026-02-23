@@ -6,27 +6,28 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * POST /api/integrations/digital-guru/sync
+ * POST /api/integrations/digital-guru/import-retroactive
  *
- * Importa transações antigas em lote (mesmo formato do webhook da Guru).
- * Body: { api_token: string, transactions: Array<GuruWebhookPayload> }
- *
- * Use para puxar dados antigos: busque as transações na API da Guru (Transactions/Myorders)
- * com seu User Token e envie o array aqui. Ou exporte do admin e monte o JSON.
+ * Importa pedidos retroativos em lote (mesmo formato do webhook da Guru).
+ * Body: { transactions: Array<GuruWebhookPayload> }
+ * Usa DIGITAL_GURU_ACCOUNT_TOKEN do servidor (não precisa enviar o token no body).
+ * Para uso pela UI "Importar vendas antigas".
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const apiToken = typeof body.api_token === 'string' ? body.api_token : '';
-    const expectedToken = apiEnv.DIGITAL_GURU_ACCOUNT_TOKEN;
-    if (expectedToken && apiToken !== expectedToken) {
-      return NextResponse.json({ error: 'api_token inválido' }, { status: 401 });
+    const apiToken = apiEnv.DIGITAL_GURU_ACCOUNT_TOKEN;
+    if (!apiToken) {
+      return NextResponse.json(
+        { error: 'DIGITAL_GURU_ACCOUNT_TOKEN não configurado no servidor.' },
+        { status: 501 }
+      );
     }
 
+    const body = (await request.json()) as Record<string, unknown>;
     const rawList = body.transactions;
     if (!Array.isArray(rawList) || rawList.length === 0) {
       return NextResponse.json(
-        { error: 'Envie { api_token, transactions: [ ... ] } com pelo menos uma transação.' },
+        { error: 'Envie { transactions: [ ... ] } com pelo menos uma transação no formato da Guru.' },
         { status: 400 }
       );
     }
@@ -79,9 +80,9 @@ export async function POST(request: NextRequest) {
       message: `Processadas ${processed} transações; ${updated} contato(s) atualizado(s).`,
     });
   } catch (error) {
-    console.error('[Digital Guru sync] Erro:', error);
+    console.error('[Digital Guru import-retroactive] Erro:', error);
     return NextResponse.json(
-      { error: 'Erro ao sincronizar transações' },
+      { error: 'Erro ao importar vendas' },
       { status: 500 }
     );
   }

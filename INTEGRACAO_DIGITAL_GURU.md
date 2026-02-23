@@ -84,30 +84,49 @@ Pelo menos um de `email` ou `phone` e o campo `product_name` são obrigatórios.
 
 ## Dados antigos (importar transações já existentes na Guru)
 
-O **webhook só envia vendas novas**. Para trazer transações antigas:
+O **webhook só envia vendas novas**. Para ter **todos os pedidos retroativos** disponíveis para consulta no MonsterChat:
 
-1. **Opção A – Sync em lote (recomendado)**  
-   Use a API da Guru para listar transações ([Transactions](https://docs.digitalmanager.guru/developers/transactions) ou [Myorders](https://docs.digitalmanager.guru/developers/myorders)) com seu **User Token** (Bearer). Para cada transação retornada (mesmo formato do webhook), monte um array e envie:
+### Opção 1 – Pela interface (recomendado)
 
-   ```http
-   POST https://seu-dominio/api/integrations/digital-guru/sync
-   Content-Type: application/json
+1. No MonsterChat, vá em **Últimas vendas** (menu lateral).
+2. Clique em **Importar vendas antigas (retroativas)** para expandir o painel.
+3. Obtenha um **array JSON** de transações no formato da Guru:
+   - **API da Guru:** use seu **User Token** (Meu Perfil → Tokens API) e chame o endpoint de listagem de transações da Guru ([Transactions](https://docs.digitalmanager.guru/developers/transactions) / [Myorders](https://docs.digitalmanager.guru/developers/myorders)). A documentação atual da Guru traz a URL e a paginação.
+   - **Exportação:** se a Guru permitir exportar vendas (CSV/JSON), converta para um array no formato do webhook (cada item com `id`, `contact`, `product` ou `items`, `status`, `dates`, etc.).
+4. Cole o JSON no campo (deve ser um **array** `[ { ... }, { ... } ]`) e clique em **Importar**.
+5. O servidor usa o `DIGITAL_GURU_ACCOUNT_TOKEN` configurado no ambiente; não é preciso colar o token na tela. As transações passam a aparecer em **Últimas vendas** e nos perfis dos contatos correspondentes.
 
-   {
-     "api_token": "seu_account_token_guru",
-     "transactions": [
-       { "id": "...", "contact": { "email": "...", "phone_number": "...", ... }, "product": { "name": "..." }, "status": "approved", "dates": { ... }, ... },
-       ...
-     ]
-   }
-   ```
+### Opção 2 – Via API (scripts / integração)
 
-   Cada item de `transactions` deve estar no **mesmo formato** que a Guru envia no webhook (incluindo `contact`, `product` ou `items`, `status`, `dates`, etc.). O endpoint `/sync` processa cada um e atualiza os contatos no MonsterChat.
+Envie o array de transações para o endpoint de sync, informando o Account Token no body:
 
-2. **Opção B – Exportar da Guru e enviar**  
-   Se a Guru permitir exportar transações (CSV/JSON), converta para o formato do webhook e use o mesmo `POST /api/integrations/digital-guru/sync` com o array em `transactions`.
+```http
+POST https://seu-dominio/api/integrations/digital-guru/sync
+Content-Type: application/json
 
-Resposta esperada do `/sync`:
+{
+  "api_token": "seu_account_token_guru",
+  "transactions": [
+    { "id": "...", "contact": { "email": "...", "phone_number": "...", "name": "..." }, "product": { "name": "..." }, "status": "approved", "dates": { "ordered_at": "..." }, ... },
+    ...
+  ]
+}
+```
+
+Ou use o endpoint que usa o token do servidor (sem enviar o token no body):
+
+```http
+POST https://seu-dominio/api/integrations/digital-guru/import-retroactive
+Content-Type: application/json
+
+{
+  "transactions": [ ... ]
+}
+```
+
+Cada item de `transactions` deve estar no **mesmo formato** que a Guru envia no webhook (incluindo `contact`, `product` ou `items`, `status`, `dates`, etc.).
+
+Resposta esperada:
 - `processed`: quantas transações foram processadas.
 - `contacts_updated`: quantos contatos foram atualizados no total.
 - `errors`: lista de erros por transação (se houver).
@@ -121,4 +140,22 @@ Cada venda recebida (webhook ou sync) é registrada na tabela **`guru_sales`** n
 
 **Migration:** rode a migration `015_guru_sales.sql` no Supabase (ou `supabase db push`) para criar a tabela `guru_sales`.
 
-**API:** `GET /api/integrations/digital-guru/sales?limit=50&offset=0` retorna as vendas com `conversation_id` quando houver conversa do contato.
+**API:** `GET /api/integrations/digital-guru/sales?limit=50&offset=0` retorna as vendas com `conversation_id` quando houver conversa do contato. Use `search=...` para filtrar por e-mail, telefone ou nome.
+
+## Vendas que ainda não foram recebidas (buscar na Guru)
+
+Vendas que existem só na Guru (anteriores ao webhook ou que não dispararam o webhook) podem ser trazidas de duas formas:
+
+### 1. Buscar por e-mail ou telefone (na interface)
+
+Na página **Últimas vendas** → **Importar vendas antigas** há a opção **Buscar vendas na Guru**: informe e-mail ou telefone e clique em **Buscar na Guru**. Se o servidor estiver configurado, as vendas retornadas pela API da Guru aparecem e você pode clicar em **Importar estas X vendas**.
+
+**Requer no servidor (Vercel / .env):**
+- `DIGITAL_GURU_USER_TOKEN` – User Token da Guru (Meu Perfil → Tokens API), usado como `Authorization: Bearer ...` na chamada à API da Guru.
+- `DIGITAL_GURU_API_BASE_URL` – URL do endpoint de listagem de transações da Guru (ex.: `https://api.digitalmanager.guru/v1/transactions`). A documentação atual da Guru informa a URL e os parâmetros (ex.: `?email=...` ou `?phone=...`).
+
+Se essas variáveis não estiverem configuradas, a busca retorna instruções e você pode usar a opção 2.
+
+### 2. Importar colando o JSON
+
+Use **Importar vendas antigas** e cole o array JSON de transações obtido da API ou exportação da Guru (mesmo formato do webhook). Não precisa configurar User Token no servidor; basta ter o Account Token para o webhook.

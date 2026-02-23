@@ -5,7 +5,7 @@ import {
   normalizePhone,
   normalizeEmail,
   parseGuruWebhook,
-  applyParsedTransactionToContacts,
+  ensureContactForSale,
   insertGuruSale,
 } from '@/lib/api/integrations/digital-guru';
 
@@ -95,13 +95,18 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    const result = await applyParsedTransactionToContacts(parsed);
+    const result = await ensureContactForSale(parsed, {
+      contactName: isGuruWebhook && body.contact && typeof body.contact === 'object'
+        ? (body.contact as Record<string, unknown>).name as string | undefined
+        : typeof body.name === 'string' ? body.name : undefined,
+    });
 
     const productNames = parsed.products.map((p) => p.name).join(', ');
     const soldAt = parsed.products[0]?.purchased_at ?? new Date().toISOString();
     const contactName =
       (isGuruWebhook && body.contact && typeof body.contact === 'object' && (body.contact as Record<string, unknown>).name) ||
       (typeof body.name === 'string' ? body.name : null);
+    const extendedParsed = isGuruWebhook ? (parsed as typeof parsed & { payment_method?: string | null; payment_total?: number | null; address_full?: string | null }) : null;
     await insertGuruSale({
       transaction_id: typeof body.id === 'string' ? body.id : null,
       contact_email: parsed.email,
@@ -110,26 +115,41 @@ export async function POST(request: NextRequest) {
       product_names: productNames,
       status: parsed.situation || null,
       sold_at: soldAt,
-      contact_id: result.contact_ids[0] ?? null,
+      contact_id: result.contact_id ?? null,
+      payment_method: extendedParsed?.payment_method ?? null,
+      payment_total: extendedParsed?.payment_total ?? null,
+      address_full: extendedParsed?.address_full ?? null,
     });
 
-    if (result.updated === 0) {
+    if (result.updated === 0 && !result.contact_id) {
       return NextResponse.json(
         {
           ok: true,
           updated: 0,
           message:
-            'Nenhum contato encontrado com esse email ou telefone. A venda foi registrada no Digital Guru.',
+            'Não foi possível criar contato para esta venda. A venda foi registrada no painel.',
         },
         { status: 200 }
       );
     }
 
+    const contactIds = result.contact_id ? [result.contact_id] : [];
     const productNamesForMessage = parsed.products.map((p) => p.name).join(', ');
+    if (result.updated === 0) {
+      return NextResponse.json({
+        ok: true,
+        updated: 0,
+        contact_ids: contactIds,
+        message: result.contact_id
+          ? `Contato criado a partir da venda. Produto(s): ${productNamesForMessage}`
+          : 'Nenhum contato encontrado com esse email ou telefone. A venda foi registrada no Digital Guru.',
+      }, { status: 200 });
+    }
+
     return NextResponse.json({
       ok: true,
       updated: result.updated,
-      contact_ids: result.contact_ids,
+      contact_ids: contactIds,
       message: `Contato(s) atualizado(s) como aluno. Produto(s): ${productNamesForMessage}`,
     });
   } catch (error) {
