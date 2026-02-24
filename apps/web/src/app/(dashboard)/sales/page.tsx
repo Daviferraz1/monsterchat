@@ -163,7 +163,7 @@ export default function SalesPage() {
     (async () => {
       try {
         const params = new URLSearchParams();
-        params.set('limit', statusFilter ? '50' : '100');
+        params.set('limit', statusFilter ? '50' : '500');
         if (statusFilter) params.set('status', statusFilter);
         if (debouncedSearch) params.set('search', debouncedSearch);
         const res = await fetch(`/api/integrations/digital-guru/sales?${params.toString()}`);

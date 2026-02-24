@@ -19,10 +19,10 @@ export async function GET(request: NextRequest) {
     const searchParam = searchParams.get('search')?.trim() || '';
     const contactIdParam = searchParams.get('contact_id')?.trim() || '';
 
-    // Sem filtro de status ("Todos"): limite maior para mostrar aprovados e demais. Com filtro: 50.
+    // Sem filtro de status ("Todos"): retornar todas (até 1000). Com filtro: 50–100.
     const limit = statusParam
       ? Math.min(Number(limitParam) || 50, 100)
-      : Math.min(Number(limitParam) || 100, 200);
+      : Math.min(Number(limitParam) || 500, 1000);
     const offset = Number(searchParams.get('offset')) || 0;
 
     const columnsBase = 'id, transaction_id, contact_email, contact_phone, contact_name, product_names, status, sold_at, contact_id, created_at';

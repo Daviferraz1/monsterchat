@@ -6,6 +6,24 @@ export function normalizePhone(phone: string | null | undefined): string {
   return phone.replace(/\D/g, '');
 }
 
+/**
+ * Normaliza telefone para formato canônico (comparação/match).
+ * No Brasil: celular pode vir 8 dígitos (ex.: 99061942) ou 9 dígitos (999061942).
+ * Ambos representam o mesmo número; normalizamos para 55 + DDD(2) + 9 dígitos.
+ * Ex.: 553799061942 (12) e 5537999061942 (13) → ambos viram 5537999061942.
+ */
+export function normalizePhoneCanonical(phone: string | null | undefined): string {
+  const digits = normalizePhone(phone);
+  if (!digits) return '';
+  if (digits.startsWith('55') && digits.length === 12) {
+    return digits.slice(0, 4) + '9' + digits.slice(4);
+  }
+  if (digits.startsWith('55') && digits.length === 11) {
+    return digits.slice(0, 4) + '9' + digits.slice(4);
+  }
+  return digits;
+}
+
 export function normalizeEmail(email: string | null | undefined): string {
   if (!email || typeof email !== 'string') return '';
   return email.trim().toLowerCase();
@@ -253,10 +271,12 @@ export async function applyParsedTransactionToContacts(
     throw fetchError;
   }
 
+  const phoneCanon = normalizePhoneCanonical(phone);
   const matched = (allContacts || []).filter((c) => {
     const cPhone = normalizePhone(c.phone);
+    const cPhoneCanon = normalizePhoneCanonical(c.phone);
     const cEmail = normalizeEmail(c.email);
-    if (phone && cPhone && cPhone === phone) return true;
+    if (phone && (cPhone === phone || (phoneCanon && cPhoneCanon && phoneCanon === cPhoneCanon))) return true;
     if (email && cEmail && cEmail === email) return true;
     return false;
   });
@@ -348,7 +368,7 @@ export async function ensureContactForSale(
   const channelId = await getOrCreateGuruChannel();
   if (!channelId) return { contact_id: null, updated: 0 };
 
-  const externalId = parsed.email || parsed.phone;
+  const externalId = parsed.email || (parsed.phone ? normalizePhoneCanonical(parsed.phone) : '') || parsed.phone;
   const name = options?.contactName?.trim() || null;
   const digitalGuru: DigitalGuruMetadata = {
     is_student: true,

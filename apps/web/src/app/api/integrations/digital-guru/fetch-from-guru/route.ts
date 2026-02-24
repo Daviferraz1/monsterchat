@@ -27,15 +27,26 @@ function normalizePhoneForMatch(phone: string | null | undefined): string {
   return phone.replace(/\D/g, '');
 }
 
+/** Brasil: 12 dígitos (55+DDD+8) e 13 dígitos (55+DDD+9) são o mesmo celular; normaliza para comparar. */
+function normalizePhoneCanonical(phone: string | null | undefined): string {
+  const digits = normalizePhoneForMatch(phone);
+  if (!digits) return '';
+  if (digits.startsWith('55') && digits.length === 12) return digits.slice(0, 4) + '9' + digits.slice(4);
+  if (digits.startsWith('55') && digits.length === 11) return digits.slice(0, 4) + '9' + digits.slice(4);
+  return digits;
+}
+
 function transactionMatchesContact(t: unknown, email: string, phone: string): boolean {
   if (!t || typeof t !== 'object') return false;
   const o = t as Record<string, unknown>;
   const contact = o.contact as Record<string, unknown> | undefined;
   if (!contact || typeof contact !== 'object') return false;
   const cEmail = normalizeEmailForMatch(contact.email as string);
-  const cPhone = normalizePhoneForMatch(contact.phone_full_number as string || contact.phone_number as string);
+  const cPhoneRaw = normalizePhoneForMatch(contact.phone_full_number as string || contact.phone_number as string);
+  const cPhoneCanon = normalizePhoneCanonical(cPhoneRaw || contact.phone_full_number as string || contact.phone_number as string);
+  const phoneCanon = normalizePhoneCanonical(phone);
   if (email && cEmail && cEmail === email) return true;
-  if (phone && cPhone && (cPhone === phone || cPhone === phone.replace(/^55/, '') || cPhone === `55${phone}`)) return true;
+  if (phone && cPhoneRaw && (cPhoneRaw === phone || (phoneCanon && cPhoneCanon && phoneCanon === cPhoneCanon))) return true;
   return false;
 }
 export async function GET(request: NextRequest) {

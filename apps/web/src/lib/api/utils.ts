@@ -54,3 +54,18 @@ export function sanitizeTokenForHeader(token: string | null | undefined): string
   if (token == null) return '';
   return String(token).replace(/\s+/g, ' ').trim();
 }
+
+/**
+ * Normaliza telefone para formato canônico (comparação/match).
+ * No Brasil: celular pode vir 8 dígitos (ex.: 99061942) ou 9 dígitos (999061942); ambos são o mesmo número.
+ * Retorna: só dígitos; se 55 + 2 (DDD) + 8 dígitos, insere "9" após o DDD.
+ * Ex.: 553799061942 e 5537999061942 → ambos viram 5537999061942.
+ */
+export function normalizePhoneCanonical(phone: string | null | undefined): string {
+  if (!phone || typeof phone !== 'string') return '';
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55') && digits.length === 12) return digits.slice(0, 4) + '9' + digits.slice(4);
+  if (digits.startsWith('55') && digits.length === 11) return digits.slice(0, 4) + '9' + digits.slice(4);
+  return digits;
+}
