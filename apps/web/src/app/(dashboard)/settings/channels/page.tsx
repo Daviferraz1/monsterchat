@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2 } from 'lucide-react';
+import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2, Bell } from 'lucide-react';
+import { useNotificationSoundEnabled } from '@/hooks/useNotificationSoundEnabled';
 
 interface Channel {
   id: string;
@@ -27,6 +28,7 @@ export default function ChannelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [soundEnabled, setSoundEnabled] = useNotificationSoundEnabled();
   const [form, setForm] = useState({
     type: 'whatsapp' as 'whatsapp' | 'instagram',
     name: '',
@@ -222,8 +224,42 @@ export default function ChannelsPage() {
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="p-6 max-w-2xl">
-        <h1 className="text-2xl font-bold mb-2">Canais</h1>
+        <h1 className="text-2xl font-bold mb-2">Configurações</h1>
         <p className="text-muted-foreground mb-6">
+          Preferências do atendente e canais para receber e enviar mensagens.
+        </p>
+
+        {/* Preferências */}
+        <div className="mb-8 p-4 border rounded-lg bg-muted/30 space-y-3">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Bell className="w-4 h-4" /> Preferências
+          </h2>
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span className="text-sm">Som ao receber nova mensagem</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={soundEnabled}
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-[#8b5cf6] focus:ring-offset-2 focus:ring-offset-background ${
+                soundEnabled ? 'bg-[#8b5cf6] border-[#8b5cf6]' : 'bg-muted border-input'
+              }`}
+            >
+              <span
+                className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+                  soundEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+                style={{ marginTop: 2 }}
+              />
+            </button>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Ative ou desative o som de notificação quando chegar uma nova mensagem no inbox.
+          </p>
+        </div>
+
+        <h2 className="text-xl font-bold mb-2">Canais</h2>
+        <p className="text-muted-foreground mb-4">
           Cadastre seu canal do WhatsApp (e depois Instagram) para receber e enviar mensagens. Sem um canal ativo, o webhook não associa mensagens ao inbox.
         </p>
 
