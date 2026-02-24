@@ -5,6 +5,7 @@ import {
   normalizePhone,
   normalizeEmail,
   parseGuruWebhook,
+  parseGuruWebhookMinimal,
   ensureContactForSale,
   insertGuruSale,
 } from '@/lib/api/integrations/digital-guru';
@@ -45,7 +46,11 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
+    let body = (await request.json()) as Record<string, unknown>;
+    // Se a requisição veio encapsulada (ex.: fila com payload), usar o payload como body
+    if (body?.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)) {
+      body = body.payload as Record<string, unknown>;
+    }
 
     let parsed: { email: string; phone: string; products: DigitalGuruProduct[]; situation: string };
     const isGuruWebhook = body.webhook_type === 'transaction' && body.api_token != null;
@@ -56,12 +61,17 @@ export async function POST(request: NextRequest) {
       if (token && receivedToken !== token) {
         return NextResponse.json({ error: 'api_token inválido' }, { status: 401 });
       }
-      const guruParsed = parseGuruWebhook(body);
+      let guruParsed = parseGuruWebhook(body);
       if (!guruParsed) {
-        return NextResponse.json(
-          { ok: true, updated: 0, message: 'Payload Guru sem contact ou produtos válidos.' },
-          { status: 200 }
-        );
+        const minimalParsed = parseGuruWebhookMinimal(body);
+        if (!minimalParsed) {
+          return NextResponse.json(
+            { ok: true, updated: 0, message: 'Payload Guru sem dados válidos (id, product/items).' },
+            { status: 200 }
+          );
+        }
+        console.warn('[Digital Guru] Parse completo falhou; usando parse mínimo para salvar venda', { id: body.id });
+        guruParsed = minimalParsed;
       }
       parsed = guruParsed;
     } else {
@@ -107,19 +117,25 @@ export async function POST(request: NextRequest) {
       (isGuruWebhook && body.contact && typeof body.contact === 'object' && (body.contact as Record<string, unknown>).name) ||
       (typeof body.name === 'string' ? body.name : null);
     const extendedParsed = isGuruWebhook ? (parsed as typeof parsed & { payment_method?: string | null; payment_total?: number | null; address_full?: string | null }) : null;
-    await insertGuruSale({
-      transaction_id: typeof body.id === 'string' ? body.id : null,
-      contact_email: parsed.email,
-      contact_phone: parsed.phone,
-      contact_name: typeof contactName === 'string' ? contactName : null,
-      product_names: productNames,
-      status: parsed.situation || null,
-      sold_at: soldAt,
-      contact_id: result.contact_id ?? null,
-      payment_method: extendedParsed?.payment_method ?? null,
-      payment_total: extendedParsed?.payment_total ?? null,
-      address_full: extendedParsed?.address_full ?? null,
-    });
+    try {
+      await insertGuruSale({
+        transaction_id: typeof body.id === 'string' ? body.id : null,
+        contact_email: parsed.email,
+        contact_phone: parsed.phone,
+        contact_name: typeof contactName === 'string' ? contactName : null,
+        product_names: productNames,
+        status: parsed.situation || null,
+        sold_at: soldAt,
+        contact_id: result.contact_id ?? null,
+        payment_method: extendedParsed?.payment_method ?? null,
+        payment_total: extendedParsed?.payment_total ?? null,
+        address_full: extendedParsed?.address_full ?? null,
+      });
+    } catch (insertErr) {
+      const err = insertErr as { message?: string; code?: string; details?: string };
+      console.error('[Digital Guru] Falha ao salvar em guru_sales:', err?.message ?? insertErr, { code: err?.code, details: err?.details });
+      throw insertErr;
+    }
 
     if (result.updated === 0 && !result.contact_id) {
       return NextResponse.json(

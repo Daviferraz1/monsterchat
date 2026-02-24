@@ -124,6 +124,119 @@ export function parseGuruWebhook(body: Record<string, unknown>): {
 }
 
 /**
+ * Parse mínimo do webhook Guru: extrai o que der para não perder vendas quando o parse completo falha
+ * (ex.: contact vazio, estrutura diferente). Sempre tenta retornar algo se tiver id + product/items.
+ */
+export function parseGuruWebhookMinimal(body: Record<string, unknown>): {
+  email: string;
+  phone: string;
+  products: DigitalGuruProduct[];
+  situation: string;
+  payment_method?: string | null;
+  payment_total?: number | null;
+  address_full?: string | null;
+} | null {
+  if (body.webhook_type !== 'transaction' || body.id == null) return null;
+
+  const contact = (body.contact && typeof body.contact === 'object') ? (body.contact as Record<string, unknown>) : null;
+  const email = contact ? normalizeEmail(contact.email as string | undefined) : '';
+  let phone = '';
+  if (contact) {
+    const fullNumber = contact.phone_full_number as string | undefined;
+    if (fullNumber && normalizePhone(fullNumber)) {
+      phone = normalizePhone(fullNumber);
+    } else {
+      const localCode = String(contact.phone_local_code ?? '').replace(/\D/g, '');
+      const phoneNum = String(contact.phone_number ?? '').replace(/\D/g, '');
+      const rawPhone = (localCode + phoneNum).trim() || String(contact.phone_number ?? '');
+      phone = normalizePhone(rawPhone);
+    }
+  }
+
+  const orderId = typeof body.id === 'string' ? body.id : String(body.id);
+  const status = typeof body.status === 'string' ? body.status : '';
+  const dates = body.dates as Record<string, unknown> | undefined;
+  const purchasedAt =
+    (dates?.ordered_at as string) || (dates?.created_at as string) || new Date().toISOString();
+
+  const products: DigitalGuruProduct[] = [];
+  const items = body.items as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      const name = item.name as string;
+      if (name) {
+        products.push({
+          name,
+          product_id: item.id as string | undefined,
+          order_id: orderId,
+          purchased_at: purchasedAt,
+        });
+      }
+    }
+  }
+  const singleProduct = body.product as Record<string, unknown> | undefined;
+  if (products.length === 0 && singleProduct && typeof singleProduct.name === 'string') {
+    products.push({
+      name: singleProduct.name as string,
+      product_id: singleProduct.id as string | undefined,
+      order_id: orderId,
+      purchased_at: purchasedAt,
+    });
+  }
+  if (products.length === 0) {
+    products.push({
+      name: 'Venda Guru',
+      product_id: undefined,
+      order_id: orderId,
+      purchased_at: purchasedAt,
+    });
+  }
+
+  let payment_method: string | null = null;
+  let payment_total: number | null = null;
+  const payment = body.payment as Record<string, unknown> | undefined;
+  if (payment && typeof payment === 'object') {
+    const method = payment.method as string | Record<string, unknown> | undefined;
+    payment_method =
+      typeof method === 'string'
+        ? method
+        : method && typeof method === 'object' && typeof (method as Record<string, unknown>).name === 'string'
+          ? (method as Record<string, unknown>).name as string
+          : null;
+    const total = payment.total;
+    if (typeof total === 'number') payment_total = total;
+    else if (typeof total === 'string') payment_total = parseFloat(total) || null;
+  }
+
+  let address_full: string | null = null;
+  if (contact) {
+    const parts: string[] = [];
+    const push = (v: unknown) => {
+      if (v != null && String(v).trim()) parts.push(String(v).trim());
+    };
+    push(contact.address);
+    push(contact.address_number);
+    push(contact.address_comp);
+    push(contact.address_district);
+    push(contact.address_city);
+    if (contact.address_state) parts.push(String(contact.address_state).trim());
+    if (contact.address_zip_code) parts.push(String(contact.address_zip_code).trim());
+    push(contact.address_country);
+    address_full = parts.length ? parts.filter(Boolean).join(', ') : null;
+  }
+
+  return {
+    email,
+    phone,
+    products,
+    situation: status,
+    payment_method: payment_method ?? undefined,
+    payment_total: payment_total ?? undefined,
+    address_full: address_full ?? undefined,
+  };
+}
+
+/**
  * Aplica uma transação já parseada aos contatos no Supabase.
  * Retorna quantidade de contatos atualizados.
  */
@@ -312,9 +425,9 @@ export interface GuruSaleInsert {
   address_full?: string | null;
 }
 
-/** Registra uma venda na tabela guru_sales (para o painel "Últimas vendas"). */
+/** Registra uma venda na tabela guru_sales (para o painel "Últimas vendas"). Lança em caso de erro. */
 export async function insertGuruSale(row: GuruSaleInsert): Promise<void> {
-  const { error } = await supabaseAdmin.from('guru_sales').insert({
+  const fullRow = {
     transaction_id: row.transaction_id || null,
     contact_email: row.contact_email,
     contact_phone: row.contact_phone,
@@ -326,8 +439,27 @@ export async function insertGuruSale(row: GuruSaleInsert): Promise<void> {
     payment_method: row.payment_method ?? null,
     payment_total: row.payment_total ?? null,
     address_full: row.address_full ?? null,
-  });
+  };
+  let { error } = await supabaseAdmin.from('guru_sales').insert(fullRow);
+  if (error && /column.*does not exist|does not exist/i.test(String(error.message))) {
+    const { error: err2 } = await supabaseAdmin.from('guru_sales').insert({
+      transaction_id: fullRow.transaction_id,
+      contact_email: fullRow.contact_email,
+      contact_phone: fullRow.contact_phone,
+      contact_name: fullRow.contact_name,
+      product_names: fullRow.product_names,
+      status: fullRow.status,
+      sold_at: fullRow.sold_at,
+      contact_id: fullRow.contact_id,
+    });
+    if (err2) {
+      console.error('[Digital Guru] Erro ao inserir guru_sales (fallback sem colunas extras):', err2);
+      throw err2;
+    }
+    return;
+  }
   if (error) {
     console.error('[Digital Guru] Erro ao inserir guru_sales:', error);
+    throw error;
   }
 }
