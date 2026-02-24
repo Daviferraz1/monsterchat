@@ -1,4 +1,4 @@
-import { Sidebar } from '@/components/layout/Sidebar';
+import { DashboardShell } from '@/components/layout/DashboardShell';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 
 export default function DashboardLayout({
@@ -8,10 +8,7 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
-      <div className="flex h-screen">
-        <Sidebar />
-        <div className="flex-1">{children}</div>
-      </div>
+      <DashboardShell>{children}</DashboardShell>
     </AuthGuard>
   );
 }

@@ -28,9 +28,11 @@ function getInitials(name: string): string {
 
 interface ConversationItemProps {
   conversation: Conversation;
+  /** No mobile, chamado ao tocar na conversa para fechar o drawer */
+  onSelect?: () => void;
 }
 
-export function ConversationItem({ conversation }: ConversationItemProps) {
+export function ConversationItem({ conversation, onSelect }: ConversationItemProps) {
   const pathname = usePathname();
   const contact = conversation.contact;
   const channel = conversation.channel;
@@ -49,7 +51,8 @@ export function ConversationItem({ conversation }: ConversationItemProps) {
   return (
     <Link
       href={`/inbox/${conversation.id}`}
-      className="flex items-start gap-3 p-3 transition-all border-b border-white/[0.03] text-left hover:bg-white/[0.04]"
+      onClick={onSelect}
+      className="flex items-start gap-3 p-3 min-h-[72px] transition-all border-b border-white/[0.03] text-left hover:bg-white/[0.04] active:bg-white/[0.06]"
       style={{
         background: isActive ? 'rgba(139,92,246,0.1)' : 'transparent',
         borderLeft: isActive ? '3px solid #8b5cf6' : '3px solid transparent',

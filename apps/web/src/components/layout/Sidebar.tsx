@@ -9,7 +9,13 @@ import { useState } from 'react';
 import { MessageSquare, Settings, Users, ShoppingBag } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  className?: string;
+}
+
+export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps) {
   const pathname = usePathname();
   const [filters, setFilters] = useState<{
     status?: string;
@@ -21,51 +27,35 @@ export function Sidebar() {
   }>({});
   const { conversations, loading } = useConversations(filters);
 
+  const navLinkClass = (active: boolean) =>
+    `flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors min-h-[44px] min-w-[44px] ${
+      active ? 'bg-[rgba(139,92,246,0.25)] text-[#a78bfa]' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+    }`;
+
   return (
-    <div className="flex flex-col h-full w-80 border-r bg-[#0a0a18]" style={{ color: '#e2e8f0' }}>
+    <aside
+      className={`flex flex-col h-full border-r bg-[#0a0a18] z-50 md:z-auto transition-transform duration-200 ease-out
+        fixed inset-y-0 left-0 w-[min(320px,85vw)] md:relative md:inset-auto md:w-80
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+        ${className}`}
+      style={{ color: '#e2e8f0' }}
+      aria-hidden={!isOpen}
+    >
       <div className="p-4 border-b border-white/5">
         <h1 className="text-xl font-bold text-white">MonsterChat</h1>
         <p className="text-xs text-gray-500">Inbox Unificado</p>
-        <nav className="flex gap-1 mt-3">
-          <Link
-            href="/inbox"
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-              pathname?.startsWith('/inbox')
-                ? 'bg-[rgba(139,92,246,0.25)] text-[#a78bfa]'
-                : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" /> Inbox
+        <nav className="flex flex-col gap-1 mt-3">
+          <Link href="/inbox" className={navLinkClass(!!pathname?.startsWith('/inbox'))} onClick={onClose}>
+            <MessageSquare className="w-4 h-4 shrink-0" /> Inbox
           </Link>
-          <Link
-            href="/contacts"
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-              pathname?.startsWith('/contacts')
-                ? 'bg-[rgba(139,92,246,0.25)] text-[#a78bfa]'
-                : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
-            }`}
-          >
-            <Users className="w-4 h-4" /> Contatos
+          <Link href="/contacts" className={navLinkClass(!!pathname?.startsWith('/contacts'))} onClick={onClose}>
+            <Users className="w-4 h-4 shrink-0" /> Contatos
           </Link>
-          <Link
-            href="/sales"
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-              pathname?.startsWith('/sales')
-                ? 'bg-[rgba(139,92,246,0.25)] text-[#a78bfa]'
-                : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
-            }`}
-          >
-            <ShoppingBag className="w-4 h-4" /> Últimas vendas
+          <Link href="/sales" className={navLinkClass(!!pathname?.startsWith('/sales'))} onClick={onClose}>
+            <ShoppingBag className="w-4 h-4 shrink-0" /> Últimas vendas
           </Link>
-          <Link
-            href="/settings/channels"
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-              pathname?.startsWith('/settings')
-                ? 'bg-[rgba(139,92,246,0.25)] text-[#a78bfa]'
-                : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
-            }`}
-          >
-            <Settings className="w-4 h-4" /> Canais
+          <Link href="/settings/channels" className={navLinkClass(!!pathname?.startsWith('/settings'))} onClick={onClose}>
+            <Settings className="w-4 h-4 shrink-0" /> Canais
           </Link>
         </nav>
       </div>
@@ -75,9 +65,10 @@ export function Sidebar() {
           conversations={conversations}
           loading={loading}
           channelTypeFilter={filters.channel_type}
+          onConversationClick={onClose}
         />
       </div>
       <UserProfile />
-    </div>
+    </aside>
   );
 }

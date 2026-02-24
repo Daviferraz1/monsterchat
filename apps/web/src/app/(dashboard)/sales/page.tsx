@@ -322,8 +322,8 @@ export default function SalesPage() {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-auto bg-[#0d0d1a]" style={{ color: '#e2e8f0' }}>
-      <div className="flex flex-col flex-1 min-w-0 w-full p-6">
+    <div className="flex flex-col flex-1 min-w-0 h-full min-h-0 overflow-auto bg-[#0d0d1a]" style={{ color: '#e2e8f0' }}>
+      <div className="flex flex-col flex-1 min-w-0 w-full p-4 sm:p-6">
         <div className="flex items-center gap-2 mb-1 shrink-0">
           <ShoppingBag className="w-6 h-6 text-[#a78bfa]" />
           <h1 className="text-2xl font-bold text-white">Últimas vendas (Guru)</h1>

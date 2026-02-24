@@ -140,7 +140,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     : null;
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="border-t p-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="border-t p-3 sm:p-4 shrink-0">
       {error && (
         <div className="mb-2 text-sm text-red-600" role="alert">
           <p className="whitespace-pre-line">{error}</p>
@@ -158,7 +158,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
       )}
       <div className="flex gap-2 items-end">
         <div className="flex flex-col flex-1 min-w-0 relative">
-          <div className="flex gap-1 items-center border rounded-lg bg-background">
+          <div className="flex gap-0.5 sm:gap-1 items-center border rounded-xl bg-background">
             <div className="relative flex-shrink-0">
               <button
                 type="button"
@@ -166,7 +166,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
                   e.preventDefault();
                   setEmojiOpen((o) => !o);
                 }}
-                className="p-2 text-muted-foreground hover:text-foreground"
+                className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
                 title="Emojis"
                 aria-label="Abrir emojis"
                 aria-expanded={emojiOpen}
@@ -220,7 +220,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 text-muted-foreground hover:text-foreground"
+              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
               title="Anexar arquivo ou imagem"
               aria-label="Anexar"
               disabled={busy}
@@ -230,7 +230,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
             <button
               type="button"
               onClick={() => audioInputRef.current?.click()}
-              className="p-2 text-muted-foreground hover:text-foreground"
+              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
               title="Enviar áudio"
               aria-label="Áudio"
               disabled={busy}
@@ -240,7 +240,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
             <button
               type="button"
               onClick={() => videoInputRef.current?.click()}
-              className="p-2 text-muted-foreground hover:text-foreground"
+              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
               title="Enviar vídeo"
               aria-label="Vídeo"
               disabled={busy}
@@ -271,7 +271,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
         <button
           type="submit"
           disabled={!text.trim() || busy}
-          className="p-2.5 bg-primary text-primary-foreground rounded-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-primary text-primary-foreground rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           aria-label="Enviar"
         >
           <Send className="w-5 h-5" />

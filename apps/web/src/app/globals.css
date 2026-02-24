@@ -45,7 +45,25 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
   body {
     @apply bg-background text-foreground;
+    min-height: 100dvh;
+    min-height: 100vh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow-x: hidden;
+  }
+}
+
+/* Áreas de toque mínimas para acessibilidade em mobile */
+@media (pointer: coarse) {
+  button:not([class*="p-"]):not([class*="px-"]):not([class*="py-"]),
+  a[role="button"],
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

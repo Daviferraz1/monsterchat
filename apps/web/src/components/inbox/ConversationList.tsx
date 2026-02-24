@@ -10,6 +10,8 @@ interface ConversationListProps {
   loading: boolean;
   /** Quando 'all', lista única (ordem = msg recente); quando whatsapp/instagram, agrupa por canal */
   channelTypeFilter?: ChannelTypeFilter;
+  /** No mobile, fecha o drawer ao clicar em uma conversa */
+  onConversationClick?: () => void;
 }
 
 function groupByChannel(conversations: Conversation[]): { channelId: string; channelName: string; channelType: ChannelType; items: Conversation[] }[] {
@@ -35,7 +37,7 @@ function groupByChannel(conversations: Conversation[]): { channelId: string; cha
   }));
 }
 
-export function ConversationList({ conversations, loading, channelTypeFilter = 'all' }: ConversationListProps) {
+export function ConversationList({ conversations, loading, channelTypeFilter = 'all', onConversationClick }: ConversationListProps) {
   if (loading) {
     return (
       <div className="p-4 text-center text-gray-500 text-sm">
@@ -58,7 +60,7 @@ export function ConversationList({ conversations, loading, channelTypeFilter = '
     return (
       <div className="divide-y divide-white/5">
         {conversations.map((conversation) => (
-          <ConversationItem key={conversation.id} conversation={conversation} />
+          <ConversationItem key={conversation.id} conversation={conversation} onSelect={onConversationClick} />
         ))}
       </div>
     );
@@ -76,7 +78,7 @@ export function ConversationList({ conversations, loading, channelTypeFilter = '
             <span className="text-[10px] text-gray-500 ml-auto flex-shrink-0">{group.items.length}</span>
           </div>
           {group.items.map((conversation) => (
-            <ConversationItem key={conversation.id} conversation={conversation} />
+            <ConversationItem key={conversation.id} conversation={conversation} onSelect={onConversationClick} />
           ))}
         </div>
       ))}

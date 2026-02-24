@@ -1,10 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
-import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft } from 'lucide-react';
 import type { DigitalGuruMetadata } from '@/types';
 
 function formatDateTime(iso?: string | null): string {
@@ -115,11 +116,19 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
     : '?';
 
   return (
-    <div ref={headerRef} className="relative">
+    <div ref={headerRef} className="relative flex items-stretch">
+      {/* Botão voltar: apenas em mobile */}
+      <Link
+        href="/inbox"
+        className="md:hidden flex items-center justify-center w-12 h-16 shrink-0 border-b border-r hover:bg-muted/50 transition-colors text-foreground"
+        aria-label="Voltar para lista de conversas"
+      >
+        <ArrowLeft className="w-5 h-5" />
+      </Link>
       <button
         type="button"
         onClick={() => setShowContactInfo((v) => !v)}
-        className="h-16 border-b flex items-center gap-3 px-4 w-full text-left hover:bg-muted/50 transition-colors cursor-pointer"
+        className="h-16 border-b flex items-center gap-3 px-4 flex-1 min-w-0 text-left hover:bg-muted/50 transition-colors cursor-pointer"
       >
         {contact?.profile_pic_url ? (
           <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-muted">
@@ -150,7 +159,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
 
       {showContactInfo && contact && (
         <div
-          className="absolute right-0 top-full z-[200] mt-0 w-[min(320px,100%)] bg-popover border rounded-b-lg rounded-tl-lg shadow-lg p-4"
+          className="absolute right-0 top-full z-[200] mt-0 w-[min(320px,calc(100vw-2rem))] max-w-full bg-popover border rounded-b-lg rounded-tl-lg shadow-lg p-4 max-h-[80vh] overflow-y-auto"
           role="dialog"
           aria-label="Informações do contato"
         >

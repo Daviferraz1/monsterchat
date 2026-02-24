@@ -76,8 +76,8 @@ export default function ContactsPage() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-[#0d0d1a]" style={{ color: '#e2e8f0' }}>
-      <div className="p-6 max-w-3xl w-full">
+    <div className="flex flex-col h-full min-h-0 overflow-auto bg-[#0d0d1a]" style={{ color: '#e2e8f0' }}>
+      <div className="p-4 sm:p-6 max-w-3xl w-full">
         <h1 className="text-2xl font-bold text-white mb-1">Contatos</h1>
         <p className="text-sm text-gray-500 mb-6">
           Contatos que já conversaram com você. Adicione e-mail e observações para identificá-los.

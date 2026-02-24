@@ -41,8 +41,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-full max-w-md p-8 border rounded-lg">
+    <div className="flex items-center justify-center min-h-[100dvh] p-4">
+      <div className="w-full max-w-md p-6 sm:p-8 border rounded-xl shadow-lg">
         <h1 className="text-2xl font-bold mb-6">MonsterChat</h1>
 
         {mounted && !configured && (
