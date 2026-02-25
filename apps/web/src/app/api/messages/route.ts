@@ -82,11 +82,15 @@ export async function POST(request: NextRequest) {
 
     try {
       if (channel.type === 'whatsapp') {
+        // Contatos da Guru podem ter external_id = e-mail; WhatsApp exige número. Preferir contact.phone.
+        const phoneDigits = (contact.phone || '').replace(/\D/g, '');
+        const toForWhatsApp = phoneDigits.length >= 10 ? (contact.phone || '') : contact.external_id;
+
         if (hasMedia && contentType) {
           const mediaParams = {
             phoneNumberId: channel.external_id,
             accessToken: channel.access_token,
-            to: contact.external_id,
+            to: toForWhatsApp,
             mediaUrl: media_url,
             caption: displayText || undefined,
             filename: filename || undefined,
@@ -107,7 +111,7 @@ export async function POST(request: NextRequest) {
           const response = await sendWhatsAppText({
             phoneNumberId: channel.external_id,
             accessToken: channel.access_token,
-            to: contact.external_id,
+            to: toForWhatsApp,
             text: text || '',
           });
           externalId = response.messages[0]?.id;
