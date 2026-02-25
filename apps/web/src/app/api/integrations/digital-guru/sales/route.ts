@@ -110,9 +110,21 @@ export async function GET(request: NextRequest) {
       created_at: s.created_at,
     }));
 
+    // Uma transação não deve aparecer duplicada (ex.: mesma compra inserida 2x ou por item)
+    const seenKeys = new Set<string>();
+    const deduped = list.filter((s) => {
+      const key =
+        s.contact_id && s.transaction_id
+          ? `${s.contact_id}:${s.transaction_id}`
+          : (s.id as string);
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+
     return NextResponse.json({
-      sales: list,
-      total: list.length,
+      sales: deduped,
+      total: deduped.length,
     });
   } catch (error) {
     console.error('[Digital Guru sales] Erro:', error);

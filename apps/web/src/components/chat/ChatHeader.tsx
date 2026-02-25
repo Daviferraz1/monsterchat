@@ -25,14 +25,7 @@ function formatDateTime(iso?: string | null): string {
   });
 }
 
-function orderStatusBadge(status: string | null | undefined): { label: string; className: string; shortLabel: string } {
-  const s = (status ?? '').toLowerCase();
-  if (['approved', 'paid'].includes(s)) return { label: 'Pedido aprovado / Pago', shortLabel: 'Comprou', className: 'bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/40' };
-  if (['pending', 'processing', 'analyzing'].includes(s)) return { label: 'Pedido pendente', shortLabel: 'Pendente', className: 'bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/40' };
-  if (['refused', 'cancelled', 'canceled', 'refunded', 'expired'].includes(s)) return { label: 'Pedido recusado / cancelado', shortLabel: 'Tentativa', className: 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/40' };
-  if (s) return { label: s, shortLabel: s.slice(0, 12), className: 'bg-muted text-muted-foreground border-border' };
-  return { label: 'Pedido feito', shortLabel: 'Pedido', className: 'bg-muted text-muted-foreground border-border' };
-}
+import { orderStatusBadge } from '@/lib/orderStatusBadge';
 
 interface ChatHeaderProps {
   conversationId: string;
@@ -80,7 +73,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
 
   const contactId = (conversation?.contact as Contact | undefined)?.id;
   useEffect(() => {
-    if (!showContactInfo || !contactId) {
+    if (!contactId) {
       setContactSales([]);
       return;
     }
@@ -90,13 +83,18 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
         const res = await fetch(`/api/integrations/digital-guru/sales?contact_id=${encodeURIComponent(contactId)}&limit=20`);
         if (!res.ok || cancelled) return;
         const data = await res.json();
-        if (!cancelled && Array.isArray(data.sales)) setContactSales(data.sales);
+        if (!cancelled && Array.isArray(data.sales)) {
+          const sorted = [...data.sales].sort(
+            (a, b) => new Date((b.sold_at as string) || 0).getTime() - new Date((a.sold_at as string) || 0).getTime()
+          );
+          setContactSales(sorted);
+        }
       } catch {
         if (!cancelled) setContactSales([]);
       }
     })();
     return () => { cancelled = true; };
-  }, [showContactInfo, contactId]);
+  }, [contactId]);
 
   if (!conversation) {
     return <div className="h-16 border-b" />;
@@ -105,6 +103,20 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const contact = conversation.contact as Contact | undefined;
   const channel = conversation.channel as Channel | undefined;
   const dg = contact?.metadata?.digital_guru as DigitalGuruMetadata | undefined;
+  const hasApprovedSale = contactSales.some(
+    (s) => s.status?.toLowerCase() === 'approved' || s.status?.toLowerCase() === 'paid'
+  );
+  const uniqueDgProducts =
+    dg?.products?.filter(
+      (p, i, arr) => arr.findIndex((x) => (x.name || '').trim() === (p.name || '').trim()) === i
+    ) ?? [];
+  const hasProductsFromGuru = uniqueDgProducts.length > 0;
+  const effectiveSituation =
+    hasApprovedSale
+      ? 'paid'
+      : dg?.situation?.toLowerCase() === 'abandoned' && hasProductsFromGuru
+        ? 'paid'
+        : (dg?.situation ?? null);
   const instagramUsername = channel?.type === 'instagram' && contact?.metadata?.username;
   const displayName =
     contact?.name ||
@@ -146,12 +158,12 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
           <p className="text-sm text-muted-foreground truncate">
             {contact?.phone || contact?.external_id || '—'}
           </p>
-          {dg && (
+          {(dg || hasApprovedSale) && (
             <span
-              className={`inline-flex items-center mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${orderStatusBadge(dg.situation).className}`}
-              title={orderStatusBadge(dg.situation).label}
+              className={`inline-flex items-center mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${orderStatusBadge(effectiveSituation).className}`}
+              title={orderStatusBadge(effectiveSituation).label}
             >
-              Pedido feito · {orderStatusBadge(dg.situation).shortLabel}
+              Pedido feito · {orderStatusBadge(effectiveSituation).shortLabel}
             </span>
           )}
         </div>
@@ -223,7 +235,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                 Canal: {channel.name} ({channel.type})
               </div>
             )}
-            {dg && (
+            {(dg || hasApprovedSale) && (
               <div className="pt-3 border-t space-y-2">
                 <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                   <GraduationCap className="w-3.5 h-3.5" />
@@ -233,26 +245,30 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-muted-foreground">Situação:</span>
                     <span
-                      className={`inline-flex items-center text-xs font-medium px-2 py-1 rounded border ${orderStatusBadge(dg.situation).className}`}
-                      title={orderStatusBadge(dg.situation).label}
+                      className={`inline-flex items-center text-xs font-medium px-2 py-1 rounded border ${orderStatusBadge(effectiveSituation).className}`}
+                      title={orderStatusBadge(effectiveSituation).label}
                     >
-                      Pedido feito · {orderStatusBadge(dg.situation).shortLabel}
+                      Pedido feito · {orderStatusBadge(effectiveSituation).shortLabel}
                     </span>
                   </div>
-                  {dg.situation && (
+                  {dg?.situation && (
                     <div className="flex items-start gap-2 text-muted-foreground">
                       <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span className="text-xs">Status do pedido: {dg.situation}</span>
+                      <span className="text-xs">
+                        {hasApprovedSale
+                          ? `Estado no Guru: ${dg.situation}`
+                          : `Status do pedido: ${dg.situation}`}
+                      </span>
                     </div>
                   )}
-                  {dg.products && dg.products.length > 0 && (
+                  {uniqueDgProducts.length > 0 && (
                     <div className="flex flex-col gap-1">
                       <span className="text-muted-foreground text-xs flex items-center gap-1.5">
                         <Package className="w-3.5 h-3.5" />
-                        Produtos comprados
+                        {hasApprovedSale ? 'Produtos comprados' : 'Produtos no carrinho / pedido'}
                       </span>
                       <ul className="list-disc list-inside text-xs space-y-0.5">
-                        {dg.products.map((p, i) => (
+                        {uniqueDgProducts.map((p, i) => (
                           <li key={i}>
                             {p.name}
                             {p.purchased_at && (
@@ -265,7 +281,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                       </ul>
                     </div>
                   )}
-                  {dg.last_sync_at && (
+                  {dg?.last_sync_at && (
                     <p className="text-[10px] text-muted-foreground pt-1">
                       Última atualização: {formatDateTime(dg.last_sync_at)}
                     </p>

@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { formatLastMessageTime } from '@/lib/utils';
+import { orderStatusBadge, effectiveSituationFromDg } from '@/lib/orderStatusBadge';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation } from '@/types';
+import type { DigitalGuruMetadata } from '@/types';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -47,6 +49,10 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
   const colorIndex = (displayName?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length;
   const [avatarError, setAvatarError] = useState(false);
   const showProfilePic = contact?.profile_pic_url && !avatarError;
+  const dg = contact?.metadata?.digital_guru as DigitalGuruMetadata | undefined;
+  const hasProducts = (dg?.products?.length ?? 0) > 0;
+  const effectiveSituation = effectiveSituationFromDg(dg?.situation, hasProducts);
+  const situationBadge = effectiveSituation ? orderStatusBadge(effectiveSituation) : null;
 
   return (
     <Link
@@ -98,6 +104,14 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
           {conversation.last_message_preview?.trim() ||
             (conversation.last_message_at ? 'Mensagem' : 'Sem mensagens')}
         </p>
+        {situationBadge && (
+          <span
+            className={`inline-flex items-center mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit ${situationBadge.className}`}
+            title={situationBadge.label}
+          >
+            {situationBadge.shortLabel}
+          </span>
+        )}
         {hasUnread && (
           <span
             className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full text-white flex-shrink-0"

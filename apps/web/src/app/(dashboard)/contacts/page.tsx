@@ -67,6 +67,8 @@ function statusLabel(status: string | null): string {
     cancelled: 'Cancelado',
     canceled: 'Cancelado',
     refunded: 'Reembolsado',
+    chargeback: 'Chargeback',
+    abandoned: 'Abandonado',
     expired: 'Expirado',
     processing: 'Processando',
     analyzing: 'Em análise',
@@ -140,9 +142,14 @@ export default function ContactsPage() {
 
       const salesList = Array.isArray(salesRes.sales) ? salesRes.sales : [];
       const byContact: Record<string, ContactSale[]> = {};
+      const seenIdsByContact: Record<string, Set<string>> = {};
       for (const s of salesList) {
         const cid = s.contact_id as string | undefined;
         if (!cid) continue;
+        const saleId = String(s.id);
+        if (!seenIdsByContact[cid]) seenIdsByContact[cid] = new Set();
+        if (seenIdsByContact[cid].has(saleId)) continue;
+        seenIdsByContact[cid].add(saleId);
         if (!byContact[cid]) byContact[cid] = [];
         byContact[cid].push({
           id: s.id,
@@ -245,10 +252,9 @@ export default function ContactsPage() {
               const approvedSales = sales.filter(
                 (s) => s.status?.toLowerCase() === 'approved' || s.status?.toLowerCase() === 'paid'
               );
-              const approvedProductNames = approvedSales.length
-                ? [...new Set(approvedSales.map((s) => s.product_names).filter(Boolean))]
-                : dg?.products?.length
-                  ? dg.products.map((p) => p.name)
+              const approvedProductNames =
+                approvedSales.length > 0
+                  ? [...new Set(approvedSales.map((s) => s.product_names).filter(Boolean))]
                   : [];
               const hasPurchased = approvedProductNames.length > 0;
 
@@ -448,7 +454,9 @@ export default function ContactsPage() {
                                       ? 'text-green-400'
                                       : s.status?.toLowerCase() === 'pending'
                                         ? 'text-amber-400'
-                                        : 'text-gray-500'
+                                        : ['refunded', 'chargeback', 'refused', 'cancelled', 'canceled'].includes(s.status?.toLowerCase() ?? '')
+                                          ? 'text-red-400'
+                                          : 'text-gray-500'
                                   }
                                 >
                                   {statusLabel(s.status)}
