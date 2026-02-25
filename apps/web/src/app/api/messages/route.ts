@@ -285,6 +285,19 @@ export async function POST(request: NextRequest) {
               : metaError && typeof metaError === 'object'
                 ? JSON.stringify(metaError)
                 : undefined;
+
+      // WhatsApp (#131009) Parameter value is not valid — número ou parâmetro em formato inválido
+      const errorCode = metaError?.code ?? (typeof metaError === 'object' && metaError && 'code' in metaError ? (metaError as { code?: number }).code : undefined);
+      if (channel?.type === 'whatsapp' && (errorCode === 131009 || /131009|Parameter value is not valid/i.test(String(metaMsg ?? '')))) {
+        return NextResponse.json(
+          {
+            error: 'Número do destinatário ou parâmetro inválido.',
+            hint: 'A API WhatsApp retornou (#131009). O número do contato deve conter só dígitos (ex.: 5511999999999). O sistema já normaliza o número automaticamente; se o erro continuar, confira em Contatos se o telefone do destinatário está correto e se o número está registrado no WhatsApp.',
+          },
+          { status: 400 }
+        );
+      }
+
       console.error('Error sending message:', {
         status: statusCode,
         statusText: error?.response?.statusText,

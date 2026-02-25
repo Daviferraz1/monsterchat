@@ -1,6 +1,23 @@
 import axios from 'axios';
 import { sanitizeTokenForHeader } from '../utils';
 
+/**
+ * A API WhatsApp exige "to" como número só dígitos no formato esperado.
+ * Contatos vindos da Guru podem vir com celular em 8 dígitos (ex.: 553194056541).
+ * No Brasil o WhatsApp usa 9 dígitos (9 + 8): normaliza 12 dígitos (55+DDD+8) → 13 (55+DDD+9+8).
+ */
+function normalizeToPhone(to: string): string {
+  let digits = (to || '').replace(/\D/g, '');
+  if (!digits) return to || '';
+  if (digits.startsWith('55') && digits.length === 12) {
+    digits = digits.slice(0, 4) + '9' + digits.slice(4);
+  }
+  if (digits.startsWith('55') && digits.length === 11) {
+    digits = digits.slice(0, 4) + '9' + digits.slice(4);
+  }
+  return digits;
+}
+
 export interface WhatsAppSendTextParams {
   phoneNumberId: string;
   accessToken: string;
@@ -21,15 +38,20 @@ export interface WhatsAppSendMessageResponse {
 
 export async function sendWhatsAppText(params: WhatsAppSendTextParams) {
   const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
-  
+  const to = normalizeToPhone(params.to);
+  if (!to) {
+    throw new Error('Número do destinatário inválido (vazio após normalização).');
+  }
+  // Remove caracteres de controle que podem causar (#131009) Parameter value is not valid
+  const bodyText = (params.text || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
   const response = await axios.post<WhatsAppSendMessageResponse>(
     url,
     {
       messaging_product: 'whatsapp',
-      to: params.to,
+      to,
       type: 'text',
       text: {
-        body: params.text,
+        body: bodyText || ' ',
       },
     },
     {
@@ -42,7 +64,7 @@ export async function sendWhatsAppText(params: WhatsAppSendTextParams) {
 
   console.log('WhatsApp message sent:', {
     phoneNumberId: params.phoneNumberId,
-    to: params.to,
+    to,
     messageId: response.data.messages[0]?.id,
   });
 
@@ -60,9 +82,11 @@ export interface WhatsAppSendMediaParams {
 
 export async function sendWhatsAppImage(params: WhatsAppSendMediaParams) {
   const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const to = normalizeToPhone(params.to);
+  if (!to) throw new Error('Número do destinatário inválido (vazio após normalização).');
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
-    to: params.to,
+    to,
     type: 'image',
     image: { link: params.mediaUrl, caption: params.caption || undefined },
   };
@@ -77,9 +101,11 @@ export async function sendWhatsAppImage(params: WhatsAppSendMediaParams) {
 
 export async function sendWhatsAppVideo(params: WhatsAppSendMediaParams) {
   const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const to = normalizeToPhone(params.to);
+  if (!to) throw new Error('Número do destinatário inválido (vazio após normalização).');
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
-    to: params.to,
+    to,
     type: 'video',
     video: { link: params.mediaUrl, caption: params.caption || undefined },
   };
@@ -94,9 +120,11 @@ export async function sendWhatsAppVideo(params: WhatsAppSendMediaParams) {
 
 export async function sendWhatsAppAudio(params: WhatsAppSendMediaParams) {
   const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const to = normalizeToPhone(params.to);
+  if (!to) throw new Error('Número do destinatário inválido (vazio após normalização).');
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
-    to: params.to,
+    to,
     type: 'audio',
     audio: { link: params.mediaUrl },
   };
@@ -111,9 +139,11 @@ export async function sendWhatsAppAudio(params: WhatsAppSendMediaParams) {
 
 export async function sendWhatsAppDocument(params: WhatsAppSendMediaParams) {
   const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const to = normalizeToPhone(params.to);
+  if (!to) throw new Error('Número do destinatário inválido (vazio após normalização).');
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
-    to: params.to,
+    to,
     type: 'document',
     document: {
       link: params.mediaUrl,
