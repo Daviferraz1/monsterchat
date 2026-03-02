@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { normalizePhoneCanonical } from '../utils';
+import type { LeadCampaign } from '@/types';
 
 export interface ContactData {
   channelType: 'whatsapp' | 'instagram';
@@ -9,6 +10,8 @@ export interface ContactData {
   email?: string;
   profilePicUrl?: string;
   metadata?: Record<string, any>;
+  /** Origem da campanha (Facebook Ads, Instagram etc.) — mesclado em metadata.campaign */
+  campaign?: LeadCampaign | null;
 }
 
 export async function upsertContact(data: ContactData) {
@@ -25,11 +28,15 @@ export async function upsertContact(data: ContactData) {
     throw selectError;
   }
   if (existing) {
+    const mergedMeta = { ...(existing.metadata || {}), ...(data.metadata || {}) };
+    if (data.campaign && Object.keys(data.campaign).length > 0) {
+      mergedMeta.campaign = { ...data.campaign, attributed_at: data.campaign.attributed_at || new Date().toISOString() };
+    }
     const updatePayload: Record<string, unknown> = {
       name: data.name || existing.name,
       phone: data.phone ?? existing.phone,
       profile_pic_url: data.profilePicUrl || existing.profile_pic_url,
-      metadata: data.metadata || existing.metadata,
+      metadata: mergedMeta,
       updated_at: new Date().toISOString(),
     };
     if (data.email !== undefined) {
@@ -68,10 +75,15 @@ export async function upsertContact(data: ContactData) {
         .eq('id', matched.id)
         .single();
       if (current) {
+        const mergedMeta = { ...(current.metadata || {}), ...(data.metadata || {}) };
+        if (data.campaign && Object.keys(data.campaign).length > 0) {
+          mergedMeta.campaign = { ...data.campaign, attributed_at: data.campaign.attributed_at || new Date().toISOString() };
+        }
         const updatePayload: Record<string, unknown> = {
           name: data.name || current.name,
           phone: data.phone ?? current.phone,
           profile_pic_url: data.profilePicUrl || current.profile_pic_url,
+          metadata: mergedMeta,
           updated_at: new Date().toISOString(),
         };
         if (data.email !== undefined) updatePayload.email = data.email || null;
@@ -87,6 +99,10 @@ export async function upsertContact(data: ContactData) {
   }
 
   // 3) Criar novo contato
+  const newMetadata = { ...(data.metadata || {}) };
+  if (data.campaign && Object.keys(data.campaign).length > 0) {
+    newMetadata.campaign = { ...data.campaign, attributed_at: data.campaign.attributed_at || new Date().toISOString() };
+  }
   const { data: created, error } = await supabaseAdmin
     .from('contacts')
     .insert({
@@ -96,7 +112,7 @@ export async function upsertContact(data: ContactData) {
       phone: data.phone,
       email: data.email || null,
       profile_pic_url: data.profilePicUrl,
-      metadata: data.metadata || {},
+      metadata: newMetadata,
     })
     .select()
     .single();

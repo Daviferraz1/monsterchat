@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, Users, ShoppingBag, Settings } from 'lucide-react';
+import { MessageSquare, Users, ShoppingBag, Settings, Megaphone } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useTotalUnreadCount } from '@/hooks/useTotalUnreadCount';
 
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/contacts', icon: Users, label: 'Contatos' },
   { href: '/sales', icon: ShoppingBag, label: 'Vendas' },
   { href: '/settings/channels', icon: Settings, label: 'Canais' },
+  { href: '/settings/campanhas', icon: Megaphone, label: 'Campanhas' },
 ] as const;
 
 /** Formata o número para o badge: número real até 999, depois "999+" */

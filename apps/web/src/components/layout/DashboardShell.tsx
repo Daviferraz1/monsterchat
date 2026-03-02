@@ -31,7 +31,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         )}
         {/* Conteúdo da rota: chat, estado vazio ou outras páginas */}
         <main
-          className={`flex-1 flex flex-col min-h-0 overflow-hidden ${isInboxList ? 'hidden md:flex' : ''}`}
+          className={`flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden ${isInboxList ? 'hidden md:flex' : ''}`}
         >
           {children}
         </main>

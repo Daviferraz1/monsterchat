@@ -8,6 +8,9 @@ import { findOrCreateConversation, updateConversation } from '../services/conver
 import { createMessage, updateMessageStatus, getMessageByExternalId } from '../services/message';
 import { getChannelByExternalId, getChannelByExternalIdMaybeInactive } from '../services/channel';
 import { storeWhatsAppMediaInSupabase } from '../services/whatsapp-media';
+import { getRecentLeadTrackingByPhone, getLeadTrackingByRefFromMessage, markLeadTrackingRefUsed } from '../services/lead-tracking';
+import { supabaseAdmin } from '../supabase';
+import { normalizePhoneCanonical } from '../utils';
 
 function isNetworkError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -207,6 +210,52 @@ async function processWhatsAppMessage(
       phone: from,
       email: extractedEmail,
     });
+
+    // Atribuir origem de campanha (Facebook Ads, Instagram etc.)
+    const existingCampaign = (contactRecord.metadata as Record<string, unknown>)?.campaign;
+    if (!existingCampaign) {
+      let leadUtm: { utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string; attributed_at: string } | null = null;
+
+      // 1) Redirecionamento direto: código (ref) em qualquer lugar da mensagem (ex.: "Olá! 👋 Quero conversar. 2KCR4SYH")
+      const refResult = await getLeadTrackingByRefFromMessage(normalized.body, 7);
+      if (refResult) {
+        leadUtm = refResult.utm;
+        const phoneCanon = normalizePhoneCanonical(from);
+        if (phoneCanon) await markLeadTrackingRefUsed(refResult.ref, phoneCanon);
+      }
+      // 2) Fluxo com formulário: busca por telefone
+      if (!leadUtm) leadUtm = await getRecentLeadTrackingByPhone(from, 7);
+
+      if (leadUtm) {
+        const metadata = (contactRecord.metadata as Record<string, unknown>) || {};
+        metadata.campaign = {
+          utm_source: leadUtm.utm_source,
+          utm_medium: leadUtm.utm_medium,
+          utm_campaign: leadUtm.utm_campaign,
+          utm_content: leadUtm.utm_content,
+          utm_term: leadUtm.utm_term,
+          attributed_at: leadUtm.attributed_at,
+        };
+        await supabaseAdmin
+          .from('contacts')
+          .update({ metadata, updated_at: new Date().toISOString() })
+          .eq('id', contactRecord.id);
+
+        // Facebook Conversions API: envia Lead para atribuição no Ads Manager
+        const { sendFacebookCAPILead } = await import('../services/facebook-capi');
+        const eventId = `wa_lead_${contactRecord.id}_${message.id}`;
+        void sendFacebookCAPILead({
+          phone: from,
+          email: extractedEmail,
+          eventId,
+          utmSource: leadUtm.utm_source,
+          utmMedium: leadUtm.utm_medium,
+          utmCampaign: leadUtm.utm_campaign,
+          utmContent: leadUtm.utm_content,
+          utmTerm: leadUtm.utm_term,
+        }).catch(() => {});
+      }
+    }
 
     // Buscar ou criar conversa
     console.log('[WhatsApp Webhook] Finding or creating conversation', { channelId, contactId: contactRecord.id });

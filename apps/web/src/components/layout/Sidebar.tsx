@@ -6,7 +6,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
-import { MessageSquare, Settings, Users, ShoppingBag } from 'lucide-react';
+import { MessageSquare, Settings, Users, ShoppingBag, Megaphone } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 
 interface SidebarProps {
@@ -54,8 +54,11 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
           <Link href="/sales" className={navLinkClass(!!pathname?.startsWith('/sales'))} onClick={onClose}>
             <ShoppingBag className="w-4 h-4 shrink-0" /> Últimas vendas
           </Link>
-          <Link href="/settings/channels" className={navLinkClass(!!pathname?.startsWith('/settings'))} onClick={onClose}>
+          <Link href="/settings/channels" className={navLinkClass(pathname === '/settings/channels')} onClick={onClose}>
             <Settings className="w-4 h-4 shrink-0" /> Canais
+          </Link>
+          <Link href="/settings/campanhas" className={navLinkClass(pathname === '/settings/campanhas')} onClick={onClose}>
+            <Megaphone className="w-4 h-4 shrink-0" /> Campanhas
           </Link>
         </nav>
       </div>

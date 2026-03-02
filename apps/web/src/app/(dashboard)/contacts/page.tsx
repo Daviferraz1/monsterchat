@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useContacts } from '@/hooks/useContacts';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '@/components/layout/ChannelBadge';
-import { Mail, FileText, Loader2, Search, ChevronDown, ChevronUp, MessageSquare, MapPin, ShoppingBag, ExternalLink } from 'lucide-react';
-import type { Contact, ChannelType, DigitalGuruMetadata } from '@/types';
+import { Mail, FileText, Loader2, Search, ChevronDown, ChevronUp, MessageSquare, MapPin, ShoppingBag, ExternalLink, Megaphone } from 'lucide-react';
+import type { Contact, ChannelType, DigitalGuruMetadata, LeadCampaign } from '@/types';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -248,6 +248,10 @@ export default function ContactsPage() {
               const conversationId = conversationByContact[c.id];
               const sales = salesByContact[c.id] ?? [];
               const dg = (c.metadata?.digital_guru as DigitalGuruMetadata | undefined);
+              const campaign = (c.metadata?.campaign as LeadCampaign | undefined);
+              const campaignLabel = campaign?.utm_source
+                ? (campaign.utm_campaign ? `${campaign.utm_source} · ${campaign.utm_campaign}` : campaign.utm_source)
+                : null;
               const latestAddress = sales.length > 0 ? sales[0].address_full : null;
               const approvedSales = sales.filter(
                 (s) => s.status?.toLowerCase() === 'approved' || s.status?.toLowerCase() === 'paid'
@@ -288,6 +292,17 @@ export default function ContactsPage() {
                           {c.email && (
                             <p className="text-sm text-gray-400 mt-1 flex items-center gap-1.5">
                               <Mail className="w-3.5 h-3.5 shrink-0" /> {c.email}
+                            </p>
+                          )}
+                          {campaignLabel && (
+                            <p className="mt-1.5 flex items-center gap-1.5">
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                                title={[campaign.utm_source, campaign.utm_medium, campaign.utm_campaign].filter(Boolean).join(' · ')}
+                              >
+                                <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                                {campaignLabel}
+                              </span>
                             </p>
                           )}
                           {hasPurchased && (
@@ -410,6 +425,26 @@ export default function ContactsPage() {
 
                   {isExpanded && (
                     <div className="border-t border-white/10 px-4 py-4 bg-white/[0.02] space-y-4">
+                      {campaign && (campaign.utm_source || campaign.utm_medium || campaign.utm_campaign) && (
+                        <div className="flex items-start gap-2">
+                          <Megaphone className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">Origem da campanha</p>
+                            <ul className="text-sm text-gray-300 space-y-0.5">
+                              {campaign.utm_source && <li><span className="text-gray-500">Fonte:</span> {campaign.utm_source}</li>}
+                              {campaign.utm_medium && <li><span className="text-gray-500">Meio:</span> {campaign.utm_medium}</li>}
+                              {campaign.utm_campaign && <li><span className="text-gray-500">Campanha:</span> {campaign.utm_campaign}</li>}
+                              {campaign.utm_content && <li><span className="text-gray-500">Conteúdo:</span> {campaign.utm_content}</li>}
+                              {campaign.utm_term && <li><span className="text-gray-500">Termo:</span> {campaign.utm_term}</li>}
+                              {campaign.attributed_at && (
+                                <li className="text-xs text-gray-500 mt-1">
+                                  Atribuído em {new Date(campaign.attributed_at).toLocaleString('pt-BR')}
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
                       {latestAddress && (
                         <div className="flex items-start gap-2">
                           <MapPin className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
@@ -484,8 +519,8 @@ export default function ContactsPage() {
                           </ul>
                         </div>
                       )}
-                      {!latestAddress && !dg?.products?.length && !dg?.situation && sales.length === 0 && (
-                        <p className="text-sm text-gray-500">Nenhum endereço, compra ou histórico registrado.</p>
+                      {!latestAddress && !dg?.products?.length && !dg?.situation && sales.length === 0 && !(campaign?.utm_source || campaign?.utm_medium || campaign?.utm_campaign) && (
+                        <p className="text-sm text-gray-500">Nenhum endereço, compra, campanha ou histórico registrado.</p>
                       )}
                     </div>
                   )}

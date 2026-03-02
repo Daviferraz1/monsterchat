@@ -56,4 +56,8 @@ export const apiEnv = {
   // Opcional: para buscar vendas na Guru (User Token + URL base da API)
   DIGITAL_GURU_USER_TOKEN: process.env.DIGITAL_GURU_USER_TOKEN,
   DIGITAL_GURU_API_BASE_URL: process.env.DIGITAL_GURU_API_BASE_URL,
+
+  // Facebook Pixel + Conversions API (rastreamento de campanhas)
+  NEXT_PUBLIC_FB_PIXEL_ID: process.env.NEXT_PUBLIC_FB_PIXEL_ID,
+  FB_CAPI_ACCESS_TOKEN: process.env.FB_CAPI_ACCESS_TOKEN,
 } as const;

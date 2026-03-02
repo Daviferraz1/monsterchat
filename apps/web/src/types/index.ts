@@ -58,6 +58,17 @@ export interface Contact {
   updated_at: string;
 }
 
+/** Origem da campanha (Facebook Ads, Instagram etc.) — salvo em contact.metadata.campaign */
+export interface LeadCampaign {
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  /** Quando a origem foi atribuída (ISO string) */
+  attributed_at?: string;
+}
+
 /** Dados do Digital Guru no metadata do contato (vendas processadas → identificar aluno e produtos). */
 export interface DigitalGuruProduct {
   name: string;
