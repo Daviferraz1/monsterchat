@@ -1,8 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FacebookPixel, trackFacebookPixelLead } from '@/components/FacebookPixel';
+
+function RedirectFallback() {
+  return (
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-[#0a0a18] text-white">
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl text-center">
+        <div className="inline-block w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin mb-4" />
+        <p className="text-lg font-medium">Carregando...</p>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Página de redirecionamento para campanhas (Facebook Ads, Instagram etc.).
@@ -10,7 +21,7 @@ import { FacebookPixel, trackFacebookPixelLead } from '@/components/FacebookPixe
  * Redireciona direto para o WhatsApp com uma mensagem que contém um código (ref).
  * Quando o lead enviar a primeira mensagem, o sistema identifica a origem da campanha pelo ref.
  */
-export default function RedirectPage() {
+function RedirectPageContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'redirect' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -110,5 +121,13 @@ export default function RedirectPage() {
     </div>
       )}
     </>
+  );
+}
+
+export default function RedirectPage() {
+  return (
+    <Suspense fallback={<RedirectFallback />}>
+      <RedirectPageContent />
+    </Suspense>
   );
 }
