@@ -298,7 +298,7 @@ export default function ContactsPage() {
                             <p className="mt-1.5 flex items-center gap-1.5">
                               <span
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                                title={[campaign.utm_source, campaign.utm_medium, campaign.utm_campaign].filter(Boolean).join(' · ')}
+                                title={[campaign?.utm_source, campaign?.utm_medium, campaign?.utm_campaign].filter(Boolean).join(' · ')}
                               >
                                 <Megaphone className="w-3.5 h-3.5 shrink-0" />
                                 {campaignLabel}
