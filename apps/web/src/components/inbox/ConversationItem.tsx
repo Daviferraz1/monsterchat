@@ -7,7 +7,8 @@ import { formatLastMessageTime } from '@/lib/utils';
 import { orderStatusBadge, effectiveSituationFromDg } from '@/lib/orderStatusBadge';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation } from '@/types';
-import type { DigitalGuruMetadata } from '@/types';
+import type { DigitalGuruMetadata, LeadCampaign } from '@/types';
+import { Megaphone } from 'lucide-react';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -53,6 +54,8 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
   const hasProducts = (dg?.products?.length ?? 0) > 0;
   const effectiveSituation = effectiveSituationFromDg(dg?.situation, hasProducts);
   const situationBadge = effectiveSituation ? orderStatusBadge(effectiveSituation) : null;
+  const campaign = contact?.metadata?.campaign as LeadCampaign | undefined;
+  const isLeadFromAd = !!(campaign?.utm_source || campaign?.utm_medium || campaign?.utm_campaign);
 
   return (
     <Link
@@ -104,14 +107,25 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
           {conversation.last_message_preview?.trim() ||
             (conversation.last_message_at ? 'Mensagem' : 'Sem mensagens')}
         </p>
-        {situationBadge && (
-          <span
-            className={`inline-flex items-center mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit ${situationBadge.className}`}
-            title={situationBadge.label}
-          >
-            {situationBadge.shortLabel}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+          {isLeadFromAd && (
+            <span
+              className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit bg-blue-500/20 text-blue-300 border-blue-500/30"
+              title={[campaign?.utm_source, campaign?.utm_medium, campaign?.utm_campaign].filter(Boolean).join(' · ') || 'Lead de anúncio'}
+            >
+              <Megaphone className="w-3 h-3 shrink-0" />
+              Lead de anúncio
+            </span>
+          )}
+          {situationBadge && (
+            <span
+              className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit ${situationBadge.className}`}
+              title={situationBadge.label}
+            >
+              {situationBadge.shortLabel}
+            </span>
+          )}
+        </div>
         {hasUnread && (
           <span
             className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full text-white flex-shrink-0"
