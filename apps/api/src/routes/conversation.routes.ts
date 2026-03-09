@@ -39,10 +39,10 @@ router.get('/', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch conversations' });
     }
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     logger.error('Error in conversations route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -69,10 +69,10 @@ router.get('/:id', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch conversation' });
     }
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     logger.error('Error in conversation route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -100,10 +100,10 @@ router.patch('/:id', async (req, res) => {
       return res.status(500).json({ error: 'Failed to update conversation' });
     }
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     logger.error('Error in conversation update route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

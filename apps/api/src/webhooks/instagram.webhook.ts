@@ -3,7 +3,7 @@ import { logger } from '../utils/logger.js';
 import type { InstagramWebhookEntry } from '../types/instagram.types.js';
 import { upsertContact } from '../services/contact.service.js';
 import { findOrCreateConversation, updateConversation } from '../services/conversation.service.js';
-import { createMessage, updateMessageStatus, getMessageByExternalId } from '../services/message.service.js';
+import { createMessage, getMessageByExternalId } from '../services/message.service.js';
 import { getChannelByExternalId } from '../services/channel.service.js';
 import { downloadAndUploadMedia } from '../services/media.service.js';
 import type { UnifiedInboundMessage } from '../types/common.types.js';
@@ -219,7 +219,7 @@ async function processInstagramReads(messageReads: any[]) {
 /**
  * Processa reação do Instagram
  */
-async function processInstagramReaction(reaction: any, channelId: string) {
+async function processInstagramReaction(reaction: any, _channelId: string) {
   try {
     // Buscar mensagem original
     const originalMessage = await getMessageByExternalId(reaction.mid);

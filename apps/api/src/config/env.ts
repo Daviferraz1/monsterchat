@@ -6,10 +6,10 @@ export const env = {
   // Supabase
   SUPABASE_URL: process.env.SUPABASE_URL!,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  
-  // Meta App
-  META_APP_SECRET: process.env.META_APP_SECRET!,
-  META_WEBHOOK_VERIFY_TOKEN: process.env.META_WEBHOOK_VERIFY_TOKEN!,
+
+  // Meta App (obrigatórios só se usar webhooks WhatsApp/Instagram na API)
+  META_APP_SECRET: process.env.META_APP_SECRET || '',
+  META_WEBHOOK_VERIFY_TOKEN: process.env.META_WEBHOOK_VERIFY_TOKEN || '',
   
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID,
@@ -28,13 +28,8 @@ export const env = {
   API_URL: process.env.API_URL || 'http://localhost:3001',
 } as const;
 
-// Validar variáveis obrigatórias
-const requiredEnvVars = [
-  'SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'META_APP_SECRET',
-  'META_WEBHOOK_VERIFY_TOKEN',
-];
+// Validar variáveis obrigatórias (Meta opcional se só usar Baileys)
+const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
 
 for (const varName of requiredEnvVars) {
   if (!env[varName as keyof typeof env]) {

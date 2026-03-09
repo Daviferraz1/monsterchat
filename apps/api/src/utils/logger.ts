@@ -1,5 +1,3 @@
-type LogLevel = 'info' | 'warn' | 'error' | 'debug';
-
 interface LogContext {
   channel?: string;
   contactId?: string;

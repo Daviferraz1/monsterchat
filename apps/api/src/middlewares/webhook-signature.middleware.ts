@@ -37,9 +37,9 @@ export async function verifyWebhookSignatureMiddleware(
 
     // Parse do JSON após verificação
     req.body = JSON.parse(rawBody);
-    next();
+    return next();
   } catch (error) {
     logger.error('Error verifying webhook signature', error);
-    res.status(400).json({ error: 'Invalid request' });
+    return res.status(400).json({ error: 'Invalid request' });
   }
 }

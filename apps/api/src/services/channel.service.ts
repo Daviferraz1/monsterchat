@@ -31,6 +31,29 @@ export async function getChannelByExternalId(
 }
 
 /**
+ * Busca um canal por ID (qualquer tipo, ativo ou não)
+ */
+export async function getChannelById(id: string) {
+  try {
+    const { data, error } = await supabase
+      .from('channels')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      logger.error('Error fetching channel by id', error);
+      throw error;
+    }
+
+    return data || null;
+  } catch (error) {
+    logger.error('Failed to get channel by id', error);
+    throw error;
+  }
+}
+
+/**
  * Busca todos os canais ativos de um tipo
  */
 export async function getActiveChannels(type?: ChannelType) {

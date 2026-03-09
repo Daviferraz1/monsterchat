@@ -9,6 +9,7 @@ import {
 } from '@/lib/api/services/whatsapp';
 import { sendInstagramText } from '@/lib/api/services/instagram';
 import { createMessage } from '@/lib/api/services/message';
+import { apiEnv } from '@/lib/api/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -81,7 +82,46 @@ export async function POST(request: NextRequest) {
     let status: 'pending' | 'sent' | 'failed' = 'pending';
 
     try {
-      if (channel.type === 'whatsapp') {
+      if (channel.type === 'whatsapp_baileys') {
+        const toPhone = (contact.phone || contact.external_id || '').replace(/\D/g, '');
+        const toJid = toPhone.length >= 10 ? toPhone : contact.external_id;
+        if (!toJid) {
+          return NextResponse.json(
+            { error: 'Contato sem número para envio via Baileys.' },
+            { status: 400 }
+          );
+        }
+        const apiUrl = (apiEnv.API_URL || '').replace(/\/$/, '');
+        if (!apiUrl) {
+          return NextResponse.json(
+            { error: 'API_URL não configurada. Configure para usar o canal WhatsApp (QR).' },
+            { status: 503 }
+          );
+        }
+        const body: { channelId: string; to: string; text?: string; mediaUrl?: string; contentType?: string; caption?: string; filename?: string } = {
+          channelId: channel.id,
+          to: toJid,
+        };
+        if (hasMedia && contentType) {
+          body.mediaUrl = media_url;
+          body.contentType = contentType;
+          body.caption = displayText || undefined;
+          body.filename = filename || undefined;
+        } else {
+          body.text = text || '';
+        }
+        const sendRes = await fetch(`${apiUrl}/baileys/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const sendData = await sendRes.json().catch(() => ({}));
+        if (!sendRes.ok) {
+          throw new Error(sendData.error || `API Baileys: ${sendRes.status}`);
+        }
+        externalId = sendData.externalId;
+        status = 'sent';
+      } else if (channel.type === 'whatsapp') {
         // Contatos da Guru podem ter external_id = e-mail; WhatsApp exige número. Preferir contact.phone.
         const phoneDigits = (contact.phone || '').replace(/\D/g, '');
         const toForWhatsApp = phoneDigits.length >= 10 ? (contact.phone || '') : contact.external_id;

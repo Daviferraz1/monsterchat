@@ -4,8 +4,6 @@ import { logger } from '../utils/logger.js';
 import { createMessage } from '../services/message.service.js';
 import { sendWhatsAppText } from '../services/whatsapp.service.js';
 import { sendInstagramText } from '../services/instagram.service.js';
-import { getChannelByExternalId } from '../services/channel.service.js';
-
 const router = Router();
 
 /**
@@ -31,10 +29,10 @@ router.get('/', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch messages' });
     }
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     logger.error('Error in messages route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -121,10 +119,10 @@ router.post('/', async (req, res) => {
       })
       .eq('id', conversation_id);
 
-    res.json(message);
+    return res.json(message);
   } catch (error) {
     logger.error('Error in message send route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

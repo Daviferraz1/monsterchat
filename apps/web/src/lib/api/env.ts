@@ -60,4 +60,8 @@ export const apiEnv = {
   // Facebook Pixel + Conversions API (rastreamento de campanhas)
   NEXT_PUBLIC_FB_PIXEL_ID: process.env.NEXT_PUBLIC_FB_PIXEL_ID,
   FB_CAPI_ACCESS_TOKEN: process.env.FB_CAPI_ACCESS_TOKEN,
+
+  // API do MonsterChat (Express) – usada para WhatsApp Baileys (QR) e envio
+  API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001',
 } as const;

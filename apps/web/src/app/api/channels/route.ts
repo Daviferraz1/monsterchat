@@ -68,16 +68,27 @@ export async function POST(request: NextRequest) {
       is_active = true,
     } = body;
 
-    if (!type || !name || !external_id || !access_token) {
+    if (!type || !name) {
       return NextResponse.json(
-        { error: 'type, name, external_id e access_token são obrigatórios' },
+        { error: 'type e name são obrigatórios' },
         { status: 400 }
       );
     }
 
-    if (!['whatsapp', 'instagram'].includes(type)) {
+    const isBaileys = type === 'whatsapp_baileys';
+    const externalId = (external_id && String(external_id).trim()) || (isBaileys ? 'baileys' : null);
+    const accessToken = (access_token && String(access_token).trim()) ? sanitizeTokenForHeader(access_token) : (isBaileys ? 'baileys-placeholder' : null);
+
+    if (!isBaileys && (!externalId || !accessToken)) {
       return NextResponse.json(
-        { error: 'type deve ser "whatsapp" ou "instagram"' },
+        { error: 'Para WhatsApp ou Instagram, external_id e access_token são obrigatórios' },
+        { status: 400 }
+      );
+    }
+
+    if (!['whatsapp', 'instagram', 'whatsapp_baileys'].includes(type)) {
+      return NextResponse.json(
+        { error: 'type deve ser "whatsapp", "instagram" ou "whatsapp_baileys"' },
         { status: 400 }
       );
     }
@@ -87,9 +98,9 @@ export async function POST(request: NextRequest) {
       .insert({
         type,
         name,
-        external_id,
+        external_id: externalId,
         business_account_id: business_account_id || null,
-        access_token: sanitizeTokenForHeader(access_token),
+        access_token: accessToken,
         webhook_verify_token: webhook_verify_token || null,
         is_active: !!is_active,
       })

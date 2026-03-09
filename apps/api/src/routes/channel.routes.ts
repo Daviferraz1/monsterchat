@@ -8,7 +8,7 @@ const router = Router();
  * GET /channels
  * Lista todos os canais
  */
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const { data, error } = await supabase
       .from('channels')
@@ -20,10 +20,10 @@ router.get('/', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch channels' });
     }
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     logger.error('Error in channels route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -35,8 +35,16 @@ router.post('/', async (req, res) => {
   try {
     const { type, name, external_id, business_account_id, access_token, webhook_verify_token, metadata } = req.body;
 
-    if (!type || !name || !external_id || !access_token) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!type || !name) {
+      return res.status(400).json({ error: 'Missing required fields: type, name' });
+    }
+
+    const isBaileys = type === 'whatsapp_baileys';
+    const externalId = external_id || (isBaileys ? 'baileys' : null);
+    const accessToken = access_token || (isBaileys ? 'baileys-placeholder' : null);
+
+    if (!isBaileys && (!externalId || !accessToken)) {
+      return res.status(400).json({ error: 'Para canais que não são WhatsApp Baileys, external_id e access_token são obrigatórios.' });
     }
 
     const { data, error } = await supabase
@@ -44,10 +52,10 @@ router.post('/', async (req, res) => {
       .insert({
         type,
         name,
-        external_id,
-        business_account_id,
-        access_token,
-        webhook_verify_token,
+        external_id: externalId,
+        business_account_id: business_account_id || null,
+        access_token: accessToken,
+        webhook_verify_token: webhook_verify_token || null,
         metadata: metadata || {},
       })
       .select()
@@ -58,10 +66,10 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create channel' });
     }
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     logger.error('Error in channel create route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -89,10 +97,10 @@ router.patch('/:id', async (req, res) => {
       return res.status(500).json({ error: 'Failed to update channel' });
     }
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     logger.error('Error in channel update route', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

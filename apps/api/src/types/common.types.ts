@@ -1,4 +1,4 @@
-export type ChannelType = 'whatsapp' | 'instagram';
+export type ChannelType = 'whatsapp' | 'instagram' | 'whatsapp_baileys';
 
 export type MessageDirection = 'inbound' | 'outbound';
 

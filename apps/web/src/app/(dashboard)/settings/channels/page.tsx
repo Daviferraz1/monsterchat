@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2, Bell } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2, Bell, QrCode } from 'lucide-react';
 import { useNotificationSoundEnabled } from '@/hooks/useNotificationSoundEnabled';
+
+const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001') : 'http://localhost:3001';
 
 interface Channel {
   id: string;
-  type: 'whatsapp' | 'instagram';
+  type: 'whatsapp' | 'instagram' | 'whatsapp_baileys';
   name: string;
   external_id: string;
   business_account_id: string | null;
@@ -30,13 +32,20 @@ export default function ChannelsPage() {
 
   const [soundEnabled, setSoundEnabled] = useNotificationSoundEnabled();
   const [form, setForm] = useState({
-    type: 'whatsapp' as 'whatsapp' | 'instagram',
+    type: 'whatsapp' as 'whatsapp' | 'instagram' | 'whatsapp_baileys',
     name: '',
     external_id: '',
     business_account_id: '',
     access_token: '',
     is_active: true,
   });
+
+  const [qrChannelId, setQrChannelId] = useState<string | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [qrConnected, setQrConnected] = useState(false);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrApiUnreachable, setQrApiUnreachable] = useState(false);
+  const qrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadChannels = async () => {
     setLoading(true);
@@ -77,9 +86,9 @@ export default function ChannelsPage() {
         body: JSON.stringify({
           type: form.type,
           name: form.name,
-          external_id: form.external_id.trim(),
+          external_id: form.type === 'whatsapp_baileys' ? 'baileys' : form.external_id.trim(),
           business_account_id: form.business_account_id.trim() || undefined,
-          access_token: form.access_token.trim(),
+          access_token: form.type === 'whatsapp_baileys' ? 'baileys-placeholder' : form.access_token.trim(),
           is_active: form.is_active,
         }),
       });
@@ -100,6 +109,12 @@ export default function ChannelsPage() {
         access_token: '',
         is_active: true,
       });
+      if (form.type === 'whatsapp_baileys' && data?.id) {
+        setQrChannelId(data.id);
+        setQrImage(null);
+        setQrConnected(false);
+        setQrLoading(true);
+      }
       loadChannels();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao salvar');
@@ -202,6 +217,65 @@ export default function ChannelsPage() {
     }
   };
 
+  const openQrModal = (ch: Channel) => {
+    if (ch.type !== 'whatsapp_baileys') return;
+    setQrChannelId(ch.id);
+    setQrImage(null);
+    setQrConnected(false);
+    setQrLoading(true);
+    setQrApiUnreachable(false);
+  };
+
+  useEffect(() => {
+    if (!qrChannelId) {
+      if (qrPollRef.current) {
+        clearInterval(qrPollRef.current);
+        qrPollRef.current = null;
+      }
+      return;
+    }
+
+    const baseUrl = API_URL.replace(/\/$/, '');
+    const fetchQr = async () => {
+      try {
+        const res = await fetch(`${baseUrl}/baileys/qr/${qrChannelId}`);
+        setQrApiUnreachable(false);
+        const data = await res.json().catch(() => ({}));
+        if (data.connected) {
+          setQrConnected(true);
+          setQrImage(null);
+          if (qrPollRef.current) {
+            clearInterval(qrPollRef.current);
+            qrPollRef.current = null;
+          }
+          return;
+        }
+        if (data.qr) {
+          const img = data.qr.startsWith('data:') ? data.qr : `data:image/png;base64,${data.qr}`;
+          setQrImage(img);
+        }
+      } catch (err) {
+        setQrLoading(false);
+        setQrApiUnreachable(true);
+      }
+    };
+
+    fetchQr();
+    qrPollRef.current = setInterval(fetchQr, 4000);
+
+    return () => {
+      if (qrPollRef.current) {
+        clearInterval(qrPollRef.current);
+        qrPollRef.current = null;
+      }
+    };
+  }, [qrChannelId]);
+
+  useEffect(() => {
+    if (!qrChannelId) setQrLoading(false);
+    else if (qrConnected || qrImage) setQrLoading(false);
+  }, [qrChannelId, qrConnected, qrImage]);
+
   const handleDeleteChannel = async (ch: Channel) => {
     if (!window.confirm(`Excluir o canal "${ch.name}"? As conversas e mensagens vinculadas também serão removidas.`)) return;
     setError(null);
@@ -273,12 +347,18 @@ export default function ChannelsPage() {
             <label className="block text-sm font-medium mb-1">Tipo</label>
             <select
               value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'whatsapp' | 'instagram' }))}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'whatsapp' | 'instagram' | 'whatsapp_baileys' }))}
               className="w-full px-3 py-2 border rounded-md bg-background"
             >
-              <option value="whatsapp">WhatsApp</option>
+              <option value="whatsapp">WhatsApp (API Meta)</option>
+              <option value="whatsapp_baileys">WhatsApp (QR / Baileys)</option>
               <option value="instagram">Instagram</option>
             </select>
+            {form.type === 'whatsapp_baileys' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Conecte com QR code (WhatsApp comum). Requer a API do MonsterChat rodando (API_URL). Não usa API oficial da Meta.
+              </p>
+            )}
           </div>
 
           <div>
@@ -287,12 +367,13 @@ export default function ChannelsPage() {
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Ex: WhatsApp Principal"
+              placeholder={form.type === 'whatsapp_baileys' ? 'Ex: WhatsApp Pessoal' : 'Ex: WhatsApp Principal'}
               className="w-full px-3 py-2 border rounded-md bg-background"
               required
             />
           </div>
 
+          {form.type !== 'whatsapp_baileys' && (
           <div>
             <label className="block text-sm font-medium mb-1">
               {form.type === 'whatsapp' ? 'ID do número de telefone (Phone Number ID)' : 'ID da Página do Facebook (Page ID) — para enviar mensagens'}
@@ -312,6 +393,7 @@ export default function ChannelsPage() {
               </div>
             )}
           </div>
+          )}
 
           {form.type === 'whatsapp' && (
             <div>
@@ -339,6 +421,7 @@ export default function ChannelsPage() {
             </div>
           )}
 
+          {form.type !== 'whatsapp_baileys' && (
           <div>
             <label className="block text-sm font-medium mb-1">Token de acesso (Access Token)</label>
             <input
@@ -350,6 +433,7 @@ export default function ChannelsPage() {
               required
             />
           </div>
+          )}
 
           <div className="flex items-center gap-2">
             <input
@@ -401,7 +485,7 @@ export default function ChannelsPage() {
                 className="flex items-center gap-3 p-3 border rounded-lg bg-background"
               >
                 <span className="flex items-center justify-center w-9 h-9 rounded-full bg-muted">
-                  {ch.type === 'whatsapp' ? (
+                  {ch.type === 'whatsapp' || ch.type === 'whatsapp_baileys' ? (
                     <MessageCircle className="w-5 h-5 text-green-600" />
                   ) : (
                     <Instagram className="w-5 h-5 text-pink-500" />
@@ -443,6 +527,16 @@ export default function ChannelsPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
+                  {ch.type === 'whatsapp_baileys' && (
+                    <button
+                      type="button"
+                      onClick={() => openQrModal(ch)}
+                      className="p-2 rounded-md border border-input bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
+                      title="Conectar com QR code"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => openEditModal(ch)}
@@ -451,6 +545,7 @@ export default function ChannelsPage() {
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
+                  {ch.type !== 'whatsapp_baileys' && (
                   <button
                     type="button"
                     onClick={() => handleUpdateToken(ch.id)}
@@ -464,6 +559,7 @@ export default function ChannelsPage() {
                       <RefreshCw className="w-4 h-4" />
                     )}
                   </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleDeleteChannel(ch)}
@@ -574,6 +670,71 @@ export default function ChannelsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal QR Code (WhatsApp Baileys) */}
+        {qrChannelId && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => setQrChannelId(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="qr-modal-title"
+          >
+            <div
+              className="bg-background border rounded-lg shadow-lg w-full max-w-sm p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="qr-modal-title" className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <QrCode className="w-5 h-5" /> Conectar WhatsApp (QR)
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Abra o WhatsApp no celular → Ajustes → Aparelhos conectados → Conectar um aparelho e escaneie o QR abaixo.
+              </p>
+              {qrApiUnreachable && (
+                <div className="py-6 px-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm space-y-2">
+                  <p className="font-medium">API do MonsterChat inacessível</p>
+                  <p>
+                    A conexão com <code className="bg-amber-100 px-1 rounded">{API_URL}</code> falhou (conexão recusada).
+                    O canal WhatsApp (QR) precisa da API rodando.
+                  </p>
+                  <p className="mt-2">
+                    No terminal, inicie a API (porta 3001). Depois feche este modal e abra de novo para gerar o QR.
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Bash: <code className="bg-amber-100 px-1 rounded">cd apps/api &amp;&amp; npm run dev</code>
+                    <br />
+                    PowerShell: <code className="bg-amber-100 px-1 rounded">cd apps/api; npm run dev</code>
+                  </p>
+                </div>
+              )}
+              {qrLoading && !qrImage && !qrConnected && !qrApiUnreachable && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {qrConnected && (
+                <div className="py-6 text-center">
+                  <p className="text-green-600 font-medium">Conectado</p>
+                  <p className="text-sm text-muted-foreground mt-1">Você já pode receber e enviar mensagens por este canal.</p>
+                </div>
+              )}
+              {qrImage && !qrConnected && (
+                <div className="flex justify-center bg-white p-4 rounded-lg">
+                  <img src={qrImage} alt="QR Code WhatsApp" className="max-w-[256px] w-full h-auto" />
+                </div>
+              )}
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setQrChannelId(null)}
+                  className="px-4 py-2 border rounded-md hover:bg-muted"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         )}
