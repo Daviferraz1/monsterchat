@@ -3,6 +3,7 @@ import { getChannelById } from '../services/channel.service.js';
 import {
   connectChannel,
   getStatus,
+  getConnectionError,
   sendText,
   sendMedia,
   disconnectChannel,
@@ -29,12 +30,13 @@ router.get('/qr/:channelId', async (req: Request, res: Response) => {
       return res.json({ connected: true, qr: null });
     }
 
-    const { qr, connected } = await connectChannel(channelId);
-    if (connected) {
+    const result = await connectChannel(channelId);
+    if (result.connected) {
       return res.json({ connected: true, qr: null });
     }
 
-    return res.json({ connected: false, qr: qr || null });
+    const error = result.error ?? getConnectionError(channelId) ?? undefined;
+    return res.json({ connected: false, qr: result.qr || null, error });
   } catch (error) {
     logger.error('Baileys GET qr error', error);
     return res.status(500).json({

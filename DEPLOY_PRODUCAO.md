@@ -90,6 +90,11 @@ A API **não** roda na Vercel. Use um serviço que mantém um processo Node semp
 - Em Railway/Render o disco é **efêmero**: ao reiniciar o serviço, a sessão é perdida e será preciso **escanear o QR de novo**.
 - Para manter sessão entre deploys/restarts, seria preciso persistir em banco ou storage (implementação futura). Por enquanto, após cada deploy ou restart da API, abra Configurações → Canais → canal WhatsApp (QR) e escaneie o QR novamente.
 
+### Erro 405 / QR não aparece (Render e outros clouds)
+
+- O WhatsApp pode **rejeitar** conexões de IPs de datacenter (erro 405). No Render (e em outros provedores em nuvem), o QR às vezes não chega a aparecer e a tela fica carregando.
+- O app agora exibe uma mensagem quando isso acontece. **Alternativas:** tentar de novo em alguns minutos; rodar a API localmente para parear (depois a sessão não persiste no Render); ou usar um VPS com IP mais “residencial” para a API com Baileys.
+
 ---
 
 ## 4. Resumo rápido

@@ -21,11 +21,17 @@ import { logger } from '../utils/logger.js';
 
 const SESSIONS_DIR = path.join(process.cwd(), 'sessions', 'baileys');
 
+const RECONNECT_BLOCK_MS = 60_000; // após 405, não reconectar por 1 minuto
+
 interface ChannelSession {
   sock: WASocket | null;
   qr: string | null;
   connected: boolean;
   connecting: boolean;
+  /** Mensagem de erro quando WhatsApp rejeita (ex.: 405 em datacenter) */
+  lastError: string | null;
+  /** Timestamp até quando não tentar reconectar (após 405) */
+  blockReconnectUntil: number;
 }
 
 const sessions = new Map<string, ChannelSession>();
@@ -180,7 +186,11 @@ export async function connectChannel(channelId: string): Promise<{ qr: string | 
   }
 
   if (session?.connecting) {
-    return { qr: session.qr, connected: false };
+    return { qr: session.qr, connected: false, error: session.lastError ?? undefined };
+  }
+
+  if (session && session.blockReconnectUntil > Date.now()) {
+    return { qr: null, connected: false, error: session.lastError ?? undefined };
   }
 
   const sessionDir = getSessionDir(channelId);
@@ -191,6 +201,8 @@ export async function connectChannel(channelId: string): Promise<{ qr: string | 
     qr: null,
     connected: false,
     connecting: true,
+    lastError: null,
+    blockReconnectUntil: 0,
   };
   sessions.set(channelId, session);
 
@@ -207,12 +219,14 @@ export async function connectChannel(channelId: string): Promise<{ qr: string | 
     if (qr) {
       session!.qr = qr;
       session!.connecting = false;
+      session!.lastError = null;
     }
 
     if (connection === 'open') {
       session!.connected = true;
       session!.qr = null;
       session!.connecting = false;
+      session!.lastError = null;
       logger.info('Baileys connected', { channelId });
     }
 
@@ -221,10 +235,16 @@ export async function connectChannel(channelId: string): Promise<{ qr: string | 
       session!.sock = null;
       session!.connecting = false;
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      const is405 = statusCode === 405;
+      if (is405) {
+        session!.lastError = 'WhatsApp rejeitou a conexão (erro 405). Comum em servidores em nuvem (ex.: Render). Tente novamente em alguns minutos ou use a API em outro ambiente.';
+        session!.blockReconnectUntil = Date.now() + RECONNECT_BLOCK_MS;
+      }
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !is405;
       logger.info('Baileys connection closed', { channelId, statusCode, shouldReconnect });
       if (shouldReconnect) {
-        setTimeout(() => connectChannel(channelId).catch((e) => logger.error('Baileys reconnect failed', e)), 3000);
+        const delay = is405 ? RECONNECT_BLOCK_MS : 3000;
+        setTimeout(() => connectChannel(channelId).catch((e) => logger.error('Baileys reconnect failed', e)), delay);
       }
     }
   });
@@ -246,11 +266,16 @@ export async function connectChannel(channelId: string): Promise<{ qr: string | 
   await new Promise((r) => setTimeout(r, 1500));
 
   session.connecting = false;
-  return { qr: session.qr, connected: session.connected };
+  return { qr: session.qr, connected: session.connected, error: session.lastError ?? undefined };
 }
 
 export function getQR(channelId: string): string | null {
   return sessions.get(channelId)?.qr ?? null;
+}
+
+/** Retorna a última mensagem de erro da conexão (ex.: 405) para exibir no frontend. */
+export function getConnectionError(channelId: string): string | null {
+  return sessions.get(channelId)?.lastError ?? null;
 }
 
 export function getStatus(channelId: string): { connected: boolean; hasSocket: boolean } {
@@ -327,6 +352,10 @@ export function disconnectChannel(channelId: string): void {
     s.sock.end(undefined);
     s.sock = null;
   }
-  s && (s.connected = false);
-  s && (s.qr = null);
+  if (s) {
+    s.connected = false;
+    s.qr = null;
+    s.lastError = null;
+    s.blockReconnectUntil = 0;
+  }
 }

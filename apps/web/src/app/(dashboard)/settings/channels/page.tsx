@@ -45,6 +45,7 @@ export default function ChannelsPage() {
   const [qrConnected, setQrConnected] = useState(false);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrApiUnreachable, setQrApiUnreachable] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
   const qrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadChannels = async () => {
@@ -224,6 +225,7 @@ export default function ChannelsPage() {
     setQrConnected(false);
     setQrLoading(true);
     setQrApiUnreachable(false);
+    setQrError(null);
   };
 
   useEffect(() => {
@@ -244,6 +246,16 @@ export default function ChannelsPage() {
         if (data.connected) {
           setQrConnected(true);
           setQrImage(null);
+          setQrError(null);
+          if (qrPollRef.current) {
+            clearInterval(qrPollRef.current);
+            qrPollRef.current = null;
+          }
+          return;
+        }
+        if (data.error) {
+          setQrError(data.error);
+          setQrLoading(false);
           if (qrPollRef.current) {
             clearInterval(qrPollRef.current);
             qrPollRef.current = null;
@@ -253,10 +265,12 @@ export default function ChannelsPage() {
         if (data.qr) {
           const img = data.qr.startsWith('data:') ? data.qr : `data:image/png;base64,${data.qr}`;
           setQrImage(img);
+          setQrError(null);
         }
       } catch (err) {
         setQrLoading(false);
         setQrApiUnreachable(true);
+        setQrError(null);
       }
     };
 
@@ -273,8 +287,8 @@ export default function ChannelsPage() {
 
   useEffect(() => {
     if (!qrChannelId) setQrLoading(false);
-    else if (qrConnected || qrImage) setQrLoading(false);
-  }, [qrChannelId, qrConnected, qrImage]);
+    else if (qrConnected || qrImage || qrError) setQrLoading(false);
+  }, [qrChannelId, qrConnected, qrImage, qrError]);
 
   const handleDeleteChannel = async (ch: Channel) => {
     if (!window.confirm(`Excluir o canal "${ch.name}"? As conversas e mensagens vinculadas também serão removidas.`)) return;
@@ -710,7 +724,16 @@ export default function ChannelsPage() {
                   </p>
                 </div>
               )}
-              {qrLoading && !qrImage && !qrConnected && !qrApiUnreachable && (
+              {qrError && (
+                <div className="py-6 px-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm space-y-2">
+                  <p className="font-medium">QR indisponível</p>
+                  <p>{qrError}</p>
+                  <p className="mt-2 text-xs">
+                    Feche o modal e tente novamente em alguns minutos, ou use a API em outro ambiente (ex.: máquina local ou VPS).
+                  </p>
+                </div>
+              )}
+              {qrLoading && !qrImage && !qrConnected && !qrApiUnreachable && !qrError && (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
