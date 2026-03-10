@@ -16,11 +16,15 @@ const app = express();
 // CORS: aceita FRONTEND_URL única ou várias origens separadas por vírgula (ex.: domínio custom + Vercel)
 const allowedOrigins = env.FRONTEND_URL
   .split(',')
-  .map((o) => o.trim())
+  .map((o) => o.trim().replace(/\/$/, ''))
   .filter(Boolean);
+if (allowedOrigins.length === 0) {
+  logger.warn('FRONTEND_URL não definida: CORS vai rejeitar requisições do navegador. Defina no Railway (ex.: https://chatmonster.monsterconcursos.com.br)');
+}
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
     return cb(null, false);
   },
   credentials: true,

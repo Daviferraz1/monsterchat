@@ -34,8 +34,8 @@ O MonsterChat usa:
    | `WHATSAPP_PHONE_NUMBER_ID` | Phone Number ID | Se usar WhatsApp API |
    | `WHATSAPP_ACCESS_TOKEN` | Token do WhatsApp | |
    | `WHATSAPP_WABA_ID` | WABA ID | Opcional |
-   | `API_URL` | **URL pública da API** (Railway/Render) | Ex.: `https://monsterchat-api.onrender.com` |
-   | `NEXT_PUBLIC_API_URL` | **Mesmo valor de API_URL** | Para o navegador carregar o QR do Baileys |
+   | `API_URL` | **URL pública da API** (Railway/Render) | Ex.: `https://monsterchat-production.up.railway.app` |
+   | `NEXT_PUBLIC_API_URL` | **Mesmo valor de API_URL** | Para o navegador carregar o QR e chamar a API (canais) |
 
 4. **Domínio customizado (ex.: chatmonster.monsterconcursos.com.br)**  
    - Em **Settings → Domains** do projeto na Vercel, adicione o domínio (ex.: `chatmonster.monsterconcursos.com.br`).
@@ -80,9 +80,25 @@ A API **não** roda na Vercel. Use um serviço que mantém um processo Node semp
 ### Opção B: Railway
 
 1. [railway.app](https://railway.app) → New → Deploy from GitHub repo.
-2. **Root Directory:** `apps/api` | **Build:** `npm install && npm run build` | **Start:** `npm run start`
-3. **Variables:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_URL`, `NODE_ENV=production`. Se o build usar Node 18, adicione `NIXPACKS_NODE_VERSION` = `20`.
-4. Gere domínio em Settings → Networking e use essa URL no Vercel em API_URL / NEXT_PUBLIC_API_URL.
+2. **Root Directory:** raiz do monorepo (ou deixe em branco). O projeto tem `nixpacks.toml` na raiz para Node 20.
+3. **Build / Start:** Nixpacks detecta o monorepo; o start usa o script do `apps/api`.
+4. **Variables (obrigatórias):** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Recomendado: `FRONTEND_URL` = URL do front (ex.: `https://chatmonster.monsterconcursos.com.br`), `NODE_ENV=production`.
+5. **Settings → Networking:** gere um domínio público (ex.: `monsterchat-production.up.railway.app`). Use **essa URL** no frontend (Vercel) em `API_URL` e `NEXT_PUBLIC_API_URL`.
+
+**Railway no ar: configurar o frontend e CORS**
+
+- No **Vercel** (ou onde o front estiver): em **Settings → Environment Variables**, defina:
+  - `API_URL` = `https://monsterchat-production.up.railway.app` (sem barra no final)
+  - `NEXT_PUBLIC_API_URL` = `https://monsterchat-production.up.railway.app`
+- Faça um **novo deploy** do frontend para as variáveis serem aplicadas (NEXT_PUBLIC_* é embutido no build).
+- **Na API (Railway)** defina **`FRONTEND_URL`** exatamente com a URL do front (sem barra no final), senão o navegador bloqueia por CORS:
+  - Ex.: `https://chatmonster.monsterconcursos.com.br`
+  - Várias origens: `https://chatmonster.monsterconcursos.com.br,https://monsterchat-xxx.vercel.app`
+
+**502 Bad Gateway / CORS ao abrir o QR**
+
+- **502**: a resposta vem do proxy do Railway; a API pode estar caindo ou dormindo. Confira os **logs do serviço** no Railway (Deployments → último deploy → View Logs). Se a API subir (SUPABASE_URL etc. ok), o 502 some.
+- **CORS** aparece junto ao 502 quando a resposta é do proxy (sem header CORS). Assim que a API responder com 200, o CORS depende de **FRONTEND_URL** incluir a origem do front (ex.: `https://chatmonster.monsterconcursos.com.br`).
 
 ### Persistência das sessões Baileys (Railway/Render)
 
