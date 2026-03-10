@@ -34,59 +34,55 @@ O MonsterChat usa:
    | `WHATSAPP_PHONE_NUMBER_ID` | Phone Number ID | Se usar WhatsApp API |
    | `WHATSAPP_ACCESS_TOKEN` | Token do WhatsApp | |
    | `WHATSAPP_WABA_ID` | WABA ID | Opcional |
-   | `API_URL` | **URL pública da API** (Railway/Render) | Ex.: `https://monsterchat-api.railway.app` |
+   | `API_URL` | **URL pública da API** (Railway/Render) | Ex.: `https://monsterchat-api.onrender.com` |
    | `NEXT_PUBLIC_API_URL` | **Mesmo valor de API_URL** | Para o navegador carregar o QR do Baileys |
 
-4. **Webhooks da Meta** (WhatsApp/Instagram): na configuração do app na Meta, use a URL do **Vercel**, por exemplo:
+4. **Domínio customizado (ex.: chatmonster.monsterconcursos.com.br)**  
+   - Em **Settings → Domains** do projeto na Vercel, adicione o domínio (ex.: `chatmonster.monsterconcursos.com.br`).
+   - No seu provedor de DNS (onde está o domínio `monsterconcursos.com.br`), crie um **CNAME** para `chatmonster` apontando para `cname.vercel-dns.com` (ou o valor que a Vercel indicar).
+   - Depois que o domínio estiver ativo, use **essa URL** como origem do app. No Render (API), defina **`FRONTEND_URL`** = `https://chatmonster.monsterconcursos.com.br` (sem barra no final). Para aceitar mais de uma origem (ex.: domínio custom + URL padrão da Vercel), use vírgula: `https://chatmonster.monsterconcursos.com.br,https://monsterchat-xi.vercel.app`.
+
+5. **Webhooks da Meta** (WhatsApp/Instagram): na configuração do app na Meta, use a URL do **Vercel**, por exemplo:
    - `https://seu-app.vercel.app/api/webhooks/whatsapp`
    - (Não use a URL da API Railway/Render para esses webhooks; eles são tratados pelo Next.js no Vercel.)
 
-5. Deploy: push no repositório ou deploy manual.
+6. Deploy: push no repositório ou deploy manual.
 
 ---
 
-## 3. API (Express + Baileys) em Railway ou Render
+## 3. API (Express + Baileys) em Render (recomendado) ou Railway
 
-A API **não** roda na Vercel. Use um serviço que mantém um processo Node sempre ativo.
+A API **não** roda na Vercel. Use um serviço que mantém um processo Node sempre ativo. **A API usa npm (não yarn).**
 
-### Opção A: Railway
+### Opção A: Render
 
-1. Acesse [railway.app](https://railway.app) e crie um projeto.
-2. **New → Deploy from GitHub repo** e escolha o repositório do MonsterChat.
-3. Configuração do serviço:
-   - **Root Directory:** `apps/api`
+1. [render.com](https://render.com) → **New → Web Service**.
+2. Conecte o repositório do MonsterChat (GitHub).
+3. Preencha assim:
+   - **Name:** `monsterchat` (ou outro nome, ex.: `monsterchat-api`)
+   - **Region:** escolha a mesma do seu app web se tiver (ex.: Oregon).
+   - **Root Directory:** `apps/api` ← obrigatório (monorepo).
    - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm run start`
-   - **Watch Paths:** `apps/api` (opcional)
-4. **Variables** (variáveis de ambiente):
+   - **Start Command:** `npm run start` ← use **npm**, não yarn.
+4. **Environment Variables** (Environment → Add Environment Variable):
+   - `SUPABASE_URL` = URL do seu projeto Supabase
+   - `SUPABASE_SERVICE_ROLE_KEY` = service role key do Supabase
+   - `FRONTEND_URL` = URL do front (ex.: `https://chatmonster.monsterconcursos.com.br` ou várias separadas por vírgula) — para CORS
+   - `NODE_ENV` = `production`
+   - (O `PORT` o Render define automaticamente; o código já usa `process.env.PORT`.)
 
-   | Variável | Valor |
-   |----------|--------|
-   | `SUPABASE_URL` | Mesma URL do Supabase |
-   | `SUPABASE_SERVICE_ROLE_KEY` | Mesma service role key |
-   | `FRONTEND_URL` | URL do app na Vercel (ex.: `https://seu-app.vercel.app`) |
-   | `PORT` | Railway/Render define automaticamente; use `process.env.PORT` (já usado no código) |
-   | `NODE_ENV` | `production` |
+   Se for usar webhooks WhatsApp/Instagram **na API** (em vez do Vercel), adicione também:
+   - `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN` e as variáveis de WhatsApp/Instagram.
+5. **Node:** o projeto pede Node 20+ (Baileys/Supabase). O Render costuma respeitar o `engines.node` e o `.nvmrc` em `apps/api`. Se o build falhar pedindo Node 20, em **Environment** adicione `NODE_VERSION` = `20`.
+6. Clique em **Create Web Service**. O Render gera uma URL (ex.: `https://monsterchat-api.onrender.com`).
+7. Use essa URL em **API_URL** e **NEXT_PUBLIC_API_URL** no Vercel (passo 2).
 
-   Se você também usar webhooks WhatsApp/Instagram **na API** (não no Vercel), adicione:
-   - `META_APP_SECRET`
-   - `META_WEBHOOK_VERIFY_TOKEN`
-   - e as variáveis de WhatsApp/Instagram.
+### Opção B: Railway
 
-5. Gere um **domínio público** no Railway (Settings → Networking → Generate Domain). Ex.: `https://monsterchat-api.railway.app`.
-6. Use essa URL em **API_URL** e **NEXT_PUBLIC_API_URL** no Vercel (passo 2).
-
-### Opção B: Render
-
-1. [render.com](https://render.com) → New → Web Service.
-2. Conecte o repositório.
-3. **Build:**
-   - **Root Directory:** `apps/api`
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm run start`
-4. **Environment:** adicione as mesmas variáveis do quadro acima (incluindo `FRONTEND_URL` = URL do Vercel).
-5. Crie o serviço; Render gera uma URL (ex.: `https://monsterchat-api.onrender.com`).
-6. Use essa URL em **API_URL** e **NEXT_PUBLIC_API_URL** no Vercel.
+1. [railway.app](https://railway.app) → New → Deploy from GitHub repo.
+2. **Root Directory:** `apps/api` | **Build:** `npm install && npm run build` | **Start:** `npm run start`
+3. **Variables:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_URL`, `NODE_ENV=production`. Se o build usar Node 18, adicione `NIXPACKS_NODE_VERSION` = `20`.
+4. Gere domínio em Settings → Networking e use essa URL no Vercel em API_URL / NEXT_PUBLIC_API_URL.
 
 ### Persistência das sessões Baileys (Railway/Render)
 

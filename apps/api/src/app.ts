@@ -13,9 +13,16 @@ import baileysRoutes from './routes/baileys.routes.js';
 
 const app = express();
 
-// Middlewares
+// CORS: aceita FRONTEND_URL única ou várias origens separadas por vírgula (ex.: domínio custom + Vercel)
+const allowedOrigins = env.FRONTEND_URL
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
