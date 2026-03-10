@@ -206,7 +206,7 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
     direction: 'outbound',
     senderType: 'system',
     contentType: 'text',
-    body: cleanReply || null,
+    body: cleanReply || undefined,
     status: 'sent',
   });
 
