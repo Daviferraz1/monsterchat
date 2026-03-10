@@ -1,0 +1,1040 @@
+{
+  "generated_at": "2026-03-10T21:06:07.710Z",
+  "summary": {
+    "total_conversations_analyzed": 731,
+    "total_knowledge_entries": 140,
+    "avg_quality_score": 3.1,
+    "avg_response_time_minutes": 761,
+    "sentiments": {
+      "positive": 251,
+      "neutral": 425,
+      "negative": 55
+    }
+  },
+  "by_brand": [
+    {
+      "brand": "fagenius",
+      "total": 230,
+      "avg_quality": 3.3,
+      "avg_response_time_s": 54811,
+      "negative_count": 15,
+      "positive_count": 82
+    },
+    {
+      "brand": "monster",
+      "total": 403,
+      "avg_quality": 3,
+      "avg_response_time_s": 43156,
+      "negative_count": 35,
+      "positive_count": 150
+    },
+    {
+      "brand": "ambiguous",
+      "total": 98,
+      "avg_quality": 2.8,
+      "avg_response_time_s": 21444,
+      "negative_count": 5,
+      "positive_count": 19
+    }
+  ],
+  "by_category": [
+    {
+      "category": "lead",
+      "brand": "monster",
+      "total": 266,
+      "avg_quality": 2.9,
+      "avg_response_time_s": 46681,
+      "resolved": 46,
+      "abandoned": 13
+    },
+    {
+      "category": "matricula",
+      "brand": "fagenius",
+      "total": 85,
+      "avg_quality": 3.4,
+      "avg_response_time_s": 44161,
+      "resolved": 26,
+      "abandoned": 0
+    },
+    {
+      "category": "lead",
+      "brand": "ambiguous",
+      "total": 56,
+      "avg_quality": 3,
+      "avg_response_time_s": 18478,
+      "resolved": 6,
+      "abandoned": 4
+    },
+    {
+      "category": "financeiro",
+      "brand": "monster",
+      "total": 55,
+      "avg_quality": 3,
+      "avg_response_time_s": 44034,
+      "resolved": 19,
+      "abandoned": 1
+    },
+    {
+      "category": "academico",
+      "brand": "fagenius",
+      "total": 50,
+      "avg_quality": 3.2,
+      "avg_response_time_s": 83672,
+      "resolved": 21,
+      "abandoned": 0
+    },
+    {
+      "category": "lead",
+      "brand": "fagenius",
+      "total": 37,
+      "avg_quality": 3.5,
+      "avg_response_time_s": 5855,
+      "resolved": 4,
+      "abandoned": 1
+    },
+    {
+      "category": "acesso",
+      "brand": "monster",
+      "total": 34,
+      "avg_quality": 3.1,
+      "avg_response_time_s": 17301,
+      "resolved": 19,
+      "abandoned": 0
+    },
+    {
+      "category": "duvida",
+      "brand": "monster",
+      "total": 22,
+      "avg_quality": 3.6,
+      "avg_response_time_s": 1945,
+      "resolved": 9,
+      "abandoned": 0
+    },
+    {
+      "category": "financeiro",
+      "brand": "fagenius",
+      "total": 21,
+      "avg_quality": 2.9,
+      "avg_response_time_s": 92420,
+      "resolved": 6,
+      "abandoned": 0
+    },
+    {
+      "category": "acesso",
+      "brand": "fagenius",
+      "total": 16,
+      "avg_quality": 3.5,
+      "avg_response_time_s": 127951,
+      "resolved": 11,
+      "abandoned": 0
+    },
+    {
+      "category": "duvida",
+      "brand": "ambiguous",
+      "total": 15,
+      "avg_quality": null,
+      "avg_response_time_s": 52,
+      "resolved": 0,
+      "abandoned": 0
+    },
+    {
+      "category": "documento",
+      "brand": "fagenius",
+      "total": 13,
+      "avg_quality": 3.1,
+      "avg_response_time_s": 14764,
+      "resolved": 7,
+      "abandoned": 0
+    },
+    {
+      "category": "tecnico",
+      "brand": "monster",
+      "total": 11,
+      "avg_quality": 3.3,
+      "avg_response_time_s": 37729,
+      "resolved": 3,
+      "abandoned": 0
+    },
+    {
+      "category": "outro",
+      "brand": "ambiguous",
+      "total": 9,
+      "avg_quality": 1,
+      "avg_response_time_s": 1668,
+      "resolved": 0,
+      "abandoned": 5
+    },
+    {
+      "category": "academico",
+      "brand": "monster",
+      "total": 8,
+      "avg_quality": 3.5,
+      "avg_response_time_s": 433553,
+      "resolved": 3,
+      "abandoned": 0
+    },
+    {
+      "category": "duvida",
+      "brand": "fagenius",
+      "total": 5,
+      "avg_quality": 3,
+      "avg_response_time_s": 5644,
+      "resolved": 1,
+      "abandoned": 0
+    },
+    {
+      "category": "financeiro",
+      "brand": "ambiguous",
+      "total": 5,
+      "avg_quality": null,
+      "avg_response_time_s": null,
+      "resolved": 0,
+      "abandoned": 0
+    },
+    {
+      "category": "acesso",
+      "brand": "ambiguous",
+      "total": 4,
+      "avg_quality": 2,
+      "avg_response_time_s": 491,
+      "resolved": 2,
+      "abandoned": 0
+    },
+    {
+      "category": "reclamacao",
+      "brand": "monster",
+      "total": 4,
+      "avg_quality": 3,
+      "avg_response_time_s": 861,
+      "resolved": 1,
+      "abandoned": 0
+    },
+    {
+      "category": "tecnico",
+      "brand": "fagenius",
+      "total": 3,
+      "avg_quality": 2,
+      "avg_response_time_s": 4953,
+      "resolved": 1,
+      "abandoned": 0
+    },
+    {
+      "category": "matricula",
+      "brand": "ambiguous",
+      "total": 3,
+      "avg_quality": 3.7,
+      "avg_response_time_s": 95072,
+      "resolved": 1,
+      "abandoned": 0
+    },
+    {
+      "category": "tecnico",
+      "brand": "ambiguous",
+      "total": 3,
+      "avg_quality": 2,
+      "avg_response_time_s": 285,
+      "resolved": 0,
+      "abandoned": 0
+    },
+    {
+      "category": "matricula",
+      "brand": "monster",
+      "total": 2,
+      "avg_quality": 2.5,
+      "avg_response_time_s": 8160,
+      "resolved": 1,
+      "abandoned": 0
+    },
+    {
+      "category": "documento",
+      "brand": "ambiguous",
+      "total": 2,
+      "avg_quality": null,
+      "avg_response_time_s": null,
+      "resolved": 0,
+      "abandoned": 0
+    },
+    {
+      "category": "reclamacao",
+      "brand": "ambiguous",
+      "total": 1,
+      "avg_quality": null,
+      "avg_response_time_s": null,
+      "resolved": 0,
+      "abandoned": 0
+    },
+    {
+      "category": "documento",
+      "brand": "monster",
+      "total": 1,
+      "avg_quality": null,
+      "avg_response_time_s": null,
+      "resolved": 0,
+      "abandoned": 0
+    }
+  ],
+  "top_questions": [
+    {
+      "brand": "monster",
+      "category": "lead",
+      "question_pattern": "Tem curso para [concurso específico]?",
+      "frequency": 12,
+      "avg_quality_score": 3,
+      "response_preview": "Opa, {nome_aluno}! 🚀 Deixa eu verificar se temos o preparatório específico pra esse concurso que voc"
+    },
+    {
+      "brand": "both",
+      "category": "lead",
+      "question_pattern": "Saudação inicial sem pergunta específica",
+      "frequency": 12,
+      "avg_quality_score": 3,
+      "response_preview": "Olá! 😊 Tudo bem? Seja bem-vindo(a) ao Monster Concursos e FAGENIUS! 🚀\n\nEstou aqui para te ajudar! Me"
+    },
+    {
+      "brand": "monster",
+      "category": "acesso",
+      "question_pattern": "Não recebi o acesso após a compra",
+      "frequency": 12,
+      "avg_quality_score": 3,
+      "response_preview": "Oi! 😊 Tudo bem? Seu login e senha foram enviados via e-mail! Dá uma olhadinha na caixa de entrada e "
+    },
+    {
+      "brand": "monster",
+      "category": "acesso",
+      "question_pattern": "Informações sobre conteúdo do curso",
+      "frequency": 9,
+      "avg_quality_score": 3,
+      "response_preview": "Opa! 😊 Vou te explicar:\n\nNossos cursos são **100% online com aulas gravadas** - você estuda no seu r"
+    },
+    {
+      "brand": "monster",
+      "category": "lead",
+      "question_pattern": "Informações gerais sobre cursos Monster",
+      "frequency": 8,
+      "avg_quality_score": 3,
+      "response_preview": "Opa, {nome_aluno}! Bem-vindo(a) ao Monster! 🚀\n\nTemos cursos preparatórios completos pra diversos con"
+    },
+    {
+      "brand": "monster",
+      "category": "acesso",
+      "question_pattern": "Qual a senha/login para acessar?",
+      "frequency": 8,
+      "avg_quality_score": 3,
+      "response_preview": "Tranquilo, {nome_aluno}! 😊 Vou te ajudar com isso!\n\n📋 Seus dados de acesso:\nLogin: [seu_email]\nSenha"
+    },
+    {
+      "brand": "fagenius",
+      "category": "acesso",
+      "question_pattern": "Prazo para liberação de acesso após matrícula/pagamento",
+      "frequency": 8,
+      "avg_quality_score": 3,
+      "response_preview": "Prezado(a) {nome_aluno}, após a confirmação do pagamento, o processo de enturmamento é realizado man"
+    },
+    {
+      "brand": "monster",
+      "category": "acesso",
+      "question_pattern": "Qual o link/site correto para acessar?",
+      "frequency": 7,
+      "avg_quality_score": 3,
+      "response_preview": "Olá! 😊 Segue os links corretos:\n\n🎓 **Curso Preparatório:** https://www.monsterstudy.com.br/\n❓ **Mons"
+    },
+    {
+      "brand": "fagenius",
+      "category": "acesso",
+      "question_pattern": "Não recebi ou não localizei o e-mail com login e senha",
+      "frequency": 7,
+      "avg_quality_score": 3,
+      "response_preview": "Por gentileza, informe seu e-mail de cadastro e CPF para que eu possa verificar a situação da sua ma"
+    },
+    {
+      "brand": "monster",
+      "category": "financeiro",
+      "question_pattern": "Como solicitar reembolso/cancelamento?",
+      "frequency": 6,
+      "avg_quality_score": 3,
+      "response_preview": "Entendi, {nome_aluno}! Sem problemas! 😊\n\nVocê tem até 7 dias corridos após a compra para solicitar o"
+    },
+    {
+      "brand": "monster",
+      "category": "acesso",
+      "question_pattern": "Acessos diferentes para plataformas (Monster Questões vs Curso)",
+      "frequency": 6,
+      "avg_quality_score": 3,
+      "response_preview": "Opa! Importante te explicar isso 😊\n\nVocê recebe 3 acessos diferentes no seu e-mail:\n1️⃣ **Curso Prep"
+    },
+    {
+      "brand": "fagenius",
+      "category": "acesso",
+      "question_pattern": "Como acessar a plataforma/aulas",
+      "frequency": 5,
+      "avg_quality_score": 3,
+      "response_preview": "O acesso ao curso é realizado através da plataforma Pincel Atômico. Após o processo de enturmamento,"
+    },
+    {
+      "brand": "monster",
+      "category": "financeiro",
+      "question_pattern": "Curso específico está indisponível para compra",
+      "frequency": 5,
+      "avg_quality_score": 3,
+      "response_preview": "Oi {nome_aluno}! Vou verificar isso pra você agora! 😊\n\nÀs vezes o curso está em atualização ou tempo"
+    },
+    {
+      "brand": "monster",
+      "category": "tecnico",
+      "question_pattern": "Curso não abre ou não carrega",
+      "frequency": 5,
+      "avg_quality_score": 3,
+      "response_preview": "Ei, {nome_aluno}! Vamos resolver isso juntos! 💪\n\nPrimeiro, tenta atualizar a página apertando F5 ou "
+    },
+    {
+      "brand": "both",
+      "category": "lead",
+      "question_pattern": "Informações sobre cursos do Monster Concursos (genérico)",
+      "frequency": 5,
+      "avg_quality_score": 3,
+      "response_preview": "Opa, que legal que você quer conhecer nossos cursos! 🎯\n\nTemos diversas opções de preparatórios para "
+    },
+    {
+      "brand": "both",
+      "category": "duvida",
+      "question_pattern": "Mensagens vazias ou incompreensíveis",
+      "frequency": 5,
+      "avg_quality_score": 3,
+      "response_preview": "Oi! 😊 Vi que você entrou em contato, mas não consegui entender sua dúvida. Pode me explicar melhor c"
+    },
+    {
+      "brand": "monster",
+      "category": "acesso",
+      "question_pattern": "Material incompleto ou faltando PDFs",
+      "frequency": 5,
+      "avg_quality_score": 3,
+      "response_preview": "Oi! 😊 Obrigado por avisar!\n\nVou informar nossa equipe pedagógica agora mesmo para verificarem e incl"
+    },
+    {
+      "brand": "fagenius",
+      "category": "duvida",
+      "question_pattern": "O curso tecnólogo é aceito em concursos específicos?",
+      "frequency": 4,
+      "avg_quality_score": 3,
+      "response_preview": "Prezado(a) {nome_aluno}, nosso curso superior de tecnologia em Gestão de Segurança Pública é reconhe"
+    },
+    {
+      "brand": "monster",
+      "category": "financeiro",
+      "question_pattern": "Desconto para ex-aluno ou múltiplos cursos",
+      "frequency": 4,
+      "avg_quality_score": 3,
+      "response_preview": "Com certeza! 😍 Adoramos valorizar nossos alunos!\n\nMe passa seu e-mail de cadastro e me conta quais c"
+    },
+    {
+      "brand": "both",
+      "category": "lead",
+      "question_pattern": "Curso para área específica não disponível",
+      "frequency": 4,
+      "avg_quality_score": 3,
+      "response_preview": "Opa, obrigado por perguntar! 😊\n\nNo momento não temos curso específico disponível para essa área/conc"
+    }
+  ],
+  "needs_attention": [
+    {
+      "conversation_id": "eb721cc5-1a05-4dd1-a591-222b975db247",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Solicitar apoio da Monster Concursos para aulão preparatório de PMMG e presença de representante (Davi) no evento",
+      "quality_score": 1,
+      "quality_notes": "Operador não respondeu à solicitação específica. Cliente aguardou 3 dias sem retorno e cobrou resposta",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-06T19:38:14+00:00",
+      "contact_name": "Jailton Jr.",
+      "contact_phone": "553891474464"
+    },
+    {
+      "conversation_id": "5c2303fd-f665-437c-b250-096cfc81df5e",
+      "brand": "fagenius",
+      "category": "academico",
+      "intent": "Verificar se o curso Sequencial em Gestão de Segurança Pública atende ao requisito de diploma de nível superior para concurso de GCM",
+      "quality_score": 1,
+      "quality_notes": "Operador respondeu apenas com saudação, não abordou a dúvida específica sobre validade do sequencial para concurso",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-03T01:18:12.353+00:00",
+      "contact_name": "Instagram 971112",
+      "contact_phone": null
+    },
+    {
+      "conversation_id": "bafa1164-a3ee-448c-91d8-173948e654f6",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Cliente busca informações sobre os cursos preparatórios do Monster Concursos",
+      "quality_score": 1,
+      "quality_notes": "Operador respondeu com mensagem genérica e não forneceu informações solicitadas. Falta de engajamento e orientação específica sobre os cursos (Monster Questões, Monster Study, Monster Sound)",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-02T19:29:05.079+00:00",
+      "contact_name": "bi",
+      "contact_phone": "5521991122604"
+    },
+    {
+      "conversation_id": "d88b7868-d20e-4388-a4be-507e02de7f85",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Cliente solicita informações sobre cursos específicos (Técnico INSS e área administrativa PF) e previsão de disponibilidade",
+      "quality_score": 1,
+      "quality_notes": "Resposta genérica e vaga. Operador não forneceu previsão, alternativas ou direcionamento adequado para resolver a demanda",
+      "sentiment": "neutral",
+      "last_message_at": "2026-02-24T18:17:44+00:00",
+      "contact_name": "Maria Betania",
+      "contact_phone": "557191098764"
+    },
+    {
+      "conversation_id": "83a1b2b3-f15f-4f82-8af1-37a533adc0d3",
+      "brand": "ambiguous",
+      "category": "outro",
+      "intent": "Aluno enviou mensagens de teste sem estabelecer uma demanda clara.",
+      "quality_score": 1,
+      "quality_notes": "Operador respondeu apenas com 'oi' ou 'posso te ajudar?' repetidamente sem investigar a necessidade do cliente. Padrão de automação inadequada sugere falha no sistema ou treinamento insuficiente.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-02-23T21:44:23.867+00:00",
+      "contact_name": "Instagram 443563",
+      "contact_phone": null
+    },
+    {
+      "conversation_id": "895e62eb-3239-42ed-bb31-2801271c51a3",
+      "brand": "ambiguous",
+      "category": "outro",
+      "intent": "Cliente testando o canal ou operador respondendo com mensagens de teste",
+      "quality_score": 1,
+      "quality_notes": "Operador respondeu apenas com mensagens genéricas ('teste', 'oi', 'blz') sem qualquer atendimento real ou identificação da demanda",
+      "sentiment": "neutral",
+      "last_message_at": "2026-02-23T20:33:19+00:00",
+      "contact_name": "Davi Ferraz",
+      "contact_phone": "553195748980"
+    },
+    {
+      "conversation_id": "c1ca78f5-1fbe-4c2e-a3ec-8b55b20f895d",
+      "brand": "ambiguous",
+      "category": "outro",
+      "intent": "estabelecer contato inicial",
+      "quality_score": 1,
+      "quality_notes": "operador respondeu apenas com saudações repetidas sem tentar qualificar a demanda ou oferecer ajuda",
+      "sentiment": "neutral",
+      "last_message_at": "2026-02-23T18:36:15.467+00:00",
+      "contact_name": "Instagram 101600",
+      "contact_phone": null
+    },
+    {
+      "conversation_id": "7c9e9147-5d4b-4a5e-ba8c-2a1103ba573f",
+      "brand": "ambiguous",
+      "category": "lead",
+      "intent": "Cliente testando canal de comunicação ou buscando estabelecer contato inicial",
+      "quality_score": 1,
+      "quality_notes": "Operador respondeu tardiamente (3 dias depois) com mensagem genérica. Sem identificação da marca ou tentativa de qualificação do cliente.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-02-23T17:41:45.301+00:00",
+      "contact_name": "Professor Davi Ferraz",
+      "contact_phone": "553196379690"
+    },
+    {
+      "conversation_id": "27200451-aa7e-41bf-865c-35c6cddf0749",
+      "brand": "monster",
+      "category": "acesso",
+      "intent": "Aluno comprou combo (sequencial + PM MG) mas sequencial não aparece na plataforma após receber acesso",
+      "quality_score": 2,
+      "quality_notes": "Resposta incompleta e vaga. Operador informou apenas que precisa 'ser enturmado' sem indicar prazo, próximos passos ou responsável. Cliente necessita de follow-up.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-10T16:47:58.709+00:00",
+      "contact_name": "Gabriel Henrique",
+      "contact_phone": "553187869883"
+    },
+    {
+      "conversation_id": "e05e34ec-a989-4db0-ab39-a7cd1d257d5f",
+      "brand": "monster",
+      "category": "financeiro",
+      "intent": "esclarecer disponibilidade da assinatura ilimitada com desconto e como acessar conteúdo premium",
+      "quality_score": 2,
+      "quality_notes": "respostas muito breves e incompletas; não esclareceu adequadamente sobre previsão de disponibilidade ou condições de acesso premium",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-10T15:13:30+00:00",
+      "contact_name": "📵",
+      "contact_phone": "559198131982"
+    },
+    {
+      "conversation_id": "490a0269-cf4f-4a8d-9aac-537e4b766d71",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Aluno busca informações sobre cursos preparatórios para concursos específicos (PM DF e PC DF)",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica e incompleta. Operador não respondeu à segunda pergunta sobre PC DF agente de custódia. Falta proatividade em sugerir alternativas disponíveis.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-10T14:43:11+00:00",
+      "contact_name": ".",
+      "contact_phone": "556195550501"
+    },
+    {
+      "conversation_id": "728fe41e-6794-4ae0-8e5e-a714000b6c69",
+      "brand": "monster",
+      "category": "financeiro",
+      "intent": "Aluno relata dificuldade para parcelar pagamento do combo sequencial + curso bombeiro via boleto",
+      "quality_score": 2,
+      "quality_notes": "Operador forneceu link de pagamento mas não respondeu à reclamação específica sobre parcelamento não funcionar",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-10T10:45:16+00:00",
+      "contact_name": "Raiane Campos 🌹",
+      "contact_phone": "553298153143"
+    },
+    {
+      "conversation_id": "8cf9f976-01b7-4951-8ceb-4fd685c268ea",
+      "brand": "monster",
+      "category": "financeiro",
+      "intent": "Solicitar informações sobre cursos e viabilidade de pagamento parcelado ou com desconto para curso PMES",
+      "quality_score": 2,
+      "quality_notes": "Operador respondeu mas não resolveu completamente; prometeu retorno sobre desconto que não foi concluído após 7 dias",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-10T02:02:21.117+00:00",
+      "contact_name": "Maria Eduarda",
+      "contact_phone": "5527992228608"
+    },
+    {
+      "conversation_id": "ea6b1659-4ed7-4256-beee-e2066d3fa874",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre cursos do Monster Concursos para preparação PMBA",
+      "quality_score": 2,
+      "quality_notes": "Operador foi acolhedor mas não forneceu informações solicitadas. Grande gap entre mensagens (3 dias) sugere falta de engajamento inicial",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-10T01:04:33.276+00:00",
+      "contact_name": "🖤🖤Alex Carvalho 🖤🖤🖤",
+      "contact_phone": "557188318261"
+    },
+    {
+      "conversation_id": "c9b51316-3721-4857-99f8-4bf40a1d682f",
+      "brand": "monster",
+      "category": "acesso",
+      "intent": "Aluno relata assinatura ilimitada inativa e solicita informações sobre liberação e funcionalidade de conclusão de tarefas",
+      "quality_score": 2,
+      "quality_notes": "Operador confirmou problema da assinatura mas não apresentou solução ou prazo realista. Orientação sobre tarefas foi adequada, mas não resolveu questão principal da assinatura",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-10T00:48:30.563+00:00",
+      "contact_name": "Camila",
+      "contact_phone": "553298195315"
+    },
+    {
+      "conversation_id": "635800d4-794a-4524-99b3-5ad48ef23f44",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Verificar disponibilidade de cursos preparatórios para concursos específicos (GCM Maricá e PMERJ)",
+      "quality_score": 2,
+      "quality_notes": "Resposta parcial e incompleta. Operador informou indisponibilidade para Maricá mas não respondeu à pergunta sobre PMERJ. Falta apresentação de alternativas ou próximos passos.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-09T21:26:37+00:00",
+      "contact_name": "+55 21 97260-8221",
+      "contact_phone": "5521972608221"
+    },
+    {
+      "conversation_id": "5bf8fb62-2e0f-4ea2-b897-d238c1282c78",
+      "brand": "fagenius",
+      "category": "financeiro",
+      "intent": "Resolver problema de boleto atrasado não contabilizado e boleto gerado anterior à matrícula",
+      "quality_score": 2,
+      "quality_notes": "Operador solicitou informações já fornecidas e não investigou a discrepância relatada. Resposta genérica ('tudo certinho') não abordou as questões específicas do cliente sobre pagamento não contabilizado e boleto com data anterior à matrícula",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-09T20:48:24+00:00",
+      "contact_name": "Marcelo Leonardo",
+      "contact_phone": "553597398250"
+    },
+    {
+      "conversation_id": "0b41fd29-e497-4825-818e-f6e6e7a7c39a",
+      "brand": "monster",
+      "category": "reclamacao",
+      "intent": "Reclamar sobre qualidade das aulas de alguns professores e solicitar reembolso",
+      "quality_score": 2,
+      "quality_notes": "Operador coletou dados (email) mas não respondeu à solicitação de reembolso. Faltou clareza sobre política de devolução e próximos passos. Conversão positiva no final não resolve a demanda original.",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-08T00:18:58+00:00",
+      "contact_name": "May Souza",
+      "contact_phone": "556292199292"
+    },
+    {
+      "conversation_id": "4df58dec-53b6-4582-a960-0f4317f5394a",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre cursos do Monster Concursos para PMMG/CBMG e acessar grupos de WhatsApp",
+      "quality_score": 2,
+      "quality_notes": "Resposta muito breve e sem oferecer alternativas ou direcionamento para obter as informações desejadas",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-07T14:34:56.409+00:00",
+      "contact_name": "Marcus.",
+      "contact_phone": "553173428059"
+    },
+    {
+      "conversation_id": "dff4718b-c3d8-41ed-a63b-966ad0ebe5b5",
+      "brand": "monster",
+      "category": "acesso",
+      "intent": "Resolver problema de acesso ao curso PM SP Soldado em computador após compra no celular",
+      "quality_score": 2,
+      "quality_notes": "Operador respondeu após 28 minutos de espera. Solicitou e-mail corretamente, mas não investigou o problema de sincronização entre dispositivos ou status de expiração da sessão. Sugeriu plataforma alternativa sem confirmar se resolve o acesso ao material.",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-07T14:30:55.857+00:00",
+      "contact_name": "Pedro",
+      "contact_phone": "5511915184199"
+    },
+    {
+      "conversation_id": "8ab92818-5e40-4254-bdff-5ced15a0850b",
+      "brand": "monster",
+      "category": "financeiro",
+      "intent": "Cancelar boleto pendente de pagamento do COMBO MG",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica e imprecisa. Operador não ofereceu solução concreta para boleto pendente; apenas recomendou não pagar, deixando dúvida sobre cancelamento automático real.",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-06T23:58:04.097+00:00",
+      "contact_name": "Mateus",
+      "contact_phone": "553195690309"
+    },
+    {
+      "conversation_id": "c56207f1-ccc4-4e14-b4a7-74ada5c8df91",
+      "brand": "fagenius",
+      "category": "academico",
+      "intent": "Aluno solicita resolução de uma solicitação acadêmica que está sem retorno desde 05/02 e já passou do prazo",
+      "quality_score": 2,
+      "quality_notes": "Operador solicitou CPF e encaminhou para diretor/suporte, mas não resolveu a questão. Resposta genérica sobre disciplinas verdes não endereça a reclamação principal",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-06T23:10:09+00:00",
+      "contact_name": "Fábio Sena",
+      "contact_phone": "557599711087"
+    },
+    {
+      "conversation_id": "86d134ee-d326-470a-91cd-ca78b920b89f",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre os cursos preparatórios disponíveis no Monster Concursos",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica e sem conteúdo específico. Operador deveria ter apresentado os cursos disponíveis (Monster Questões, Monster Study, Monster Sound) e suas características",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-06T18:50:03.4+00:00",
+      "contact_name": "samy☆",
+      "contact_phone": "5512988130014"
+    },
+    {
+      "conversation_id": "74076bb9-c620-41dc-b7bb-4a9d76fb9066",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Cliente solicita informações sobre cursos preparatórios do Monster Concursos",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica sem fornecer informações solicitadas ou qualificar o lead",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-06T18:48:51.164+00:00",
+      "contact_name": "Marco Junior",
+      "contact_phone": "5521976697111"
+    },
+    {
+      "conversation_id": "92cf8573-0de7-492c-891f-df32433dff12",
+      "brand": "fagenius",
+      "category": "academico",
+      "intent": "Solicitar antecipação de colação de grau e desbloqueio de disciplinas para atender chamada de concurso público",
+      "quality_score": 2,
+      "quality_notes": "Operador foi direto mas pouco empático com situação urgente do aluno. Não ofereceu alternativas viáveis. Resposta final vaga ('em breve a secretaria entrará em contato') não resolveu o problema",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-06T16:41:26+00:00",
+      "contact_name": "livrai me senhor do mal🙌",
+      "contact_phone": "553199646431"
+    },
+    {
+      "conversation_id": "b262baf7-8d45-46eb-bd73-827d89aee436",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Cliente interessado em curso presencial para Guarda Municipal, mas Monster oferece apenas modalidade online",
+      "quality_score": 2,
+      "quality_notes": "Resposta breve e direta, mas sem oferecer alternativas ou detalhes sobre o curso online disponível",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-06T14:41:41.854+00:00",
+      "contact_name": "Josimar Carlos",
+      "contact_phone": "553187175527"
+    },
+    {
+      "conversation_id": "e8e76d76-73a8-4146-8dc8-d24fff2672ff",
+      "brand": "ambiguous",
+      "category": "lead",
+      "intent": "Esclarecer se Monster Concursos oferece cursos presenciais",
+      "quality_score": 2,
+      "quality_notes": "Resposta confusa e potencialmente incorreta. Operador menciona 'bacharel em Direito' (típico de Fagenius) ao ser perguntado sobre Monster Concursos. Não esclareceu as modalidades corretas (Monster Questões, Monster Study, Monster Sound são geralmente online).",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-06T14:40:56.57+00:00",
+      "contact_name": "João Alves",
+      "contact_phone": "553399516111"
+    },
+    {
+      "conversation_id": "12722bfc-9880-43c3-9c88-a89c3194ab79",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre cursos preparatórios para concurso de Guarda Municipal de Natal",
+      "quality_score": 2,
+      "quality_notes": "Operador respondeu com abertura genérica sem abordar a dúvida específica do aluno sobre Guarda de Natal",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-06T14:07:22+00:00",
+      "contact_name": "Italo Silva",
+      "contact_phone": "558492008015"
+    },
+    {
+      "conversation_id": "052d0f63-ad97-4628-aca0-1e81b67650b6",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Verificar se há curso preparatório disponível para concurso do MP-ES",
+      "quality_score": 2,
+      "quality_notes": "Resposta correta mas impessoal. Faltou oferecer alternativas ou manter contato para futuro",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-06T12:17:09+00:00",
+      "contact_name": "Larissa G Dalmazio",
+      "contact_phone": "5527999345369"
+    },
+    {
+      "conversation_id": "f343632b-b656-48e6-9507-524998932463",
+      "brand": "monster",
+      "category": "acesso",
+      "intent": "Aluno com dificuldade para acessar plataforma após pagamento aprovado do curso PM BAHIA",
+      "quality_score": 2,
+      "quality_notes": "Operador forneceu credenciais mas não resolveu erro de email não constar na base. Link para nova plataforma fornecido sem explicação adicional. Falta investigação técnica mais profunda e confirmação se problema foi resolvido.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-05T23:54:54+00:00",
+      "contact_name": "Junior",
+      "contact_phone": "557581483579"
+    },
+    {
+      "conversation_id": "6028d9d0-c2fd-4656-9451-f99c3c00f3b3",
+      "brand": "monster",
+      "category": "financeiro",
+      "intent": "Aluno solicita cancelamento da assinatura devido a insatisfação com qualidade e atualização do conteúdo",
+      "quality_score": 2,
+      "quality_notes": "Operador respondeu defensivamente sem validar a reclamação, não explorou motivos ou ofereceu alternativas antes do cancelamento",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-05T22:45:58.669+00:00",
+      "contact_name": "Pedro Augusto",
+      "contact_phone": "553186209729"
+    },
+    {
+      "conversation_id": "6cda9931-08f4-46af-903e-589620fea86e",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre os cursos preparatórios oferecidos pela Monster Concursos",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica e passiva. Operador não apresentou os produtos específicos (Monster Questões, Monster Study, Monster Sound) nem ofereceu informações diretas solicitadas pelo cliente.",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-05T21:13:03.696+00:00",
+      "contact_name": "..",
+      "contact_phone": "559584141002"
+    },
+    {
+      "conversation_id": "1a874f08-94b7-4e5b-b895-87ea2660904b",
+      "brand": "ambiguous",
+      "category": "tecnico",
+      "intent": "Aluno compartilhou link externo potencialmente malicioso ou phishing",
+      "quality_score": 2,
+      "quality_notes": "Operador respondeu genericamente sem identificar risco de segurança do link compartilhado",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-05T15:48:19.561+00:00",
+      "contact_name": "michellechristina1978",
+      "contact_phone": "553199956226"
+    },
+    {
+      "conversation_id": "4dca3093-5968-4bdc-9dca-e946d8b79acf",
+      "brand": "fagenius",
+      "category": "academico",
+      "intent": "Esclarecer se é possível fazer o sequencial após interrupção do tecnólogo sem trancamento formal",
+      "quality_score": 2,
+      "quality_notes": "Resposta incompleta e confusa. Operador não abordou o cenário exato (não trancou) e a resposta mistura condições (se trancou vs. se não trancou). Faltou clareza sobre políticas de matrícula e orientação para próximos passos.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-05T15:20:43.247+00:00",
+      "contact_name": "🇲🇨🇧🇷",
+      "contact_phone": "553884048371"
+    },
+    {
+      "conversation_id": "d0598bc6-e032-4411-9b77-baed84f396f8",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "obter informações sobre os cursos preparatórios disponíveis",
+      "quality_score": 2,
+      "quality_notes": "resposta genérica sem fornecer informações solicitadas sobre os cursos",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-05T14:47:21.011+00:00",
+      "contact_name": "Álefe Nascimento",
+      "contact_phone": "557399072547"
+    },
+    {
+      "conversation_id": "69ae0a84-6b75-4375-98fa-c2e315a07c3f",
+      "brand": "monster",
+      "category": "financeiro",
+      "intent": "Regularizar parcela vencida para liberar certificado de conclusão",
+      "quality_score": 2,
+      "quality_notes": "Operador redirecionou para número externo sem oferecer suporte direto ou agendar atendimento especializado",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-05T14:33:29.404+00:00",
+      "contact_name": "Bianca Caetano",
+      "contact_phone": "553598077551"
+    },
+    {
+      "conversation_id": "143fb62a-3649-4636-a7a6-cb267b5f7770",
+      "brand": "fagenius",
+      "category": "documento",
+      "intent": "Resolver discrepância entre data de conclusão do ensino médio e data de início do Tecnólogo para evitar problemas na comprovação de títulos em concursos públicos",
+      "quality_score": 2,
+      "quality_notes": "Operador demonstrou compreensão do problema, coletou dados pessoais e solicitou verificação junto à secretaria, mas não ofereceu solução imediata ou explicação clara sobre o processo de resolução",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-05T14:04:13.583+00:00",
+      "contact_name": "João Vitor",
+      "contact_phone": "553399651068"
+    },
+    {
+      "conversation_id": "3c6b5821-3b97-4ad1-8bf6-9cceeab1bc54",
+      "brand": "fagenius",
+      "category": "tecnico",
+      "intent": "Relatar indisponibilidade do site da arena do aluno e solicitar suporte técnico",
+      "quality_score": 2,
+      "quality_notes": "Operador iniciou coleta de dados (email) mas não diagnosticou o problema nem ofereceu soluções imediatas",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-05T13:08:14.907+00:00",
+      "contact_name": "DANIEL",
+      "contact_phone": "553183296551"
+    },
+    {
+      "conversation_id": "ffc1aa30-1a80-4e65-a503-c160bfb70d45",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre cursos preparatórios para guarda municipal em Cataguases",
+      "quality_score": 2,
+      "quality_notes": "Resposta rápida mas negativa sem oferecer alternativas ou cidades próximas disponíveis",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-05T01:36:37+00:00",
+      "contact_name": "Mendes Pix",
+      "contact_phone": "553299256258"
+    },
+    {
+      "conversation_id": "d95ec203-16a7-4361-ac7e-06e7dafd26c1",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre os cursos disponíveis no Monster Concursos",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica sem fornecer informações solicitadas. Operador não apresentou os cursos (Monster Questões, Monster Study, Monster Sound)",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-05T00:18:45.273+00:00",
+      "contact_name": "Diego Fagundes",
+      "contact_phone": "553195856469"
+    },
+    {
+      "conversation_id": "a1e5da39-bae3-4064-b0e1-c168576f9c81",
+      "brand": "fagenius",
+      "category": "matricula",
+      "intent": "Aluno busca informações sobre tecnólogo adequado para concurso de polícia penal",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica e promocional sem abordar especificamente a dúvida do aluno sobre qual tecnólogo é adequado para concurso de polícia penal. Operador enviou material comercial em vez de esclarecer a pergunta.",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-04T23:23:58.282+00:00",
+      "contact_name": "Atila",
+      "contact_phone": "554988059217"
+    },
+    {
+      "conversation_id": "42ee5cc4-aa8c-4568-8e44-9d8b77ef1148",
+      "brand": "monster",
+      "category": "acesso",
+      "intent": "Resolver problemas de login e questionar a política de expiração anual do curso",
+      "quality_score": 2,
+      "quality_notes": "Operador localizou o problema corretamente, mas foi defensivo ao invés de empático com a reclamação sobre CDC. Faltou proposta de solução (renovação com desconto, extensão, etc)",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-04T20:42:13+00:00",
+      "contact_name": "Fabíola",
+      "contact_phone": "553399714234"
+    },
+    {
+      "conversation_id": "d7e43b41-c78d-42db-867d-7d05acac2e9d",
+      "brand": "ambiguous",
+      "category": "acesso",
+      "intent": "Usuário relata impossibilidade de acessar conta e falha na recuperação de senha",
+      "quality_score": 2,
+      "quality_notes": "Operador solicitou e-mail após longo intervalo (21 minutos), mas cliente recebeu mensagem automática de indisponibilidade antes de responder. Atendimento incompleto.",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-04T20:18:38+00:00",
+      "contact_name": "Advocacia e Consultoria",
+      "contact_phone": "553387091346"
+    },
+    {
+      "conversation_id": "73a4dda9-92d2-43bf-a4f2-b38d06760547",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre os cursos preparatórios do Monster Concursos",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica e não assertiva. Operador não ofereceu informações específicas sobre os cursos (Monster Questões, Monster Study, Monster Sound) conforme solicitado.",
+      "sentiment": "positive",
+      "last_message_at": "2026-03-04T18:40:54.199+00:00",
+      "contact_name": "Martins🤑",
+      "contact_phone": "553195417872"
+    },
+    {
+      "conversation_id": "ef88dc87-f40b-477c-b719-752459c4ae5a",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre cursos disponíveis no Monster Concursos",
+      "quality_score": 2,
+      "quality_notes": "Operador não forneceu informações úteis, não identificou o concurso de interesse e não ofereceu alternativas ou redirecionamento adequado",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-04T15:33:23+00:00",
+      "contact_name": "Samira",
+      "contact_phone": "553591022109"
+    },
+    {
+      "conversation_id": "c10f4ac1-6942-4d5d-9c12-44c39e0593e8",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Cliente solicita informações sobre os cursos disponíveis no Monster Concursos",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica sem abordar especificamente a solicitação do cliente sobre cursos",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-04T15:18:01.539+00:00",
+      "contact_name": "Indiara",
+      "contact_phone": "553186623516"
+    },
+    {
+      "conversation_id": "038a8924-ec13-4bd5-a71d-3e16d6de0b76",
+      "brand": "fagenius",
+      "category": "lead",
+      "intent": "Verificar disponibilidade de curso técnico em segurança do trabalho",
+      "quality_score": 2,
+      "quality_notes": "Resposta muito breve e sem alternativas oferecidas. Deveria ter informado sobre cursos disponíveis (Tecnólogo ou Sequencial em Gestão de Segurança Pública) como opções relacionadas",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-04T15:13:08.253+00:00",
+      "contact_name": "Mara Magalhães",
+      "contact_phone": "553387133184"
+    },
+    {
+      "conversation_id": "9caf2eba-69a2-4328-a98a-75cb0761e34e",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Cliente solicita informações sobre os cursos preparatórios disponíveis",
+      "quality_score": 2,
+      "quality_notes": "Resposta genérica e sem informações específicas. Operador não abordou os produtos (Monster Questões, Monster Study, Monster Sound) ou diferenciadores",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-04T02:59:28.177+00:00",
+      "contact_name": "Alex Henrique",
+      "contact_phone": "553184811226"
+    },
+    {
+      "conversation_id": "ac5cf374-49fb-4cf7-af71-2260c799c236",
+      "brand": "fagenius",
+      "category": "financeiro",
+      "intent": "Esclarecer diferença entre valor da proposta (R$ 2.997) e valor cobrado no site (R$ 333,97)",
+      "quality_score": 2,
+      "quality_notes": "Resposta incompleta. Operador confirmou presença de juros mas não explicou a discrepância de valores nem orientou adequadamente sobre o cálculo final.",
+      "sentiment": "negative",
+      "last_message_at": "2026-03-04T02:35:41.268+00:00",
+      "contact_name": "Lucas Reis",
+      "contact_phone": "557588353156"
+    },
+    {
+      "conversation_id": "8b04d5dc-b38e-4f59-a6f9-2055ba235fdd",
+      "brand": "monster",
+      "category": "lead",
+      "intent": "Obter informações sobre curso para concurso municipal de Ipatinga e disponibilidade de material",
+      "quality_score": 2,
+      "quality_notes": "Resposta parcial e vaga. Operador informou lançamento do curso na semana, mas não esclareceu dúvidas sobre vagas femininas ou detalhes de material. Falta informações específicas e follow-up adequado",
+      "sentiment": "neutral",
+      "last_message_at": "2026-03-03T23:48:16+00:00",
+      "contact_name": "Mariana",
+      "contact_phone": "553187023306"
+    }
+  ]
+}

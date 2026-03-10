@@ -9,7 +9,8 @@ export interface ConversationUpdate {
   lastMessageAt?: string;
   lastMessagePreview?: string;
   unreadCount?: number;
-  status?: 'open' | 'pending' | 'closed' | 'snoozed';
+  status?: 'open' | 'pending' | 'closed' | 'snoozed' | 'aguardando_interno';
+  lastAgentReplyAt?: string;
 }
 
 export async function findOrCreateConversation(data: ConversationData) {
@@ -53,6 +54,7 @@ export async function updateConversation(conversationId: string, updates: Conver
   if (updates.lastMessagePreview !== undefined) payload.last_message_preview = updates.lastMessagePreview;
   if (updates.unreadCount !== undefined) payload.unread_count = updates.unreadCount;
   if (updates.status !== undefined) payload.status = updates.status;
+  if (updates.lastAgentReplyAt !== undefined) payload.last_agent_reply_at = updates.lastAgentReplyAt;
 
   const { data, error } = await supabaseAdmin
     .from('conversations')

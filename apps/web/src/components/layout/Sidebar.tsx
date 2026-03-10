@@ -6,7 +6,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
-import { MessageSquare, Settings, Users, ShoppingBag, Megaphone } from 'lucide-react';
+import { MessageSquare, Settings, Users, ShoppingBag, Megaphone, Bot, BookOpen } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 
 interface SidebarProps {
@@ -54,11 +54,17 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
           <Link href="/sales" className={navLinkClass(!!pathname?.startsWith('/sales'))} onClick={onClose}>
             <ShoppingBag className="w-4 h-4 shrink-0" /> Últimas vendas
           </Link>
+          <p className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Configurações
+          </p>
           <Link href="/settings/channels" className={navLinkClass(pathname === '/settings/channels')} onClick={onClose}>
             <Settings className="w-4 h-4 shrink-0" /> Canais
           </Link>
           <Link href="/settings/campanhas" className={navLinkClass(pathname === '/settings/campanhas')} onClick={onClose}>
             <Megaphone className="w-4 h-4 shrink-0" /> Campanhas
+          </Link>
+          <Link href="/settings/ia" className={navLinkClass(!!pathname?.startsWith('/settings/ia'))} onClick={onClose}>
+            <Bot className="w-4 h-4 shrink-0" /> IA Atendimento
           </Link>
         </nav>
       </div>

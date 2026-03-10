@@ -323,6 +323,39 @@ async function processWhatsAppMessage(
       unreadCount: (conversation.unread_count || 0) + 1,
     });
 
+    // IA: se piloto ativo e mensagem é texto, IA responde direto (ou classifica + escala)
+    const isTextWithBody = normalized.contentType === 'text' && normalized.body?.trim();
+    if (!isTextWithBody) {
+      console.log('[WhatsApp Webhook] IA não acionada: mensagem não é texto ou body vazio', {
+        contentType: normalized.contentType,
+        bodyLength: normalized.body?.length ?? 0,
+        conversationId: conversation.id,
+      });
+    } else {
+      const { isAutopilotEnabled } = await import('../ia/autopilot');
+      const enabled = await isAutopilotEnabled();
+      if (!enabled) {
+        console.log('[WhatsApp Webhook] IA não acionada: piloto desativado (ative em Configurações > IA)', {
+          conversationId: conversation.id,
+        });
+      } else {
+        console.log('[WhatsApp Webhook] Acionando IA para conversa', { conversationId: conversation.id });
+        const { handleIAReply } = await import('../ia/reply');
+        handleIAReply({
+          conversationId: conversation.id,
+          channelId,
+          accessToken,
+          contactPhone: contactRecord.phone || normalized.contactExternalId || '',
+          contactName: contactRecord.name ?? undefined,
+          contactMetadata: contactRecord.metadata ?? undefined,
+          contactId: contactRecord.id,
+          messageBody: normalized.body,
+        }).catch((err) => {
+          console.error('[WhatsApp Webhook] IA reply:', err);
+        });
+      }
+    }
+
     console.log('WhatsApp message processed', {
       messageId: messageRecord.id,
       conversationId: conversation.id,

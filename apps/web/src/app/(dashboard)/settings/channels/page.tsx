@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2, Bell, QrCode } from 'lucide-react';
+import Link from 'next/link';
+import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2, Bell, QrCode, Bot, ChevronRight } from 'lucide-react';
 import { useNotificationSoundEnabled } from '@/hooks/useNotificationSoundEnabled';
 
 const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001') : 'http://localhost:3001';
@@ -343,6 +344,23 @@ export default function ChannelsPage() {
           <p className="text-xs text-muted-foreground">
             Ative ou desative o som de notificação quando chegar uma nova mensagem no inbox.
           </p>
+        </div>
+
+        {/* IA Atendimento */}
+        <div className="mb-8 p-4 border rounded-lg bg-muted/30">
+          <h2 className="font-semibold flex items-center gap-2 mb-2">
+            <Bot className="w-4 h-4 text-[#8b5cf6]" /> IA Atendimento
+          </h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            Ative o piloto automático para a IA responder direto aos alunos no WhatsApp. Configure o catálogo de produtos e regras de atendimento.
+          </p>
+          <Link
+            href="/settings/ia"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#8b5cf6] text-white hover:bg-[#7c3aed] transition-colors text-sm font-medium"
+          >
+            Abrir IA Atendimento
+            <ChevronRight className="w-4 h-4" />
+          </Link>
         </div>
 
         <h2 className="text-xl font-bold mb-2">Canais</h2>

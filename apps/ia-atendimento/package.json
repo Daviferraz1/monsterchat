@@ -1,0 +1,21 @@
+{
+  "name": "ia-atendimento-monster",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "phase:all": "dotenv -e .env -- tsx src/run-all-phases.ts",
+    "phase:report": "dotenv -e .env -- tsx src/run-all-phases.ts report",
+    "phase:weekly": "dotenv -e .env -- tsx src/run-weekly.ts",
+    "test:classify": "dotenv -e .env -- tsx src/test-classify.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^7.4.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -64,4 +64,7 @@ export const apiEnv = {
   // API do MonsterChat (Express) – usada para WhatsApp Baileys (QR) e envio
   API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001',
+
+  // IA Atendimento (classificação + sugestões)
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
 } as const;

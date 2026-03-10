@@ -1,0 +1,62 @@
+RELATÓRIO DE ANÁLISE DE ATENDIMENTO
+Gerado em: 10/03/2026, 18:06:07
+══════════════════════════════════════════════════
+
+RESUMO GERAL
+  Conversas analisadas : 731
+  Entradas na base     : 140
+  Qualidade média      : 3.1/5
+  Tempo médio resposta : 761 min
+  Sentimentos          : 😊 251 positivo | 😐 425 neutro | 😞 55 negativo
+
+──────────────────────────────────────────────────
+POR MARCA
+  FAGENIUS     |   230 conversas | qualidade: 3.3 | resposta: 914min
+  MONSTER      |   403 conversas | qualidade: 3 | resposta: 719min
+  AMBIGUOUS    |    98 conversas | qualidade: 2.8 | resposta: 357min
+
+──────────────────────────────────────────────────
+TOP 20 PERGUNTAS MAIS FREQUENTES
+   1. [monster/lead] (12x) Tem curso para [concurso específico]?
+   2. [both/lead] (12x) Saudação inicial sem pergunta específica
+   3. [monster/acesso] (12x) Não recebi o acesso após a compra
+   4. [monster/acesso] (9x) Informações sobre conteúdo do curso
+   5. [monster/lead] (8x) Informações gerais sobre cursos Monster
+   6. [monster/acesso] (8x) Qual a senha/login para acessar?
+   7. [fagenius/acesso] (8x) Prazo para liberação de acesso após matrícula/pagamento
+   8. [monster/acesso] (7x) Qual o link/site correto para acessar?
+   9. [fagenius/acesso] (7x) Não recebi ou não localizei o e-mail com login e senha
+  10. [monster/financeiro] (6x) Como solicitar reembolso/cancelamento?
+  11. [monster/acesso] (6x) Acessos diferentes para plataformas (Monster Questões vs Curso)
+  12. [fagenius/acesso] (5x) Como acessar a plataforma/aulas
+  13. [monster/financeiro] (5x) Curso específico está indisponível para compra
+  14. [monster/tecnico] (5x) Curso não abre ou não carrega
+  15. [both/lead] (5x) Informações sobre cursos do Monster Concursos (genérico)
+  16. [both/duvida] (5x) Mensagens vazias ou incompreensíveis
+  17. [monster/acesso] (5x) Material incompleto ou faltando PDFs
+  18. [fagenius/duvida] (4x) O curso tecnólogo é aceito em concursos específicos?
+  19. [monster/financeiro] (4x) Desconto para ex-aluno ou múltiplos cursos
+  20. [both/lead] (4x) Curso para área específica não disponível
+
+──────────────────────────────────────────────────
+CONVERSAS QUE PRECISAM DE ATENÇÃO (qualidade ≤ 2 ou sentimento negativo)
+  • Jailton Jr. | monster/lead | nota: 1 | Operador não respondeu à solicitação específica. Cliente aguardou 3 dias sem retorno e cobrou resposta
+  • Instagram 971112 | fagenius/academico | nota: 1 | Operador respondeu apenas com saudação, não abordou a dúvida específica sobre validade do sequencial para concurso
+  • bi | monster/lead | nota: 1 | Operador respondeu com mensagem genérica e não forneceu informações solicitadas. Falta de engajamento e orientação específica sobre os cursos (Monster Questões, Monster Study, Monster Sound)
+  • Maria Betania | monster/lead | nota: 1 | Resposta genérica e vaga. Operador não forneceu previsão, alternativas ou direcionamento adequado para resolver a demanda
+  • Instagram 443563 | ambiguous/outro | nota: 1 | Operador respondeu apenas com 'oi' ou 'posso te ajudar?' repetidamente sem investigar a necessidade do cliente. Padrão de automação inadequada sugere falha no sistema ou treinamento insuficiente.
+  • Davi Ferraz | ambiguous/outro | nota: 1 | Operador respondeu apenas com mensagens genéricas ('teste', 'oi', 'blz') sem qualquer atendimento real ou identificação da demanda
+  • Instagram 101600 | ambiguous/outro | nota: 1 | operador respondeu apenas com saudações repetidas sem tentar qualificar a demanda ou oferecer ajuda
+  • Professor Davi Ferraz | ambiguous/lead | nota: 1 | Operador respondeu tardiamente (3 dias depois) com mensagem genérica. Sem identificação da marca ou tentativa de qualificação do cliente.
+  • Gabriel Henrique | monster/acesso | nota: 2 | Resposta incompleta e vaga. Operador informou apenas que precisa 'ser enturmado' sem indicar prazo, próximos passos ou responsável. Cliente necessita de follow-up.
+  • 📵 | monster/financeiro | nota: 2 | respostas muito breves e incompletas; não esclareceu adequadamente sobre previsão de disponibilidade ou condições de acesso premium
+  • . | monster/lead | nota: 2 | Resposta genérica e incompleta. Operador não respondeu à segunda pergunta sobre PC DF agente de custódia. Falta proatividade em sugerir alternativas disponíveis.
+  • Raiane Campos 🌹 | monster/financeiro | nota: 2 | Operador forneceu link de pagamento mas não respondeu à reclamação específica sobre parcelamento não funcionar
+  • Maria Eduarda | monster/financeiro | nota: 2 | Operador respondeu mas não resolveu completamente; prometeu retorno sobre desconto que não foi concluído após 7 dias
+  • 🖤🖤Alex Carvalho 🖤🖤🖤 | monster/lead | nota: 2 | Operador foi acolhedor mas não forneceu informações solicitadas. Grande gap entre mensagens (3 dias) sugere falta de engajamento inicial
+  • Camila | monster/acesso | nota: 2 | Operador confirmou problema da assinatura mas não apresentou solução ou prazo realista. Orientação sobre tarefas foi adequada, mas não resolveu questão principal da assinatura
+  • +55 21 97260-8221 | monster/lead | nota: 2 | Resposta parcial e incompleta. Operador informou indisponibilidade para Maricá mas não respondeu à pergunta sobre PMERJ. Falta apresentação de alternativas ou próximos passos.
+  • Marcelo Leonardo | fagenius/financeiro | nota: 2 | Operador solicitou informações já fornecidas e não investigou a discrepância relatada. Resposta genérica ('tudo certinho') não abordou as questões específicas do cliente sobre pagamento não contabilizado e boleto com data anterior à matrícula
+  • May Souza | monster/reclamacao | nota: 2 | Operador coletou dados (email) mas não respondeu à solicitação de reembolso. Faltou clareza sobre política de devolução e próximos passos. Conversão positiva no final não resolve a demanda original.
+  • Marcus. | monster/lead | nota: 2 | Resposta muito breve e sem oferecer alternativas ou direcionamento para obter as informações desejadas
+  • Pedro | monster/acesso | nota: 2 | Operador respondeu após 28 minutos de espera. Solicitou e-mail corretamente, mas não investigou o problema de sincronização entre dispositivos ou status de expiração da sessão. Sugeriu plataforma alternativa sem confirmar se resolve o acesso ao material.
