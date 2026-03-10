@@ -14,17 +14,19 @@ export interface ConversationData {
 }
 
 /**
- * Busca ou cria uma conversa para um canal e contato
+ * Busca ou cria uma conversa para um canal e contato.
+ * Se existir conversa com mesmo channel+contact (qualquer status), reutiliza; senão cria com status desejado.
  */
 export async function findOrCreateConversation(data: ConversationData) {
   try {
-    // Tentar encontrar conversa existente
+    // Tentar encontrar conversa existente (qualquer status) para evitar duplicar conversa por canal+contato
     const { data: existing } = await supabase
       .from('conversations')
       .select('*')
       .eq('channel_id', data.channelId)
       .eq('contact_id', data.contactId)
-      .eq('status', data.status || 'open')
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(1)
       .maybeSingle();
 
     if (existing) {
@@ -86,12 +88,17 @@ export async function updateConversation(
   }
 ) {
   try {
+    const row: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (updates.lastMessageAt !== undefined) row.last_message_at = updates.lastMessageAt;
+    if (updates.lastMessagePreview !== undefined) row.last_message_preview = updates.lastMessagePreview;
+    if (updates.unreadCount !== undefined) row.unread_count = updates.unreadCount;
+    if (updates.status !== undefined) row.status = updates.status;
+
     const { data, error } = await supabase
       .from('conversations')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(row)
       .eq('id', conversationId)
       .select()
       .single();
@@ -99,6 +106,7 @@ export async function updateConversation(
     if (error) {
       logger.error('Error updating conversation', error, {
         conversationId,
+        code: (error as { code?: string })?.code,
       });
       throw error;
     }

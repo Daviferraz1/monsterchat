@@ -16,9 +16,10 @@ export const logger = {
   },
   
   error: (message: string, error?: Error | unknown, context?: LogContext) => {
-    const errorDetails = error instanceof Error 
-      ? { error: error.message, stack: error.stack }
-      : { error: String(error) };
+    const errorDetails =
+      error instanceof Error
+        ? { error: error.message, stack: error.stack }
+        : { error: (error as { message?: string })?.message ?? JSON.stringify(error) };
     console.error(JSON.stringify({ level: 'error', message, ...errorDetails, ...context, timestamp: new Date().toISOString() }));
   },
   

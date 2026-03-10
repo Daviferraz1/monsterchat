@@ -22,7 +22,9 @@ function groupByChannel(conversations: Conversation[]): { channelId: string; cha
     const id = c.channel_id;
     if (!map.has(id)) {
       const type = (c.channel?.type || 'whatsapp') as ChannelType;
-      const name = c.channel?.name || (type === 'whatsapp' ? 'WhatsApp' : type === 'instagram' ? 'Instagram' : 'Guru (vendas)');
+      const name =
+        c.channel?.name ||
+        (type === 'whatsapp' ? 'WhatsApp' : type === 'whatsapp_baileys' ? 'WhatsApp Web' : type === 'instagram' ? 'Instagram' : 'Guru (vendas)');
       map.set(id, []);
       channelMeta.set(id, { name, type });
     }

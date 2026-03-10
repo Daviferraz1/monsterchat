@@ -44,10 +44,11 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
       {/* Abas por canal */}
       <div>
         <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">Canal</p>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {[
             { label: 'Todos', value: 'all' as const, icon: null },
             { label: 'WhatsApp', value: 'whatsapp' as const, icon: 'whatsapp' },
+            { label: 'WhatsApp Web', value: 'whatsapp_baileys' as const, icon: 'whatsapp' },
             { label: 'Instagram', value: 'instagram' as const, icon: 'instagram' },
           ].map((tab) => (
             <button

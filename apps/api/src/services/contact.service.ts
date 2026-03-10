@@ -57,6 +57,27 @@ export async function upsertContact(data: ContactData) {
 }
 
 /**
+ * Atualiza apenas a foto de perfil do contato (ex.: Baileys).
+ */
+export async function updateContactProfilePic(
+  contactId: string,
+  profilePicUrl: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('contacts')
+    .update({
+      profile_pic_url: profilePicUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', contactId);
+
+  if (error) {
+    logger.error('Error updating contact profile pic', error, { contactId });
+    throw error;
+  }
+}
+
+/**
  * Busca um contato por channel_type e external_id
  */
 export async function getContactByExternalId(

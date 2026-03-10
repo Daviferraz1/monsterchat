@@ -2,6 +2,34 @@ import axios from 'axios';
 import { supabase } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 
+const MEDIA_BUCKET = 'media';
+
+/**
+ * Faz upload de um buffer para o bucket 'media' e retorna a URL pública.
+ * Usado por Baileys para persistir imagem, áudio, vídeo, documento recebidos.
+ */
+export async function uploadBufferToMedia(
+  buffer: Buffer,
+  path: string,
+  mimeType: string
+): Promise<{ url: string; path: string }> {
+  const { data, error } = await supabase.storage
+    .from(MEDIA_BUCKET)
+    .upload(path, buffer, {
+      contentType: mimeType,
+      upsert: true,
+    });
+
+  if (error) {
+    logger.error('Error uploading buffer to Supabase', error, { path });
+    throw error;
+  }
+
+  const { data: urlData } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+  logger.debug('Media buffer uploaded', { path, url: urlData.publicUrl });
+  return { url: urlData.publicUrl, path: data.path };
+}
+
 /**
  * Faz download de uma URL e faz upload para Supabase Storage
  */

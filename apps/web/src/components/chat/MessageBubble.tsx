@@ -28,8 +28,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             : 'bg-muted text-foreground'
         )}
       >
-        {message.content_type === 'text' && message.body && (
-          <p className="whitespace-pre-wrap">{message.body}</p>
+        {message.content_type === 'text' && (
+          <p className="whitespace-pre-wrap">
+            {message.direction === 'outbound' && !message.body?.trim()
+              ? '\u00A0'
+              : message.body?.trim() || '(mensagem vazia)'}
+          </p>
         )}
         {message.media_url && (
           <MediaMessage
@@ -38,6 +42,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             filename={message.media_filename}
             contentType={message.content_type}
           />
+        )}
+        {!message.media_url && message.content_type !== 'text' && message.content_type !== 'reaction' && (
+          <p className="text-sm opacity-80">{message.body?.trim() || `[${message.content_type}]`}</p>
         )}
         <span className="text-xs opacity-70 mt-1 block">
           {formatDate(message.created_at)}

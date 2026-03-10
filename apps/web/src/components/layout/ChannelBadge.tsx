@@ -8,7 +8,7 @@ interface ChannelBadgeProps {
 }
 
 export function ChannelBadge({ type, className }: ChannelBadgeProps) {
-  const isWhatsApp = type === 'whatsapp';
+  const isWhatsApp = type === 'whatsapp' || type === 'whatsapp_baileys';
   const isGuru = type === 'guru';
 
   return (

@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { Router, Request, Response } from 'express';
 import { getChannelById } from '../services/channel.service.js';
 import {
@@ -36,7 +37,19 @@ router.get('/qr/:channelId', async (req: Request, res: Response) => {
     }
 
     const error = result.error ?? getConnectionError(channelId) ?? undefined;
-    return res.json({ connected: false, qr: result.qr || null, error });
+    let qrImage: string | null = null;
+    if (result.qr) {
+      if (result.qr.startsWith('data:')) {
+        qrImage = result.qr;
+      } else {
+        try {
+          qrImage = await QRCode.toDataURL(result.qr, { margin: 2 });
+        } catch (e) {
+          logger.warn('Baileys QR toDataURL failed', { error: e });
+        }
+      }
+    }
+    return res.json({ connected: false, qr: qrImage, error });
   } catch (error) {
     logger.error('Baileys GET qr error', error);
     return res.status(500).json({

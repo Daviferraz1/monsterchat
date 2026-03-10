@@ -263,8 +263,7 @@ export default function ChannelsPage() {
           return;
         }
         if (data.qr) {
-          const img = data.qr.startsWith('data:') ? data.qr : `data:image/png;base64,${data.qr}`;
-          setQrImage(img);
+          setQrImage(data.qr.startsWith('data:') ? data.qr : `data:image/png;base64,${data.qr}`);
           setQrError(null);
         }
       } catch (err) {

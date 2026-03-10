@@ -6,6 +6,7 @@ import path from 'path';
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
+  fetchLatestBaileysVersion,
   type WASocket,
   type WAMessage,
   type proto,
@@ -14,9 +15,10 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { getChannelById } from './channel.service.js';
-import { upsertContact } from './contact.service.js';
+import { upsertContact, getContactByExternalId, updateContactProfilePic } from './contact.service.js';
 import { findOrCreateConversation, updateConversation } from './conversation.service.js';
 import { createMessage, getMessageByExternalId } from './message.service.js';
+import { uploadBufferToMedia, downloadAndUploadMedia } from './media.service.js';
 import { logger } from '../utils/logger.js';
 
 const SESSIONS_DIR = path.join(process.cwd(), 'sessions', 'baileys');
@@ -44,6 +46,41 @@ function jidToPhone(jid: string): string {
   return jid.replace(/@.*/, '').trim();
 }
 
+/** Extrai mimetype e nome do arquivo do conteúdo da mensagem (imagem, vídeo, áudio, documento). */
+function getMediaInfo(msg: WAMessage): { mimetype: string; fileName?: string } {
+  const m = msg.message as Record<string, { mimetype?: string; fileName?: string; title?: string }> | undefined;
+  if (!m) return { mimetype: 'application/octet-stream' };
+  const types = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
+  for (const key of types) {
+    const content = m[key];
+    if (content?.mimetype) {
+      return {
+        mimetype: content.mimetype.split(';')[0]?.trim() || 'application/octet-stream',
+        fileName: content.fileName || content.title,
+      };
+    }
+  }
+  return { mimetype: 'application/octet-stream' };
+}
+
+function extensionFromMime(mimetype: string): string {
+  const map: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'video/mp4': 'mp4',
+    'video/3gpp': '3gp',
+    'audio/ogg': 'ogg',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'audio/mpeg': 'mp3',
+    'application/pdf': 'pdf',
+  };
+  const base = mimetype.split(';')[0]?.split('/').pop() ?? 'bin';
+  return map[mimetype.split(';')[0] ?? ''] ?? base;
+}
+
 function normalizeContentType(msg: WAMessage): string {
   const type = getContentType(msg.message ?? undefined);
   if (!type) return 'text';
@@ -62,16 +99,53 @@ function normalizeContentType(msg: WAMessage): string {
 }
 
 function extractBody(msg: WAMessage): string | undefined {
-  const m = msg.message;
+  const m = msg.message as Record<string, unknown> | undefined;
   if (!m) return undefined;
-  if (m.conversation) return m.conversation;
-  if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
-  if (m.imageMessage?.caption) return m.imageMessage.caption;
-  if (m.videoMessage?.caption) return m.videoMessage.caption;
-  if (m.documentMessage?.caption) return m.documentMessage.caption;
-  if (m.locationMessage) return JSON.stringify(m.locationMessage);
-  if (m.reactionMessage) return m.reactionMessage.text || '';
+  if (typeof (m as any).conversation === 'string') return (m as any).conversation;
+  if (typeof (m as any).extendedTextMessage?.text === 'string') return (m as any).extendedTextMessage.text;
+  if (typeof (m as any).imageMessage?.caption === 'string') return (m as any).imageMessage.caption;
+  if (typeof (m as any).videoMessage?.caption === 'string') return (m as any).videoMessage.caption;
+  if (typeof (m as any).documentMessage?.caption === 'string') return (m as any).documentMessage.caption;
+  if ((m as any).locationMessage) return JSON.stringify((m as any).locationMessage);
+  if (typeof (m as any).reactionMessage?.text === 'string') return (m as any).reactionMessage.text;
+  // Botões, listas e respostas
+  const buttons = (m as any).buttonsMessage;
+  if (buttons && (typeof buttons.contentText === 'string' || typeof buttons.text === 'string'))
+    return (buttons.contentText || buttons.text) as string;
+  const list = (m as any).listMessage;
+  if (list) {
+    const str = [list.title, list.description, list.buttonText, list.footerText].filter(Boolean).join(' · ');
+    if (str) return str;
+  }
+  if (typeof (m as any).templateButtonReplyMessage?.selectedDisplayText === 'string')
+    return (m as any).templateButtonReplyMessage.selectedDisplayText;
+  if (typeof (m as any).buttonsResponseMessage?.selectedButtonId === 'string')
+    return (m as any).buttonsResponseMessage.selectedDisplayText || (m as any).buttonsResponseMessage.selectedButtonId;
+  if (typeof (m as any).listResponseMessage?.title === 'string')
+    return (m as any).listResponseMessage.title;
   return undefined;
+}
+
+/**
+ * Busca a foto de perfil do contato no WhatsApp (profilePictureUrl), faz upload para o Storage
+ * e atualiza o contato. Executado em background para não atrasar o processamento de mensagens.
+ */
+async function fetchAndSaveContactProfilePicture(
+  channelId: string,
+  jid: string,
+  contactId: string,
+  externalId: string
+): Promise<void> {
+  const sock = sessions.get(channelId)?.sock;
+  if (!sock || typeof sock.profilePictureUrl !== 'function') return;
+
+  const ppUrl = await sock.profilePictureUrl(jid, 'image');
+  if (!ppUrl) return;
+
+  const path = `baileys-profile/${channelId}/${externalId.replace(/\D/g, '')}.jpg`;
+  const { url } = await downloadAndUploadMedia(ppUrl, 'media', path, 'image/jpeg');
+  await updateContactProfilePic(contactId, url);
+  logger.debug('Baileys profile picture saved', { channelId, contactId });
 }
 
 async function processIncomingMessage(
@@ -103,6 +177,15 @@ async function processIncomingMessage(
     phone,
   });
 
+  // Foto de perfil: buscar no WhatsApp e salvar se o contato ainda não tiver
+  if (!contactRecord.profile_pic_url) {
+    setImmediate(() => {
+      fetchAndSaveContactProfilePicture(channelId, from, contactRecord.id, phone).catch((e) =>
+        logger.warn('Baileys profile pic fetch failed', { channelId, jid: from, error: e })
+      );
+    });
+  }
+
   const conversation = await findOrCreateConversation({
     channelId,
     contactId: contactRecord.id,
@@ -110,11 +193,12 @@ async function processIncomingMessage(
 
   const contentType = normalizeContentType(msg);
   let body = extractBody(msg);
+  if (body === undefined || body === null) body = contentType === 'text' ? '(mensagem)' : `[${contentType}]`;
   let mediaUrl: string | undefined;
   let mediaMimeType: string | undefined;
   let mediaFilename: string | undefined;
 
-  // Baileys: mídia pode ser baixada depois para Supabase Storage se quiser; por ora só texto e referência
+  // Baileys: baixar mídia e fazer upload para Supabase Storage para exibir imagem, áudio, vídeo, documento
   if (contentType !== 'text' && contentType !== 'reaction' && msg.message) {
     try {
       const buffer = await downloadMediaMessage(
@@ -133,12 +217,17 @@ async function processIncomingMessage(
         }
       );
       if (Buffer.isBuffer(buffer) && buffer.length > 0) {
-        // Por simplicidade não subimos para Supabase aqui; poderia usar media.service
-        // Salvar como data URL ou URL temporária não é ideal; deixamos body com legenda e sem mediaUrl
-        mediaMimeType = getContentType(msg.message)?.includes('image') ? 'image/jpeg' : undefined;
+        const { mimetype, fileName } = getMediaInfo(msg);
+        const ext = extensionFromMime(mimetype);
+        const safeId = (messageId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const storagePath = `baileys/${channelId}/${safeId}.${ext}`;
+        const { url } = await uploadBufferToMedia(buffer, storagePath, mimetype);
+        mediaUrl = url;
+        mediaMimeType = mimetype;
+        mediaFilename = fileName || `arquivo.${ext}`;
       }
     } catch (e) {
-      logger.warn('Baileys: could not download media', { messageId, error: e });
+      logger.warn('Baileys: could not download or upload media', { messageId, error: e });
     }
   }
 
@@ -146,28 +235,111 @@ async function processIncomingMessage(
     ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
     : new Date().toISOString();
 
-  await createMessage({
-    conversationId: conversation.id,
-    direction: 'inbound',
-    senderType: 'contact',
-    senderId: phone,
-    contentType: contentType as import('../types/common.types.js').MessageContentType,
-    body,
-    mediaUrl,
-    mediaMimeType,
-    mediaFilename,
-    externalId: messageId,
-    status: 'delivered',
-    metadata: msg as unknown as Record<string, unknown>,
-  });
+  try {
+    await createMessage({
+      conversationId: conversation.id,
+      direction: 'inbound',
+      senderType: 'contact',
+      senderId: phone,
+      contentType: contentType as import('../types/common.types.js').MessageContentType,
+      body,
+      mediaUrl,
+      mediaMimeType,
+      mediaFilename,
+      externalId: messageId,
+      status: 'delivered',
+      metadata: msg as unknown as Record<string, unknown>,
+    });
+  } catch (err: any) {
+    if (err?.code === '23505') {
+      logger.debug('Baileys incoming message duplicate ignored', { messageId });
+      return;
+    }
+    throw err;
+  }
 
+  const preview = (body && String(body).trim()) || `[${contentType}]`;
   await updateConversation(conversation.id, {
     lastMessageAt: timestamp,
-    lastMessagePreview: body || `[${contentType}]`,
+    lastMessagePreview: preview,
     unreadCount: (conversation.unread_count ?? 0) + 1,
+    status: 'open',
   });
 
   logger.info('Baileys message persisted', {
+    channelId,
+    conversationId: conversation.id,
+    messageId,
+  });
+}
+
+/**
+ * Processa mensagens enviadas pelo próprio número (respostas no celular) para aparecer no sistema.
+ */
+async function processOutgoingMessage(channelId: string, msg: WAMessage): Promise<void> {
+  const remoteJid = msg.key.remoteJid;
+  if (!remoteJid || remoteJid === 'status@broadcast') return;
+
+  const messageId = msg.key.id;
+  if (!messageId) return;
+
+  const existing = await getMessageByExternalId(messageId);
+  if (existing) {
+    logger.debug('Baileys outgoing message already processed', { messageId });
+    return;
+  }
+
+  const channel = await getChannelById(channelId);
+  if (!channel || channel.type !== 'whatsapp_baileys') return;
+
+  const phone = jidToPhone(remoteJid);
+  let contactRecord = await getContactByExternalId('whatsapp_baileys', phone);
+  if (!contactRecord) {
+    contactRecord = await upsertContact({
+      channelType: 'whatsapp_baileys',
+      externalId: phone,
+      phone,
+    });
+  }
+
+  const conversation = await findOrCreateConversation({
+    channelId,
+    contactId: contactRecord.id,
+  });
+
+  const contentType = normalizeContentType(msg);
+  let body = extractBody(msg);
+  if (body === undefined || body === null) body = contentType === 'text' ? '' : `[${contentType}]`;
+
+  try {
+    await createMessage({
+      conversationId: conversation.id,
+      direction: 'outbound',
+      senderType: 'agent',
+      senderId: phone,
+      contentType: contentType as import('../types/common.types.js').MessageContentType,
+      body: (body && String(body).trim()) || undefined,
+      externalId: messageId,
+      status: 'delivered',
+      metadata: msg as unknown as Record<string, unknown>,
+    });
+  } catch (err: any) {
+    if (err?.code === '23505') {
+      logger.debug('Baileys outgoing message duplicate ignored', { messageId });
+      return;
+    }
+    throw err;
+  }
+
+  const preview = (body && String(body).trim()) || `[${contentType}]`;
+  await updateConversation(conversation.id, {
+    lastMessageAt: msg.messageTimestamp
+      ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+      : new Date().toISOString(),
+    lastMessagePreview: preview,
+  });
+
+  logger.info('Baileys outgoing message persisted (reply from phone)', {
     channelId,
     conversationId: conversation.id,
     messageId,
@@ -206,8 +378,19 @@ export async function connectChannel(channelId: string): Promise<{ qr: string | 
   };
   sessions.set(channelId, session);
 
+  // Usar versão mais recente do WhatsApp Web pode evitar 405 (ClientTooOld)
+  let version: [number, number, number] | undefined;
+  try {
+    const { version: v } = await fetchLatestBaileysVersion();
+    version = v;
+    logger.debug('Baileys using fetched version', { version });
+  } catch (e) {
+    logger.warn('Baileys fetchLatestBaileysVersion failed, using default', { error: e });
+  }
+
   const sock = makeWASocket({
     auth: state,
+    version,
     printQRInTerminal: false,
   });
 
@@ -252,10 +435,14 @@ export async function connectChannel(channelId: string): Promise<{ qr: string | 
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
+    logger.info('Baileys messages.upsert received', { channelId, count: messages.length });
     for (const m of messages) {
-      if (m.key.fromMe) continue;
       try {
-        await processIncomingMessage(channelId, m);
+        if (m.key.fromMe) {
+          await processOutgoingMessage(channelId, m);
+        } else {
+          await processIncomingMessage(channelId, m);
+        }
       } catch (err) {
         logger.error('Baileys process message error', err, { channelId, messageId: m.key.id ?? undefined });
       }

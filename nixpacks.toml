@@ -1,0 +1,4 @@
+# Railway/Nixpacks: usa Node 20 (Baileys e Supabase exigem >= 20).
+# Sem isso o build usa Node 18 e o postinstall do Baileys falha.
+[phases.setup]
+nixPkgs = ["nodejs_20"]

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSupabase } from './useSupabase';
 import type { Conversation } from '@/types';
 
-export type ChannelTypeFilter = 'all' | 'whatsapp' | 'instagram';
+export type ChannelTypeFilter = 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
 export type RepliedFilter = 'all' | 'replied' | 'not_replied';
 
 const VALID_STATUSES = ['open', 'pending', 'closed', 'snoozed'] as const;
@@ -65,9 +65,13 @@ export function useConversations(filters?: {
 
       let list = data || [];
       if (filters?.channel_type && filters.channel_type !== 'all') {
-        list = list.filter(
-          (c) => (c as Conversation).channel?.type === filters.channel_type
-        );
+        list = list.filter((c) => {
+          const channelType = (c as Conversation).channel?.type;
+          if (filters.channel_type === 'whatsapp') {
+            return channelType === 'whatsapp' || channelType === 'whatsapp_baileys';
+          }
+          return channelType === filters.channel_type;
+        });
       }
       setConversations(list);
       setLoading(false);

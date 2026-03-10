@@ -1,6 +1,13 @@
+import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 
+// Carrega .env do diretório atual (apps/api) e, se necessário, da raiz do monorepo
 dotenv.config();
+if (!process.env.SUPABASE_URL) {
+  const rootEnv = path.join(process.cwd(), '..', '..', '.env');
+  if (fs.existsSync(rootEnv)) dotenv.config({ path: rootEnv });
+}
 
 export const env = {
   // Supabase
