@@ -174,7 +174,7 @@ async function processIncomingMessage(
   });
 }
 
-export async function connectChannel(channelId: string): Promise<{ qr: string | null; connected: boolean }> {
+export async function connectChannel(channelId: string): Promise<{ qr: string | null; connected: boolean; error?: string }> {
   let session = sessions.get(channelId);
   if (session?.connected && session.sock) {
     return { qr: null, connected: true };
