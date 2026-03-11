@@ -349,7 +349,7 @@ async function processWhatsAppMessage(
           contactName: contactRecord.name ?? undefined,
           contactMetadata: contactRecord.metadata ?? undefined,
           contactId: contactRecord.id,
-          messageBody: normalized.body,
+          messageBody: normalized.body ?? '',
         }).catch((err) => {
           console.error('[WhatsApp Webhook] IA reply:', err);
         });
