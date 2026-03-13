@@ -8,6 +8,9 @@ import {
   parseGuruWebhookMinimal,
   ensureContactForSale,
   insertGuruSale,
+  parseGuruSubscriptionWebhook,
+  ensureContactForSubscription,
+  upsertGuruSubscription,
 } from '@/lib/api/integrations/digital-guru';
 
 export const dynamic = 'force-dynamic';
@@ -21,12 +24,15 @@ export async function GET() {
       integration: 'digital-guru',
       webhook_configured: webhookConfigured,
       method: 'POST',
-      message: 'Envie um POST com o payload do webhook de transações do Digital Manager Guru.',
-      docs: 'https://docs.digitalmanager.guru/developers/webhook-para-transacoes',
+      message: 'Envie um POST com o payload do webhook do Digital Manager Guru (transações ou assinaturas).',
+      webhooks: [
+        { type: 'transaction', docs: 'https://docs.digitalmanager.guru/developers/webhook-para-transacoes' },
+        { type: 'subscription', docs: 'https://docs.digitalmanager.guru/developers/webhook-para-assinaturas' },
+      ],
       how_to_verify: [
         '1. Configure o webhook na Guru (URL desta API) e DIGITAL_GURU_ACCOUNT_TOKEN no ambiente.',
-        '2. Após uma venda na Guru, abra o contato no MonsterChat (mesmo email/telefone) e veja o bloco "Digital Guru" no perfil.',
-        '3. Veja os logs da Vercel (Functions) por "[Digital Guru]" para debug.',
+        '2. Transações: veja "Últimas vendas". Assinaturas: veja "Assinaturas" no menu.',
+        '3. Veja os logs por "[Digital Guru]" para debug.',
       ],
       sync_import: 'POST /api/integrations/digital-guru/sync com { api_token, transactions: [...] } para importar transações antigas.',
     },
@@ -37,19 +43,44 @@ export async function GET() {
 /**
  * POST /api/integrations/digital-guru
  *
- * 1) Webhook oficial do Digital Manager Guru (webhook_type === "transaction"):
- *    Valida api_token com DIGITAL_GURU_ACCOUNT_TOKEN, extrai contact.email, contact.phone_number,
- *    product/items, status e datas. Sempre retorna HTTP 200 quando o token é válido (exigência da Guru).
- *
- * 2) Payload genérico (sem webhook_type):
- *    Body: email?, phone?, product_name, product_id?, order_id?, situation?, purchased_at?
+ * 1) Webhook de assinaturas (webhook_type === "subscription"): upsert em guru_subscriptions.
+ * 2) Webhook de transações (webhook_type === "transaction"): contato + guru_sales.
+ * 3) Payload genérico (sem webhook_type): email?, phone?, product_name, etc.
  */
 export async function POST(request: NextRequest) {
   try {
     let body = (await request.json()) as Record<string, unknown>;
-    // Se a requisição veio encapsulada (ex.: fila com payload), usar o payload como body
     if (body?.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)) {
       body = body.payload as Record<string, unknown>;
+    }
+
+    const isSubscriptionWebhook = body.webhook_type === 'subscription' && body.api_token != null;
+    if (isSubscriptionWebhook) {
+      const token = apiEnv.DIGITAL_GURU_ACCOUNT_TOKEN;
+      const receivedToken = typeof body.api_token === 'string' ? body.api_token : '';
+      if (token && receivedToken !== token) {
+        return NextResponse.json({ error: 'api_token inválido' }, { status: 401 });
+      }
+      const parsedSub = parseGuruSubscriptionWebhook(body);
+      if (!parsedSub) {
+        return NextResponse.json(
+          { ok: true, updated: 0, message: 'Payload de assinatura sem id válido.' },
+          { status: 200 }
+        );
+      }
+      const contactId = await ensureContactForSubscription(
+        parsedSub.subscriber_email ?? '',
+        parsedSub.subscriber_phone ?? '',
+        parsedSub.subscriber_name
+      );
+      await upsertGuruSubscription({ ...parsedSub, contact_id: contactId ?? null });
+      return NextResponse.json({
+        ok: true,
+        subscription_id: parsedSub.subscription_id,
+        contact_id: contactId,
+        is_overdue: parsedSub.is_overdue,
+        message: 'Assinatura registrada/atualizada.',
+      }, { status: 200 });
     }
 
     let parsed: { email: string; phone: string; products: DigitalGuruProduct[]; situation: string };

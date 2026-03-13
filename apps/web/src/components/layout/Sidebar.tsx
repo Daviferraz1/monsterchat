@@ -6,7 +6,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
-import { MessageSquare, Settings, Users, ShoppingBag, Megaphone, Bot, BookOpen } from 'lucide-react';
+import { MessageSquare, Settings, Users, ShoppingBag, CreditCard, Megaphone, Bot, BookOpen } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 
 interface SidebarProps {
@@ -53,6 +53,9 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
           </Link>
           <Link href="/sales" className={navLinkClass(!!pathname?.startsWith('/sales'))} onClick={onClose}>
             <ShoppingBag className="w-4 h-4 shrink-0" /> Últimas vendas
+          </Link>
+          <Link href="/subscriptions" className={navLinkClass(!!pathname?.startsWith('/subscriptions'))} onClick={onClose}>
+            <CreditCard className="w-4 h-4 shrink-0" /> Assinaturas
           </Link>
           <p className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Configurações

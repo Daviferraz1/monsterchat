@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, Users, ShoppingBag, Settings, Megaphone, Bot } from 'lucide-react';
+import { MessageSquare, Users, ShoppingBag, CreditCard, Settings, Megaphone, Bot } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useTotalUnreadCount } from '@/hooks/useTotalUnreadCount';
 
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: '/inbox', icon: MessageSquare, label: 'Conversas' },
   { href: '/contacts', icon: Users, label: 'Contatos' },
   { href: '/sales', icon: ShoppingBag, label: 'Vendas' },
+  { href: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
   { href: '/settings/channels', icon: Settings, label: 'Canais' },
   { href: '/settings/campanhas', icon: Megaphone, label: 'Campanhas' },
   { href: '/settings/ia', icon: Bot, label: 'IA Atendimento' },

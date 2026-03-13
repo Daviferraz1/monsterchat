@@ -483,3 +483,249 @@ export async function insertGuruSale(row: GuruSaleInsert): Promise<void> {
     throw error;
   }
 }
+
+// --- Webhook de assinaturas (Guru) ---
+// Ref: https://docs.digitalmanager.guru/developers/webhook-para-assinaturas
+
+export interface GuruSubscriptionInsert {
+  subscription_id: string;
+  internal_id?: string | null;
+  subscription_code?: string | null;
+  contact_id?: string | null;
+  subscriber_email?: string | null;
+  subscriber_name?: string | null;
+  subscriber_doc?: string | null;
+  subscriber_phone?: string | null;
+  subscriber_phone_local_code?: string | null;
+  subscriber_address?: string | null;
+  subscriber_address_number?: string | null;
+  subscriber_address_comp?: string | null;
+  subscriber_address_district?: string | null;
+  subscriber_address_city?: string | null;
+  subscriber_address_state?: string | null;
+  subscriber_address_zip_code?: string | null;
+  subscriber_address_country?: string | null;
+  last_status?: string | null;
+  current_invoice_id?: string | null;
+  current_invoice_status?: string | null;
+  current_invoice_charge_at?: string | null;
+  current_invoice_value?: number | null;
+  current_invoice_period_start?: string | null;
+  current_invoice_period_end?: string | null;
+  current_invoice_payment_url?: string | null;
+  product_id?: string | null;
+  product_name?: string | null;
+  offer_id?: string | null;
+  offer_name?: string | null;
+  next_cycle_at?: string | null;
+  cycle_end_date?: string | null;
+  cycle_start_date?: string | null;
+  started_at?: string | null;
+  last_status_at?: string | null;
+  canceled_at?: string | null;
+  cancel_at_cycle_end?: boolean | null;
+  cancel_reason?: string | null;
+  cancelled_by_name?: string | null;
+  cancelled_by_email?: string | null;
+  cancelled_by_date?: string | null;
+  payment_method?: string | null;
+  charged_every_days?: number | null;
+  charged_times?: number | null;
+  next_cycle_value?: number | null;
+  is_overdue?: boolean;
+  days_overdue?: number | null;
+  overdue_since?: string | null;
+  raw_payload?: Record<string, unknown> | null;
+}
+
+function parseDateOnly(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? s.slice(0, 10) : null;
+}
+
+function parseIsoDate(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s || null;
+}
+
+/**
+ * Parse do webhook de assinaturas do Digital Manager Guru.
+ * Retorna objeto para upsert em guru_subscriptions e calcula is_overdue/days_overdue.
+ */
+export function parseGuruSubscriptionWebhook(body: Record<string, unknown>): GuruSubscriptionInsert | null {
+  if (body.webhook_type !== 'subscription' || body.id == null) return null;
+  const subscriptionId = typeof body.id === 'string' ? body.id : String(body.id);
+
+  const subscriber = body.subscriber && typeof body.subscriber === 'object' ? (body.subscriber as Record<string, unknown>) : null;
+  const currentInvoice = body.current_invoice && typeof body.current_invoice === 'object' ? (body.current_invoice as Record<string, unknown>) : null;
+  const product = body.product && typeof body.product === 'object' ? (body.product as Record<string, unknown>) : null;
+  const offer = product?.offer && typeof product.offer === 'object' ? (product.offer as Record<string, unknown>) : null;
+  const dates = body.dates && typeof body.dates === 'object' ? (body.dates as Record<string, unknown>) : null;
+  const cancelledBy = body.cancelled_by && typeof body.cancelled_by === 'object' ? (body.cancelled_by as Record<string, unknown>) : null;
+
+  const email = subscriber ? normalizeEmail(subscriber.email as string | undefined) : '';
+  const phoneLocal = subscriber ? String(subscriber.phone_local_code ?? '').trim() : '';
+  const phoneNum = subscriber ? String(subscriber.phone_number ?? '').replace(/\D/g, '') : '';
+  const phone = subscriber ? normalizePhone(phoneNum ? (phoneLocal + phoneNum) : (subscriber.phone_number as string)) : '';
+
+  const chargeAt = currentInvoice ? parseDateOnly(currentInvoice.charge_at) : null;
+  const invoiceStatus = currentInvoice && typeof currentInvoice.status === 'string' ? currentInvoice.status : null;
+  let currentInvoiceValue: number | null = null;
+  if (currentInvoice?.value != null) {
+    const v = currentInvoice.value;
+    currentInvoiceValue = typeof v === 'number' ? v : parseFloat(String(v)) || null;
+  }
+  let nextCycleValue: number | null = null;
+  if (body.next_cycle_value != null) {
+    const v = body.next_cycle_value;
+    nextCycleValue = typeof v === 'number' ? v : parseFloat(String(v)) || null;
+  }
+
+  const row: GuruSubscriptionInsert = {
+    subscription_id: subscriptionId,
+    internal_id: body.internal_id != null ? String(body.internal_id) : null,
+    subscription_code: body.subscription_code != null ? String(body.subscription_code) : null,
+    subscriber_email: email || null,
+    subscriber_name: subscriber && typeof subscriber.name === 'string' ? subscriber.name : null,
+    subscriber_doc: subscriber && subscriber.doc != null ? String(subscriber.doc) : null,
+    subscriber_phone: phone || null,
+    subscriber_phone_local_code: phoneLocal || null,
+    subscriber_address: subscriber && subscriber.address != null ? String(subscriber.address) : null,
+    subscriber_address_number: subscriber && subscriber.address_number != null ? String(subscriber.address_number) : null,
+    subscriber_address_comp: subscriber && subscriber.address_comp != null ? String(subscriber.address_comp) : null,
+    subscriber_address_district: subscriber && subscriber.address_district != null ? String(subscriber.address_district) : null,
+    subscriber_address_city: subscriber && subscriber.address_city != null ? String(subscriber.address_city) : null,
+    subscriber_address_state: subscriber && subscriber.address_state != null ? String(subscriber.address_state) : null,
+    subscriber_address_zip_code: subscriber && subscriber.address_zip_code != null ? String(subscriber.address_zip_code) : null,
+    subscriber_address_country: subscriber && subscriber.address_country != null ? String(subscriber.address_country) : null,
+    last_status: body.last_status != null ? String(body.last_status) : null,
+    current_invoice_id: currentInvoice && currentInvoice.id != null ? String(currentInvoice.id) : null,
+    current_invoice_status: invoiceStatus,
+    current_invoice_charge_at: chargeAt,
+    current_invoice_value: currentInvoiceValue,
+    current_invoice_period_start: currentInvoice ? parseDateOnly(currentInvoice.period_start) : null,
+    current_invoice_period_end: currentInvoice ? parseDateOnly(currentInvoice.period_end) : null,
+    current_invoice_payment_url: currentInvoice && typeof currentInvoice.payment_url === 'string' ? currentInvoice.payment_url : null,
+    product_id: product && product.id != null ? String(product.id) : null,
+    product_name: product && typeof product.name === 'string' ? product.name : null,
+    offer_id: offer && offer.id != null ? String(offer.id) : null,
+    offer_name: offer && typeof offer.name === 'string' ? offer.name : null,
+    next_cycle_at: dates && dates.next_cycle_at != null ? parseDateOnly(dates.next_cycle_at) : null,
+    cycle_end_date: dates && dates.cycle_end_date != null ? parseDateOnly(dates.cycle_end_date) : null,
+    cycle_start_date: dates && dates.cycle_start_date != null ? parseDateOnly(dates.cycle_start_date) : null,
+    started_at: dates && dates.started_at ? parseIsoDate(dates.started_at) : null,
+    last_status_at: dates && dates.last_status_at ? parseIsoDate(dates.last_status_at) : null,
+    canceled_at: dates && dates.canceled_at ? parseIsoDate(dates.canceled_at) : null,
+    cancel_at_cycle_end: body.cancel_at_cycle_end === true || body.cancel_at_cycle_end === 1,
+    cancel_reason: body.cancel_reason != null ? String(body.cancel_reason) : null,
+    cancelled_by_name: cancelledBy && cancelledBy.name != null ? String(cancelledBy.name) : null,
+    cancelled_by_email: cancelledBy && cancelledBy.email != null ? String(cancelledBy.email) : null,
+    cancelled_by_date: cancelledBy && cancelledBy.date ? parseIsoDate(cancelledBy.date) : null,
+    payment_method: body.payment_method != null ? String(body.payment_method) : null,
+    charged_every_days: typeof body.charged_every_days === 'number' ? body.charged_every_days : null,
+    charged_times: typeof body.charged_times === 'number' ? body.charged_times : null,
+    next_cycle_value: nextCycleValue,
+    raw_payload: body,
+  };
+
+  // Atraso: fatura não paga e data de cobrança já passou
+  const paidStatuses = ['paid', 'approved'];
+  const isPaid = invoiceStatus && paidStatuses.includes(invoiceStatus.toLowerCase());
+  const today = new Date().toISOString().slice(0, 10);
+  if (!isPaid && chargeAt && chargeAt <= today) {
+    const charge = new Date(chargeAt);
+    const todayDate = new Date(today);
+    const diffMs = todayDate.getTime() - charge.getTime();
+    const daysOverdue = Math.max(0, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+    row.is_overdue = true;
+    row.days_overdue = daysOverdue;
+    row.overdue_since = chargeAt;
+  } else {
+    row.is_overdue = false;
+    row.days_overdue = null;
+    row.overdue_since = null;
+  }
+
+  return row;
+}
+
+/**
+ * Garante contato para assinatura (busca por email/telefone ou cria). Retorna contact_id.
+ */
+export async function ensureContactForSubscription(
+  email: string,
+  phone: string,
+  contactName?: string | null
+): Promise<string | null> {
+  if (!email && !phone) return null;
+  const result = await applyParsedTransactionToContacts({
+    email,
+    phone,
+    products: [],
+    situation: 'subscription',
+  });
+  if (result.contact_ids.length > 0) return result.contact_ids[0];
+
+  const channelId = await getOrCreateGuruChannel();
+  if (!channelId) return null;
+  const externalId = email || (phone ? normalizePhoneCanonical(phone) : '') || phone;
+  const name = contactName?.trim() || null;
+  const digitalGuru: DigitalGuruMetadata = {
+    is_student: true,
+    products: [],
+    situation: 'subscription',
+    last_sync_at: new Date().toISOString(),
+  };
+
+  const { data: newContact, error } = await supabaseAdmin
+    .from('contacts')
+    .insert({
+      channel_type: 'guru',
+      external_id: externalId,
+      name: name || undefined,
+      email: email || undefined,
+      phone: phone || undefined,
+      metadata: { digital_guru: digitalGuru },
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    if ((error as { code?: string }).code === '23505') {
+      const { data: existing } = await supabaseAdmin
+        .from('contacts')
+        .select('id')
+        .eq('channel_type', 'guru')
+        .eq('external_id', externalId)
+        .limit(1)
+        .maybeSingle();
+      return existing?.id ?? null;
+    }
+    return null;
+  }
+  return newContact?.id ?? null;
+}
+
+/** Upsert de assinatura na tabela guru_subscriptions (por subscription_id). */
+export async function upsertGuruSubscription(row: GuruSubscriptionInsert): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  const payload = {
+    ...row,
+    updated_at: updatedAt,
+  };
+  const { error } = await supabaseAdmin
+    .from('guru_subscriptions')
+    .upsert(payload, {
+      onConflict: 'subscription_id',
+      ignoreDuplicates: false,
+    });
+
+  if (error) {
+    console.error('[Digital Guru] Erro ao upsert guru_subscriptions:', error);
+    throw error;
+  }
+}
