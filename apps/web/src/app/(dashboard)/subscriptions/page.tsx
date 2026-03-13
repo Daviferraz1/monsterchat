@@ -156,7 +156,7 @@ function buildAddressFull(s: SubscriptionItem): string {
 
 export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
-  const [stats, setStats] = useState<Stats>({ total: 0, overdue_count: 0, active_count: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, overdue_count: 0, active_count: 0, cycles_paid_count: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [overdueOnly, setOverdueOnly] = useState(false);
