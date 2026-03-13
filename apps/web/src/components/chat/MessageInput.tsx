@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSendMessage } from '@/hooks/useSendMessage';
-import { Send, Smile, Paperclip, Mic, Video, Loader2 } from 'lucide-react';
+import { useSuggestion } from '@/hooks/useSuggestion';
+import { Send, Smile, Paperclip, Mic, Video, Loader2, MessageCircle, Check, Plus } from 'lucide-react';
 
 const EMOJIS = [
   '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂',
@@ -11,8 +12,13 @@ const EMOJIS = [
   '👋', '🙌', '👏', '🤝', '🙏', '✅', '❌', '⭐', '🔥', '💯',
 ];
 
+const TEXTAREA_MIN_HEIGHT = 40;
+const TEXTAREA_MAX_HEIGHT = 200;
+
 interface MessageInputProps {
   conversationId: string;
+  lastInboundBody?: string | null;
+  suggestionEnabled?: boolean;
 }
 
 type SpellMenu = {
@@ -23,10 +29,15 @@ type SpellMenu = {
   length: number;
 };
 
-export function MessageInput({ conversationId }: MessageInputProps) {
+export function MessageInput({
+  conversationId,
+  lastInboundBody = null,
+  suggestionEnabled = false,
+}: MessageInputProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [spellMenu, setSpellMenu] = useState<SpellMenu | null>(null);
   const [spellLoading, setSpellLoading] = useState(false);
   const [spellLoadingAt, setSpellLoadingAt] = useState<{ x: number; y: number } | null>(null);
@@ -35,11 +46,32 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const spellMenuRef = useRef<HTMLDivElement>(null);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const { sendMessage, uploadAndSendMedia, sending, uploading } = useSendMessage();
+  const { result: suggestionResult, loading: suggestionLoading, fetchSuggestion, clear: clearSuggestion } = useSuggestion();
   const busy = sending || uploading;
 
   const closeSpellMenu = useCallback(() => setSpellMenu(null), []);
+
+  useEffect(() => {
+    if (suggestionEnabled && lastInboundBody?.trim()) {
+      fetchSuggestion(lastInboundBody.trim());
+    } else {
+      clearSuggestion();
+    }
+  }, [suggestionEnabled, lastInboundBody, fetchSuggestion, clearSuggestion]);
+
+  // Auto-expand textarea conforme o texto (até TEXTAREA_MAX_HEIGHT)
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const h = Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT);
+    ta.style.height = `${Math.max(TEXTAREA_MIN_HEIGHT, h)}px`;
+    if (h >= TEXTAREA_MAX_HEIGHT) ta.style.overflowY = 'auto';
+    else ta.style.overflowY = 'hidden';
+  }, [text]);
 
   useEffect(() => {
     if (!spellMenu) return;
@@ -53,6 +85,19 @@ export function MessageInput({ conversationId }: MessageInputProps) {
       document.removeEventListener('click', onDocClick);
     };
   }, [spellMenu, closeSpellMenu]);
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (attachMenuRef.current?.contains(e.target as Node)) return;
+      setAttachMenuOpen(false);
+    };
+    const t = setTimeout(() => document.addEventListener('click', onDocClick), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDocClick);
+    };
+  }, [attachMenuOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,8 +184,41 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     ? error.match(/https:\/\/www\.meta\.com\/debug[^\s)]*/)?.[0]
     : null;
 
+  const applyIASuggestion = useCallback(() => {
+    if (suggestionResult?.suggestion) {
+      setText(suggestionResult.suggestion);
+      clearSuggestion();
+      textareaRef.current?.focus();
+    }
+  }, [suggestionResult?.suggestion, clearSuggestion]);
+
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="border-t p-3 sm:p-4 shrink-0">
+      {suggestionEnabled && (suggestionLoading || suggestionResult?.suggestion) && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/5 p-2.5 text-sm">
+          <MessageCircle className="w-4 h-4 shrink-0 text-[#7c3aed]" />
+          {suggestionLoading ? (
+            <span className="flex-1 text-muted-foreground flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Buscando sugestão na base de conhecimento...
+            </span>
+          ) : suggestionResult?.suggestion ? (
+            <>
+              <span className="flex-1 line-clamp-2 text-foreground">
+                {suggestionResult.suggestion}
+              </span>
+              <button
+                type="button"
+                onClick={applyIASuggestion}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7c3aed] text-white hover:bg-[#6d28d9] font-medium text-xs"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Usar
+              </button>
+            </>
+          ) : null}
+        </div>
+      )}
       {error && (
         <div className="mb-2 text-sm text-red-600" role="alert">
           <p className="whitespace-pre-line">{error}</p>
@@ -159,41 +237,6 @@ export function MessageInput({ conversationId }: MessageInputProps) {
       <div className="flex gap-2 items-end">
         <div className="flex flex-col flex-1 min-w-0 relative">
           <div className="flex gap-0.5 sm:gap-1 items-center border rounded-xl bg-background">
-            <div className="relative flex-shrink-0">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setEmojiOpen((o) => !o);
-                }}
-                className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
-                title="Emojis"
-                aria-label="Abrir emojis"
-                aria-expanded={emojiOpen}
-              >
-                <Smile className="w-5 h-5" />
-              </button>
-              {emojiOpen && (
-                <div
-                  className="absolute bottom-full left-0 mb-2 p-3 min-w-[280px] w-max max-w-[min(320px,100vw)] bg-popover border rounded-xl shadow-xl grid grid-cols-10 gap-1 max-h-44 overflow-y-auto z-[100]"
-                  role="listbox"
-                  style={{ width: 'max-content' }}
-                >
-                  {EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      className="p-1.5 text-xl hover:bg-muted rounded-md transition-colors"
-                      onClick={() => insertEmoji(emoji)}
-                      role="option"
-                      aria-selected={false}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -217,37 +260,98 @@ export function MessageInput({ conversationId }: MessageInputProps) {
               className="hidden"
               onChange={handleFile}
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
-              title="Anexar arquivo ou imagem"
-              aria-label="Anexar"
-              disabled={busy}
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => audioInputRef.current?.click()}
-              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
-              title="Enviar áudio"
-              aria-label="Áudio"
-              disabled={busy}
-            >
-              <Mic className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => videoInputRef.current?.click()}
-              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
-              title="Enviar vídeo"
-              aria-label="Vídeo"
-              disabled={busy}
-            >
-              <Video className="w-5 h-5" />
-            </button>
-            <div lang="pt-BR" className="flex-1 min-w-0 flex">
+            <div className="relative flex-shrink-0" ref={attachMenuRef}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setAttachMenuOpen((o) => !o);
+                  setEmojiOpen(false);
+                }}
+                className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
+                title="Anexar, emojis, áudio, vídeo"
+                aria-label="Expandir opções"
+                aria-expanded={attachMenuOpen}
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+              {attachMenuOpen && (
+                <div className="absolute bottom-full left-0 mb-2 flex gap-1 p-2 rounded-xl bg-popover border shadow-xl z-[100]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachMenuOpen(false);
+                      setEmojiOpen(true);
+                    }}
+                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                    title="Emojis"
+                    aria-label="Emojis"
+                  >
+                    <Smile className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setAttachMenuOpen(false);
+                    }}
+                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                    title="Anexar arquivo ou imagem"
+                    aria-label="Anexar"
+                    disabled={busy}
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      audioInputRef.current?.click();
+                      setAttachMenuOpen(false);
+                    }}
+                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                    title="Enviar áudio"
+                    aria-label="Áudio"
+                    disabled={busy}
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      videoInputRef.current?.click();
+                      setAttachMenuOpen(false);
+                    }}
+                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                    title="Enviar vídeo"
+                    aria-label="Vídeo"
+                    disabled={busy}
+                  >
+                    <Video className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+              {emojiOpen && (
+                <div
+                  className="absolute bottom-full left-0 mb-2 p-3 min-w-[280px] w-max max-w-[min(320px,100vw)] bg-popover border rounded-xl shadow-xl grid grid-cols-10 gap-1 max-h-44 overflow-y-auto z-[100]"
+                  role="listbox"
+                  style={{ width: 'max-content' }}
+                >
+                  {EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      className="p-1.5 text-xl hover:bg-muted rounded-md transition-colors"
+                      onClick={() => insertEmoji(emoji)}
+                      role="option"
+                      aria-selected={false}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div lang="pt-BR" className="flex-1 min-w-0 flex items-end">
               <textarea
                 ref={textareaRef}
                 value={text}
@@ -258,7 +362,8 @@ export function MessageInput({ conversationId }: MessageInputProps) {
                 onContextMenu={handleContextMenu}
                 onBlur={() => setTimeout(() => setEmojiOpen(false), 150)}
                 placeholder="Digite uma mensagem..."
-                className="flex-1 min-h-[40px] max-h-32 py-2 px-2 border-0 bg-transparent resize-none focus:outline-none focus:ring-0"
+                className="flex-1 w-full min-h-[40px] py-2.5 px-3 border-0 bg-transparent resize-none focus:outline-none focus:ring-0 placeholder:text-muted-foreground text-foreground leading-normal"
+                style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
                 disabled={busy}
                 rows={1}
                 spellCheck

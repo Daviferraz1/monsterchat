@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package } from 'lucide-react';
+import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle } from 'lucide-react';
 
 interface IAStats {
   conversationsAnalyzed: number;
@@ -12,6 +12,7 @@ interface IAStats {
 
 export default function IAPage() {
   const [enabled, setEnabled] = useState(false);
+  const [suggestionEnabled, setSuggestionEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export default function IAPage() {
 
       if (!autopilotRes.ok) throw new Error(autopilotData.error || 'Falha ao carregar');
       setEnabled(autopilotData.enabled === true);
+      setSuggestionEnabled(autopilotData.suggestionEnabled === true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -47,7 +49,7 @@ export default function IAPage() {
     load();
   }, []);
 
-  const handleToggle = async () => {
+  const handleToggleAutopilot = async () => {
     setSaving(true);
     setError(null);
     try {
@@ -58,7 +60,26 @@ export default function IAPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
-      setEnabled(!enabled);
+      setEnabled(data.enabled === true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleSuggestion = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/ia/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suggestionEnabled: !suggestionEnabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      setSuggestionEnabled(data.suggestionEnabled === true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -131,7 +152,10 @@ export default function IAPage() {
 
         <div className="mt-8 space-y-6">
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Piloto automático</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <Bot className="w-5 h-5 text-[#7c3aed]" />
+              IA responde
+            </h2>
             <p className="text-gray-600 text-sm mb-4">
               Quando ativo, a IA responde direto ao aluno no WhatsApp (com base no catálogo e nas regras de atendimento). Se o operador enviar uma mensagem manual, a IA para de responder naquela conversa até ser reativada.
             </p>
@@ -145,7 +169,7 @@ export default function IAPage() {
                 <input
                   type="checkbox"
                   checked={enabled}
-                  onChange={handleToggle}
+                  onChange={handleToggleAutopilot}
                   disabled={saving}
                   className="rounded border-gray-400 bg-white text-[#7c3aed] focus:ring-[#7c3aed]"
                 />
@@ -159,6 +183,36 @@ export default function IAPage() {
               <p className="mt-3 text-sm text-red-600" role="alert">
                 {error}
               </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-[#7c3aed]" />
+              Sugestão de mensagem
+            </h2>
+            <p className="text-gray-600 text-sm mb-4">
+              Quando ativo, o atendente vê sugestões de resposta no chat com base na última mensagem do lead e na base de conhecimento. O atendente escolhe se usa ou não a sugestão.
+            </p>
+            {loading ? (
+              <div className="flex items-center gap-2 text-gray-600">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Carregando...
+              </div>
+            ) : (
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={suggestionEnabled}
+                  onChange={handleToggleSuggestion}
+                  disabled={saving}
+                  className="rounded border-gray-400 bg-white text-[#7c3aed] focus:ring-[#7c3aed]"
+                />
+                <span className="text-gray-900 font-medium">
+                  {suggestionEnabled ? 'Sugestão ativa' : 'Sugestão desativada'}
+                </span>
+                {saving && <Loader2 className="w-4 h-4 animate-spin text-gray-500" />}
+              </label>
             )}
           </div>
 

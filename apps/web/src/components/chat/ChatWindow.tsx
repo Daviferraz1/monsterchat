@@ -14,7 +14,7 @@ export function ChatWindow() {
   const params = useParams();
   const conversationId = params?.id as string | null;
   const supabase = useSupabase();
-  const { enabled: autopilotEnabled } = useAutopilot();
+  const { enabled: autopilotEnabled, suggestionEnabled } = useAutopilot();
   const { messages, refresh } = useRealtimeMessages(conversationId);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -112,7 +112,11 @@ export function ChatWindow() {
           <MessageBubble key={message.id} message={message} />
         ))}
       </div>
-      <MessageInput conversationId={conversationId} />
+      <MessageInput
+        conversationId={conversationId}
+        lastInboundBody={lastInboundBody}
+        suggestionEnabled={suggestionEnabled}
+      />
     </div>
   );
 }

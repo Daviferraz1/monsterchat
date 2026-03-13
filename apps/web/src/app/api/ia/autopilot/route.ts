@@ -1,25 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isAutopilotEnabled, setAutopilotEnabled } from '@/lib/api/ia/autopilot';
+import {
+  isAutopilotEnabled,
+  setAutopilotEnabled,
+  isSuggestionEnabled,
+  setSuggestionEnabled,
+} from '@/lib/api/ia/autopilot';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const enabled = await isAutopilotEnabled();
-    return NextResponse.json({ enabled });
+    const [enabled, suggestionEnabled] = await Promise.all([
+      isAutopilotEnabled(),
+      isSuggestionEnabled(),
+    ]);
+    return NextResponse.json({ enabled, suggestionEnabled });
   } catch (err) {
     console.error('[API ia/autopilot GET]', err);
-    // Se a tabela ia_settings não existir ainda, retorna desligado em vez de 500
-    return NextResponse.json({ enabled: false });
+    return NextResponse.json({ enabled: false, suggestionEnabled: false });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const enabled = body.enabled === true;
-    await setAutopilotEnabled(enabled);
-    return NextResponse.json({ enabled });
+    if (typeof body.enabled === 'boolean') {
+      await setAutopilotEnabled(body.enabled);
+    }
+    if (typeof body.suggestionEnabled === 'boolean') {
+      await setSuggestionEnabled(body.suggestionEnabled);
+    }
+    const [enabled, suggestionEnabled] = await Promise.all([
+      isAutopilotEnabled(),
+      isSuggestionEnabled(),
+    ]);
+    return NextResponse.json({ enabled, suggestionEnabled });
   } catch (err) {
     console.error('[API ia/autopilot POST]', err);
     return NextResponse.json({ error: 'Erro ao salvar configuração' }, { status: 500 });
