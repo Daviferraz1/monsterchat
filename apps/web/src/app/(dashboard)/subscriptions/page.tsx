@@ -43,6 +43,7 @@ interface SubscriptionItem {
   subscriber_address_country: string | null;
   last_status: string | null;
   current_invoice_id: string | null;
+  current_invoice_cycle: number | null;
   current_invoice_status: string | null;
   current_invoice_charge_at: string | null;
   current_invoice_value: number | null;
@@ -80,6 +81,7 @@ interface Stats {
   total: number;
   overdue_count: number;
   active_count: number;
+  cycles_paid_count: number;
 }
 
 function formatPhoneDisplay(phone: string | null | undefined): string {
@@ -162,6 +164,17 @@ export default function SubscriptionsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [copiedSubscriptionId, setCopiedSubscriptionId] = useState<string | null>(null);
+
+  const copyPaymentLink = (url: string, subscriptionId: string) => {
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopiedSubscriptionId(subscriptionId);
+        setTimeout(() => setCopiedSubscriptionId(null), 2000);
+      },
+      () => setCopiedSubscriptionId(null)
+    );
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 400);
@@ -183,7 +196,7 @@ export default function SubscriptionsPage() {
       })
       .then((data) => {
         setSubscriptions(data.subscriptions ?? []);
-        setStats(data.stats ?? { total: 0, overdue_count: 0, active_count: 0 });
+        setStats(data.stats ?? { total: 0, overdue_count: 0, active_count: 0, cycles_paid_count: 0 });
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Erro'))
       .finally(() => setLoading(false));
@@ -208,7 +221,7 @@ export default function SubscriptionsPage() {
         </p>
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 shrink-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 shrink-0">
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Total de assinaturas</p>
             <p className="text-2xl font-bold text-white">{stats.total}</p>
@@ -216,14 +229,20 @@ export default function SubscriptionsPage() {
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
             <p className="text-xs font-medium text-amber-400/90 uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <AlertTriangle className="w-4 h-4" />
-              Em atraso
+              Ciclos em atraso
             </p>
             <p className="text-2xl font-bold text-amber-400">{stats.overdue_count}</p>
-            <p className="text-xs text-gray-500 mt-1">Recorrências com pagamento vencido</p>
+            <p className="text-xs text-gray-500 mt-1">Assinaturas com fatura atual vencida (para cobrança)</p>
           </div>
           <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4">
-            <p className="text-xs font-medium text-green-400/90 uppercase tracking-wider mb-1">Ativas</p>
-            <p className="text-2xl font-bold text-green-400">{stats.active_count}</p>
+            <p className="text-xs font-medium text-green-400/90 uppercase tracking-wider mb-1">Ciclo atual pago</p>
+            <p className="text-2xl font-bold text-green-400">{stats.cycles_paid_count}</p>
+            <p className="text-xs text-gray-500 mt-1">Fatura do ciclo atual já paga</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status ativo</p>
+            <p className="text-2xl font-bold text-white">{stats.active_count}</p>
+            <p className="text-xs text-gray-500 mt-1">Assinaturas ativas (last_status = active)</p>
           </div>
         </div>
 
@@ -294,11 +313,12 @@ export default function SubscriptionsPage() {
                     <th className="py-3 px-4">Cliente</th>
                     <th className="py-3 px-4">Contato</th>
                     <th className="py-3 px-4">Produto</th>
+                    <th className="py-3 px-4">Ciclo</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Fatura</th>
                     <th className="py-3 px-4">Vencimento</th>
                     <th className="py-3 px-4">Dias atraso</th>
-                    <th className="py-3 px-4 min-w-[140px]">Ação</th>
+                    <th className="py-3 px-4 min-w-[180px]">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -339,6 +359,17 @@ export default function SubscriptionsPage() {
                           </span>
                           {s.offer_name && (
                             <span className="text-xs text-gray-500 block mt-0.5">{s.offer_name}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-gray-300">
+                            {s.current_invoice_cycle != null ? `Ciclo ${s.current_invoice_cycle}` : '—'}
+                          </span>
+                          {s.charged_times != null && (
+                            <span className="text-xs text-gray-500 block mt-0.5">{s.charged_times} cobrança(s) realizada(s)</span>
+                          )}
+                          {s.is_overdue && (
+                            <span className="text-amber-400 text-xs font-medium block mt-0.5">1 em atraso</span>
                           )}
                         </td>
                         <td className="py-3 px-4">
@@ -385,6 +416,27 @@ export default function SubscriptionsPage() {
                             >
                               {expandedId === s.id ? 'Menos' : 'Detalhes'}
                             </button>
+                            {s.current_invoice_payment_url && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => copyPaymentLink(s.current_invoice_payment_url!, s.id)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-400 hover:bg-amber-500/10"
+                                  title="Copiar link da fatura para enviar ao cliente (WhatsApp, e-mail, etc.)"
+                                >
+                                  {copiedSubscriptionId === s.id ? 'Copiado!' : 'Copiar link'}
+                                </button>
+                                <a
+                                  href={s.current_invoice_payment_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-green-400 hover:underline"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  Abrir pagamento
+                                </a>
+                              </>
+                            )}
                             {s.conversation_id && (
                               <Link
                                 href={`/inbox/${s.conversation_id}`}
@@ -394,23 +446,12 @@ export default function SubscriptionsPage() {
                                 Conversa
                               </Link>
                             )}
-                            {s.current_invoice_payment_url && (
-                              <a
-                                href={s.current_invoice_payment_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-green-400 hover:underline"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                Pagar
-                              </a>
-                            )}
                           </div>
                         </td>
                       </tr>
                       {expandedId === s.id && (
                         <tr className="border-b border-white/5 bg-white/[0.02]">
-                          <td colSpan={9} className="py-4 px-4">
+                          <td colSpan={10} className="py-4 px-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                               <div className="space-y-3">
                                 <h4 className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-2">
@@ -449,15 +490,39 @@ export default function SubscriptionsPage() {
                                     <span className="text-gray-300">{s.product_name || '—'}</span>
                                   </div>
                                   <div>
-                                    <span className="text-gray-500 block text-xs">Ciclo</span>
+                                    <span className="text-gray-500 block text-xs">Ciclo atual</span>
+                                    <span className="text-gray-300">
+                                      {s.current_invoice_cycle != null ? `Ciclo ${s.current_invoice_cycle}` : '—'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 block text-xs">Cobrança</span>
                                     <span className="text-gray-300">
                                       {s.charged_every_days ? `A cada ${s.charged_every_days} dia(s)` : '—'}
+                                      {s.charged_times != null && ` · ${s.charged_times} cobrança(s) realizada(s)`}
                                     </span>
                                   </div>
                                   <div>
                                     <span className="text-gray-500 block text-xs">Próximo ciclo</span>
                                     <span className="text-gray-300">{formatDate(s.next_cycle_at)}</span>
                                   </div>
+                                  {s.current_invoice_payment_url && (
+                                    <div className="w-full">
+                                      <span className="text-gray-500 block text-xs mb-1">Link da fatura (enviar ao cliente)</span>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <code className="text-xs text-gray-400 truncate max-w-md block bg-white/5 px-2 py-1 rounded">
+                                          {s.current_invoice_payment_url}
+                                        </code>
+                                        <button
+                                          type="button"
+                                          onClick={() => copyPaymentLink(s.current_invoice_payment_url!, s.id)}
+                                          className="text-xs text-amber-400 hover:underline"
+                                        >
+                                          {copiedSubscriptionId === s.id ? 'Copiado!' : 'Copiar'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                   <div>
                                     <span className="text-gray-500 block text-xs">Meio de pagamento</span>
                                     <span className="text-gray-300">{s.payment_method || '—'}</span>

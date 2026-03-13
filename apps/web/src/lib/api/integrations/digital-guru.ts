@@ -365,9 +365,6 @@ export async function ensureContactForSale(
     return { contact_id: result.contact_ids[0], updated: result.updated };
   }
 
-  const channelId = await getOrCreateGuruChannel();
-  if (!channelId) return { contact_id: null, updated: 0 };
-
   const externalId = parsed.email || (parsed.phone ? normalizePhoneCanonical(parsed.phone) : '') || parsed.phone;
   const name = options?.contactName?.trim() || null;
   const digitalGuru: DigitalGuruMetadata = {
@@ -419,15 +416,7 @@ export async function ensureContactForSale(
 
   if (!newContact?.id) return { contact_id: null, updated: 0 };
 
-  const { error: convError } = await supabaseAdmin.from('conversations').insert({
-    channel_id: channelId,
-    contact_id: newContact.id,
-    status: 'open',
-  });
-  if (convError) {
-    console.error('[Digital Guru] Erro ao criar conversa do contato Guru:', convError);
-  }
-
+  // Não criar conversa: apenas unificar/criar contato com dados da compra. A conversa será criada quando o atendente iniciar contato (ex.: WhatsApp) ou quando o canal receber mensagem.
   return { contact_id: newContact.id, updated: 0 };
 }
 
@@ -507,6 +496,7 @@ export interface GuruSubscriptionInsert {
   subscriber_address_country?: string | null;
   last_status?: string | null;
   current_invoice_id?: string | null;
+  current_invoice_cycle?: number | null;
   current_invoice_status?: string | null;
   current_invoice_charge_at?: string | null;
   current_invoice_value?: number | null;
@@ -604,6 +594,12 @@ export function parseGuruSubscriptionWebhook(body: Record<string, unknown>): Gur
     subscriber_address_country: subscriber && subscriber.address_country != null ? String(subscriber.address_country) : null,
     last_status: body.last_status != null ? String(body.last_status) : null,
     current_invoice_id: currentInvoice && currentInvoice.id != null ? String(currentInvoice.id) : null,
+    current_invoice_cycle:
+      currentInvoice && typeof currentInvoice.cycle === 'number'
+        ? currentInvoice.cycle
+        : currentInvoice?.cycle != null
+          ? parseInt(String(currentInvoice.cycle), 10)
+          : null,
     current_invoice_status: invoiceStatus,
     current_invoice_charge_at: chargeAt,
     current_invoice_value: currentInvoiceValue,
@@ -670,8 +666,6 @@ export async function ensureContactForSubscription(
   });
   if (result.contact_ids.length > 0) return result.contact_ids[0];
 
-  const channelId = await getOrCreateGuruChannel();
-  if (!channelId) return null;
   const externalId = email || (phone ? normalizePhoneCanonical(phone) : '') || phone;
   const name = contactName?.trim() || null;
   const digitalGuru: DigitalGuruMetadata = {

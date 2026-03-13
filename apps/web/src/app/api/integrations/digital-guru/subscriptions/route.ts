@@ -4,7 +4,9 @@ import { supabaseAdmin } from '@/lib/api/supabase';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const COLS =
+const COLS_WITH_CYCLE =
+  'id, subscription_id, internal_id, subscription_code, contact_id, subscriber_email, subscriber_name, subscriber_doc, subscriber_phone, subscriber_phone_local_code, subscriber_address, subscriber_address_number, subscriber_address_comp, subscriber_address_district, subscriber_address_city, subscriber_address_state, subscriber_address_zip_code, subscriber_address_country, last_status, current_invoice_id, current_invoice_cycle, current_invoice_status, current_invoice_charge_at, current_invoice_value, current_invoice_period_start, current_invoice_period_end, current_invoice_payment_url, product_id, product_name, offer_id, offer_name, next_cycle_at, cycle_end_date, cycle_start_date, started_at, last_status_at, canceled_at, cancel_at_cycle_end, cancel_reason, cancelled_by_name, cancelled_by_email, cancelled_by_date, payment_method, charged_every_days, charged_times, next_cycle_value, is_overdue, days_overdue, overdue_since, created_at, updated_at';
+const COLS_WITHOUT_CYCLE =
   'id, subscription_id, internal_id, subscription_code, contact_id, subscriber_email, subscriber_name, subscriber_doc, subscriber_phone, subscriber_phone_local_code, subscriber_address, subscriber_address_number, subscriber_address_comp, subscriber_address_district, subscriber_address_city, subscriber_address_state, subscriber_address_zip_code, subscriber_address_country, last_status, current_invoice_id, current_invoice_status, current_invoice_charge_at, current_invoice_value, current_invoice_period_start, current_invoice_period_end, current_invoice_payment_url, product_id, product_name, offer_id, offer_name, next_cycle_at, cycle_end_date, cycle_start_date, started_at, last_status_at, canceled_at, cancel_at_cycle_end, cancel_reason, cancelled_by_name, cancelled_by_email, cancelled_by_date, payment_method, charged_every_days, charged_times, next_cycle_value, is_overdue, days_overdue, overdue_since, created_at, updated_at';
 
 /**
@@ -38,7 +40,12 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('last_status', 'active');
 
-    let q = supabaseAdmin.from('guru_subscriptions').select(COLS);
+    const { count: cyclesPaidCount } = await supabaseAdmin
+      .from('guru_subscriptions')
+      .select('*', { count: 'exact', head: true })
+      .in('current_invoice_status', ['paid', 'approved']);
+
+    let q = supabaseAdmin.from('guru_subscriptions').select(COLS_WITH_CYCLE);
     if (overdueOnly) q = q.eq('is_overdue', true);
     if (statusParam) q = q.ilike('last_status', statusParam);
     if (contactIdParam) q = q.eq('contact_id', contactIdParam);
@@ -55,12 +62,38 @@ export async function GET(request: NextRequest) {
       if (digits.length >= 2) orParts.push(`subscriber_phone.ilike.%${digits}%`);
       q = q.or(orParts.join(','));
     }
-    const { data: rows, error } = await q
+    let result = await q
       .order('is_overdue', { ascending: false })
       .order('overdue_since', { ascending: true, nullsFirst: false })
       .order('updated_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
+    if (result.error && /column.*does not exist|current_invoice_cycle/i.test(String(result.error.message))) {
+      q = supabaseAdmin.from('guru_subscriptions').select(COLS_WITHOUT_CYCLE);
+      if (overdueOnly) q = q.eq('is_overdue', true);
+      if (statusParam) q = q.ilike('last_status', statusParam);
+      if (contactIdParam) q = q.eq('contact_id', contactIdParam);
+      if (searchParam.length >= 2) {
+        const escaped = searchParam.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+        const digits = searchParam.replace(/\D/g, '');
+        const orParts = [
+          `subscriber_email.ilike.%${escaped}%`,
+          `subscriber_name.ilike.%${escaped}%`,
+          `subscriber_doc.ilike.%${escaped}%`,
+          `subscriber_phone.ilike.%${escaped}%`,
+          `product_name.ilike.%${escaped}%`,
+        ];
+        if (digits.length >= 2) orParts.push(`subscriber_phone.ilike.%${digits}%`);
+        q = q.or(orParts.join(','));
+      }
+      result = await q
+        .order('is_overdue', { ascending: false })
+        .order('overdue_since', { ascending: true, nullsFirst: false })
+        .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+    }
+
+    const { data: rows, error } = result;
     if (error) {
       console.error('[Digital Guru subscriptions] Erro:', error);
       return NextResponse.json(
@@ -97,6 +130,7 @@ export async function GET(request: NextRequest) {
         total: totalCount ?? 0,
         overdue_count: overdueCount ?? 0,
         active_count: activeCount ?? 0,
+        cycles_paid_count: cyclesPaidCount ?? 0,
       },
     });
   } catch (err) {
