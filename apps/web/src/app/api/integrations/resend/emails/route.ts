@@ -9,10 +9,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '20', 10)));
     const after = searchParams.get('after') ?? undefined;
-    const { emails, hasMore } = await listResendEmails({ limit, after });
-    return NextResponse.json({ emails, hasMore });
+    const { emails, hasMore, configured } = await listResendEmails({ limit, after });
+    return NextResponse.json({ emails, hasMore, configured });
   } catch (err) {
     console.error('[API resend/emails]', err);
-    return NextResponse.json({ error: 'Falha ao listar e-mails', emails: [], hasMore: false }, { status: 500 });
+    return NextResponse.json({ error: 'Falha ao listar e-mails', emails: [], hasMore: false, configured: false }, { status: 500 });
   }
 }

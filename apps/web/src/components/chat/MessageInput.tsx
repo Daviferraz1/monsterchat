@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSendMessage } from '@/hooks/useSendMessage';
 import { useSuggestion } from '@/hooks/useSuggestion';
-import { Send, Smile, Paperclip, Mic, Video, Loader2, MessageCircle, Check, Plus } from 'lucide-react';
+import { Send, Smile, Paperclip, Mic, Video, Loader2, MessageCircle, Check, Plus, X, FileText } from 'lucide-react';
 
 const EMOJIS = [
   '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂',
@@ -14,6 +14,19 @@ const EMOJIS = [
 
 const TEXTAREA_MIN_HEIGHT = 40;
 const TEXTAREA_MAX_HEIGHT = 200;
+
+function PendingImagePreview({ file }: { file: File }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  if (!url) return <div className="w-14 h-14 rounded-lg bg-muted animate-pulse" />;
+  return (
+    <img src={url} alt="" className="w-14 h-14 object-cover rounded-lg" />
+  );
+}
 
 interface MessageInputProps {
   conversationId: string;
@@ -38,10 +51,12 @@ export function MessageInput({
   const [error, setError] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [spellMenu, setSpellMenu] = useState<SpellMenu | null>(null);
   const [spellLoading, setSpellLoading] = useState(false);
   const [spellLoadingAt, setSpellLoadingAt] = useState<{ x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageVideoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -102,7 +117,8 @@ export function MessageInput({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const messageSent = text.trim();
-    if (!messageSent || busy) return;
+    const hasFile = pendingFile != null;
+    if ((!messageSent && !hasFile) || busy) return;
     setError(null);
     const hadSuggestion = suggestionResult?.suggestion != null;
     const suggestionSnapshot = hadSuggestion
@@ -112,8 +128,14 @@ export function MessageInput({
         }
       : null;
     try {
-      await sendMessage(conversationId, messageSent);
-      setText('');
+      if (pendingFile) {
+        await uploadAndSendMedia(conversationId, pendingFile, messageSent);
+        setPendingFile(null);
+        setText('');
+      } else {
+        await sendMessage(conversationId, messageSent);
+        setText('');
+      }
       if (suggestionSnapshot) {
         const wasUsed = messageSent === suggestionSnapshot.suggestion?.trim();
         const confidenceMap = { high: 0.9, medium: 0.5, low: 0.2, none: 0 } as const;
@@ -147,17 +169,50 @@ export function MessageInput({
     if (error) setError(null);
   };
 
+  const isImageOrVideo = (f: File) => {
+    const t = f.type.toLowerCase();
+    return t.startsWith('image/') || t.startsWith('video/');
+  };
+
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
     setError(null);
+    if (isImageOrVideo(file)) {
+      setPendingFile(file);
+      return;
+    }
     try {
       await uploadAndSendMedia(conversationId, file, text);
       setText('');
     } catch (err) {
       console.error('Error uploading:', err);
       setError(err instanceof Error ? err.message : 'Falha ao enviar mídia.');
+    }
+  };
+
+  const handleImageVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setError(null);
+    setPendingFile(file);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file && isImageOrVideo(file)) {
+          e.preventDefault();
+          setError(null);
+          setPendingFile(file);
+          return;
+        }
+      }
     }
   };
 
@@ -264,15 +319,44 @@ export function MessageInput({
           )}
         </div>
       )}
+      {pendingFile && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border bg-muted/50 p-2">
+          {pendingFile.type.startsWith('image/') ? (
+            <PendingImagePreview file={pendingFile} />
+          ) : (
+            <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center">
+              <Video className="w-6 h-6 text-muted-foreground" />
+            </div>
+          )}
+          <span className="flex-1 text-sm text-muted-foreground truncate" title={pendingFile.name}>
+            {pendingFile.name}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPendingFile(null)}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+            aria-label="Remover anexo"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div className="flex gap-2 items-end">
         <div className="flex flex-col flex-1 min-w-0 relative">
           <div className="flex gap-0.5 sm:gap-1 items-center border rounded-xl bg-background">
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,.pdf,.doc,.docx"
+              accept="image/*,video/*,.pdf,.doc,.docx"
               className="hidden"
               onChange={handleFile}
+            />
+            <input
+              ref={imageVideoInputRef}
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={handleImageVideoSelect}
             />
             <input
               ref={audioInputRef}
@@ -322,15 +406,28 @@ export function MessageInput({
                   <button
                     type="button"
                     onClick={() => {
+                      imageVideoInputRef.current?.click();
+                      setAttachMenuOpen(false);
+                    }}
+                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                    title="Anexar imagem ou vídeo (envia ao clicar em Enviar)"
+                    aria-label="Anexar imagem ou vídeo"
+                    disabled={busy}
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
                       fileInputRef.current?.click();
                       setAttachMenuOpen(false);
                     }}
                     className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
-                    title="Anexar arquivo ou imagem"
-                    aria-label="Anexar"
+                    title="Anexar documento (PDF, etc.) — envia na hora"
+                    aria-label="Anexar documento"
                     disabled={busy}
                   >
-                    <Paperclip className="w-5 h-5" />
+                    <FileText className="w-5 h-5" />
                   </button>
                   <button
                     type="button"
@@ -389,9 +486,10 @@ export function MessageInput({
                   setText(e.target.value);
                   if (error) setError(null);
                 }}
+                onPaste={handlePaste}
                 onContextMenu={handleContextMenu}
                 onBlur={() => setTimeout(() => setEmojiOpen(false), 150)}
-                placeholder="Digite uma mensagem..."
+                placeholder={pendingFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
                 className="flex-1 w-full min-h-[40px] py-2.5 px-3 border-0 bg-transparent resize-none focus:outline-none focus:ring-0 placeholder:text-muted-foreground text-foreground leading-normal"
                 style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
                 disabled={busy}
@@ -405,7 +503,7 @@ export function MessageInput({
         </div>
         <button
           type="submit"
-          disabled={!text.trim() || busy}
+          disabled={(!text.trim() && !pendingFile) || busy}
           className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-primary text-primary-foreground rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           aria-label="Enviar"
         >

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../supabase';
 import { getMatchingProducts } from './catalog';
 import type { ProductRow } from './catalog';
 import { apiEnv } from '../env';
+import { getCredentialsByEmail } from '../contacts-credentials';
 
 function similarityToConfidence(similarity: number): 'high' | 'medium' | 'low' | 'none' {
   if (similarity >= 0.5) return 'high';
@@ -69,6 +70,43 @@ function wrapWithGreeting(text: string | null, contactName: string | undefined):
   const lead = greeting(contactName);
   if (!lead) return text;
   return lead + text.trim();
+}
+
+/** Detecta se o lead está dizendo que não recebeu o acesso (curso/preparatório). */
+function isAskingAboutMissingAccess(text: string): boolean {
+  const t = text.toLowerCase().replace(/\s+/g, ' ');
+  return (
+    /\bnão\s+receb(eu|i)\s+(o\s+)?acesso\b/.test(t) ||
+    /\bnão\s+recebeu\s+(o\s+)?acesso\b/.test(t) ||
+    /\bnão\s+recebi\s+(o\s+)?acesso\s+do\s+curso\b/.test(t) ||
+    /\bnão\s+chegou\s+(o\s+)?acesso\b/.test(t) ||
+    /\bnão\s+receb(eu|i)\s+o\s+acesso\s+de\s+curso\b/.test(t) ||
+    /\bacesso\s+de\s+curso\s+preparat[oó]rio\b.*\bnão\s+receb/.test(t)
+  );
+}
+
+const SUGGESTION_ASK_EMAIL_ACCESS =
+  'Por favor, informe o e-mail que você usou na compra para localizarmos seu acesso.';
+
+/** Extrai o primeiro e-mail encontrado no texto. */
+function extractEmail(text: string): string | null {
+  const match = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+  return match ? match[0].trim().toLowerCase() : null;
+}
+
+/** Monta mensagem com os acessos (login/senha) por plataforma para o atendente enviar. */
+function formatAccessSuggestion(
+  credentials: Array<{ platformLabel: string; login: string; password: string }>
+): string {
+  const lines: string[] = ['Segue seu acesso:', ''];
+  for (const c of credentials) {
+    lines.push(`${c.platformLabel}:`);
+    lines.push(`Login: ${c.login}`);
+    lines.push(`Senha: ${c.password}`);
+    lines.push('');
+  }
+  lines.push('Qualquer dúvida, estamos à disposição!');
+  return lines.join('\n').trim();
 }
 
 /**
@@ -139,7 +177,36 @@ export async function getSuggestion(
     return { confidence: 'none', suggestion: null, category: null, alternatives: [] };
   }
 
+  const text = messageBody.trim();
+
   try {
+    // 1) Aluno disse que não recebeu o acesso → sugerir pedir o e-mail da compra
+    if (isAskingAboutMissingAccess(text)) {
+      return {
+        confidence: 'high',
+        suggestion: SUGGESTION_ASK_EMAIL_ACCESS,
+        category: 'acesso',
+        alternatives: [],
+      };
+    }
+
+    // 2) Mensagem contém um e-mail → buscar credenciais (Resend/contatos) e sugerir os acessos
+    const email = extractEmail(text);
+    if (email) {
+      const credentials = await getCredentialsByEmail(email);
+      if (credentials.length > 0) {
+        const suggestion = formatAccessSuggestion(
+          credentials.map((c) => ({ platformLabel: c.platformLabel, login: c.login, password: c.password }))
+        );
+        return {
+          confidence: 'high',
+          suggestion,
+          category: 'acesso',
+          alternatives: [],
+        };
+      }
+    }
+
     const [kbResult, matchingProducts] = await Promise.all([
       searchKnowledgeBase(messageBody, brand),
       getMatchingProducts(messageBody, brand),

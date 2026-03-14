@@ -41,29 +41,36 @@ function getClient(): Resend | null {
 export async function listResendEmails(options?: { limit?: number; after?: string }): Promise<{
   emails: ResendEmailListItem[];
   hasMore: boolean;
+  configured: boolean;
 }> {
   const resend = getClient();
-  if (!resend) return { emails: [], hasMore: false };
+  if (!resend) {
+    console.warn('[Resend] API key não configurada (RESEND_API_KEY vazio ou placeholder)');
+    return { emails: [], hasMore: false, configured: false };
+  }
   try {
     const { data, error } = await resend.emails.list({
       limit: options?.limit ?? 20,
       ...(options?.after && { after: options.after }),
     });
     if (error) {
-      console.warn('[Resend] list error', error);
-      return { emails: [], hasMore: false };
+      console.warn('[Resend] list error', error?.name, error?.message);
+      return { emails: [], hasMore: false, configured: true };
     }
     const payload = data as { data?: ResendEmailListItem[]; has_more?: boolean };
     const list = payload?.data ?? [];
     const arr = Array.isArray(list) ? list : [];
+    if (arr.length === 0 && !options?.after) {
+      console.warn('[Resend] list retornou 0 e-mails. Verifique: 1) API key com permissão "Full access" (Resend > API Keys); 2) A key é da mesma conta onde os e-mails aparecem no dashboard.');
+    }
     const emails = arr.map((e) => ({
       ...e,
       to: Array.isArray(e.to) ? e.to : (e.to ? [String(e.to)] : []),
     }));
-    return { emails, hasMore: payload?.has_more === true };
+    return { emails, hasMore: payload?.has_more === true, configured: true };
   } catch (err) {
     console.error('[Resend] list', err);
-    return { emails: [], hasMore: false };
+    return { emails: [], hasMore: false, configured: true };
   }
 }
 

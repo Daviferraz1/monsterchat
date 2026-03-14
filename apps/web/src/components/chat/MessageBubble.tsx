@@ -41,9 +41,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           isOutbound
             ? 'bg-primary text-primary-foreground'
             : 'bg-muted text-foreground',
-          isOutbound && isFromIA && 'ring-1 ring-purple-400/50'
+          isOutbound && isFromIA && 'ring-1 ring-purple-400/50',
+          message.content_type === 'reaction' && 'px-3 py-1.5'
         )}
       >
+        {message.content_type === 'reaction' && (
+          <span className="text-2xl leading-none" title="Reação">
+            {message.body?.trim() || '❤️'}
+          </span>
+        )}
         {message.content_type === 'text' && (
           <p className="whitespace-pre-wrap">
             {message.direction === 'outbound' && !message.body?.trim()
@@ -62,10 +68,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {!message.media_url && message.content_type !== 'text' && message.content_type !== 'reaction' && (
           <p className="text-sm opacity-80">{message.body?.trim() || `[${message.content_type}]`}</p>
         )}
+        {message.content_type !== 'reaction' && (
         <span className="text-xs opacity-70 mt-1 block flex items-center gap-1.5">
           {isOutbound && isFromIA && <span className="text-[10px] opacity-90">🤖 IA</span>}
           {formatDate(message.created_at)}
         </span>
+        )}
       </div>
     </div>
   );

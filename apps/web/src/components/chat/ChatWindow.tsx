@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useSupabase } from '@/hooks/useSupabase';
 import { useAutopilot } from '@/hooks/useAutopilot';
@@ -17,6 +17,18 @@ export function ChatWindow() {
   const { enabled: autopilotEnabled, suggestionEnabled } = useAutopilot();
   const { messages, refresh } = useRealtimeMessages(conversationId);
   const [refreshing, setRefreshing] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Ao abrir a conversa ou receber novas mensagens, rolar até o final
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const scrollToBottom = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+    scrollToBottom();
+    requestAnimationFrame(scrollToBottom);
+  }, [conversationId, messages.length]);
 
   const lastInboundBody = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -107,7 +119,10 @@ export function ChatWindow() {
           </button>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 overscroll-behavior-contain">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 overscroll-behavior-contain"
+      >
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}

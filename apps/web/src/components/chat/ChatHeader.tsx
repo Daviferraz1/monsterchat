@@ -261,12 +261,10 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                       <div key={cred.platform} className="rounded-lg border border-gray-200 p-2 text-xs">
                         <span className="font-medium text-muted-foreground block mb-1">{cred.platformLabel}</span>
                         <p className="text-foreground break-all">Login: {cred.login}</p>
-                        <p className="text-foreground">Senha: ••••••••</p>
+                        <p className="text-foreground break-all">Senha: {cred.password}</p>
                         <button
                           type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(text);
-                          }}
+                          onClick={() => navigator.clipboard.writeText(text)}
                           className="mt-2 flex items-center gap-1 text-primary hover:underline"
                         >
                           <Copy className="w-3 h-3" />
