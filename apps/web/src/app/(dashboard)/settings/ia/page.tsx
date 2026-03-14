@@ -13,6 +13,8 @@ interface IAStats {
 export default function IAPage() {
   const [enabled, setEnabled] = useState(false);
   const [suggestionEnabled, setSuggestionEnabled] = useState(false);
+  const [suggestionAiEnabled, setSuggestionAiEnabled] = useState(true);
+  const [learnFromFeedbackUseAi, setLearnFromFeedbackUseAi] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,8 @@ export default function IAPage() {
       if (!autopilotRes.ok) throw new Error(autopilotData.error || 'Falha ao carregar');
       setEnabled(autopilotData.enabled === true);
       setSuggestionEnabled(autopilotData.suggestionEnabled === true);
+      setSuggestionAiEnabled(autopilotData.suggestionAiEnabled !== false);
+      setLearnFromFeedbackUseAi(autopilotData.learnFromFeedbackUseAi !== false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -80,6 +84,45 @@ export default function IAPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
       setSuggestionEnabled(data.suggestionEnabled === true);
+      if (data.suggestionAiEnabled !== undefined) setSuggestionAiEnabled(data.suggestionAiEnabled !== false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleSuggestionAI = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/ia/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suggestionAiEnabled: !suggestionAiEnabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      setSuggestionAiEnabled(data.suggestionAiEnabled !== false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleLearnFromFeedbackUseAi = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/ia/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ learnFromFeedbackUseAi: !learnFromFeedbackUseAi }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      setLearnFromFeedbackUseAi(data.learnFromFeedbackUseAi !== false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -200,19 +243,40 @@ export default function IAPage() {
                 Carregando...
               </div>
             ) : (
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={suggestionEnabled}
-                  onChange={handleToggleSuggestion}
-                  disabled={saving}
-                  className="rounded border-gray-400 bg-white text-[#7c3aed] focus:ring-[#7c3aed]"
-                />
-                <span className="text-gray-900 font-medium">
-                  {suggestionEnabled ? 'Sugestão ativa' : 'Sugestão desativada'}
-                </span>
-                {saving && <Loader2 className="w-4 h-4 animate-spin text-gray-500" />}
-              </label>
+              <>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={suggestionEnabled}
+                    onChange={handleToggleSuggestion}
+                    disabled={saving}
+                    className="rounded border-gray-400 bg-white text-[#7c3aed] focus:ring-[#7c3aed]"
+                  />
+                  <span className="text-gray-900 font-medium">
+                    {suggestionEnabled ? 'Sugestão ativa' : 'Sugestão desativada'}
+                  </span>
+                  {saving && <Loader2 className="w-4 h-4 animate-spin text-gray-500" />}
+                </label>
+                {suggestionEnabled && (
+                  <div className="mt-4 pl-7 border-l-2 border-[#7c3aed]/30">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={suggestionAiEnabled}
+                        onChange={handleToggleSuggestionAI}
+                        disabled={saving}
+                        className="rounded border-gray-400 bg-white text-[#7c3aed] focus:ring-[#7c3aed]"
+                      />
+                      <span className="text-gray-800 text-sm">
+                        Usar IA (Claude) nas sugestões
+                      </span>
+                    </label>
+                    <p className="text-xs text-gray-500 mt-1 ml-7">
+                      Quando ativo, o Claude analisa o contexto e gera a sugestão. Quando desativado, usa apenas base de conhecimento e catálogo (sem IA).
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -239,7 +303,22 @@ export default function IAPage() {
               Base de conhecimento
             </h2>
             <p className="text-gray-700 text-sm mb-4">
-              Perguntas-tipo e respostas ouro geradas pelo batch (phase:all). Usada para melhoria semanal com feedback do operador.
+              Perguntas-tipo e respostas ouro. Quando o atendente não usa a sugestão, o sistema pode salvar automaticamente a pergunta e a resposta na base.
+            </p>
+            <label className="flex items-start gap-3 cursor-pointer mb-4">
+              <input
+                type="checkbox"
+                checked={learnFromFeedbackUseAi}
+                onChange={handleToggleLearnFromFeedbackUseAi}
+                disabled={saving}
+                className="mt-1 rounded border-gray-300 text-[#7c3aed] focus:ring-[#7c3aed]"
+              />
+              <span className="text-gray-800 text-sm">
+                Usar IA ao salvar automaticamente
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 mb-4 ml-7">
+              Quando ativo, o Claude normaliza a pergunta e a resposta antes de salvar. Quando desativado, salva a pergunta e a resposta do atendente como estão (sem IA).
             </p>
             <Link
               href="/settings/ia/knowledge"

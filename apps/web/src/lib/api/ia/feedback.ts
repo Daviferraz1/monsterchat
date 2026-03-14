@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { learnFromFeedback } from './learn-from-feedback';
 
 export interface FeedbackParams {
   conversationId: string;
@@ -9,6 +10,9 @@ export interface FeedbackParams {
   wasEdited?: boolean;
   editedResponse?: string;
   operatorFeedback?: string;
+  /** Pergunta/dúvida do aluno (contexto usado na sugestão). Se não enviado, buscamos a última mensagem inbound da conversa. */
+  questionContext?: string;
+  brand?: 'monster' | 'fagenius' | 'both';
 }
 
 export async function recordSuggestionFeedback(params: FeedbackParams): Promise<void> {
@@ -26,4 +30,30 @@ export async function recordSuggestionFeedback(params: FeedbackParams): Promise<
   } catch (err) {
     console.error('[IA recordSuggestionFeedback]', err);
   }
+
+  // Quando o atendente NÃO usou a sugestão (ou editou), aprendemos com a resposta dele e criamos entrada na base de conhecimento
+  const shouldLearn = (!params.wasUsed || (params.wasEdited === true)) && params.editedResponse?.trim();
+  if (!shouldLearn) return;
+
+  let questionContext = params.questionContext?.trim();
+  if (!questionContext) {
+    const { data: messages } = await supabaseAdmin
+      .from('messages')
+      .select('body')
+      .eq('conversation_id', params.conversationId)
+      .eq('direction', 'inbound')
+      .eq('content_type', 'text')
+      .not('body', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    const bodies = (messages ?? []).map((m: { body: string }) => m.body?.trim()).filter(Boolean).reverse();
+    questionContext = bodies.join('\n') || '';
+  }
+  if (!questionContext) return;
+
+  await learnFromFeedback({
+    questionContext,
+    actualResponse: params.editedResponse.trim(),
+    brand: params.brand ?? 'both',
+  });
 }

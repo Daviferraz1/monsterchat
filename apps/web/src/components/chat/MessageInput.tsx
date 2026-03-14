@@ -56,11 +56,11 @@ export function MessageInput({
 
   useEffect(() => {
     if (suggestionEnabled && lastInboundBody?.trim()) {
-      fetchSuggestion(lastInboundBody.trim());
+      fetchSuggestion(lastInboundBody.trim(), undefined, conversationId);
     } else {
       clearSuggestion();
     }
-  }, [suggestionEnabled, lastInboundBody, fetchSuggestion, clearSuggestion]);
+  }, [suggestionEnabled, lastInboundBody, conversationId, fetchSuggestion, clearSuggestion]);
 
   // Auto-expand textarea conforme o texto (até TEXTAREA_MAX_HEIGHT)
   useEffect(() => {
@@ -101,11 +101,41 @@ export function MessageInput({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text.trim() || busy) return;
+    const messageSent = text.trim();
+    if (!messageSent || busy) return;
     setError(null);
+    const hadSuggestion = suggestionResult?.suggestion != null;
+    const suggestionSnapshot = hadSuggestion
+      ? {
+          suggestion: suggestionResult!.suggestion,
+          confidence: suggestionResult!.confidence,
+        }
+      : null;
     try {
-      await sendMessage(conversationId, text);
+      await sendMessage(conversationId, messageSent);
       setText('');
+      if (suggestionSnapshot) {
+        const wasUsed = messageSent === suggestionSnapshot.suggestion?.trim();
+        const confidenceMap = { high: 0.9, medium: 0.5, low: 0.2, none: 0 } as const;
+        try {
+          await fetch('/api/ia/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId,
+              suggestedResponse: suggestionSnapshot.suggestion,
+              confidence: confidenceMap[suggestionSnapshot.confidence] ?? 0,
+              wasUsed,
+              wasEdited: !wasUsed,
+              editedResponse: messageSent,
+              questionContext: lastInboundBody?.trim() || undefined,
+            }),
+          });
+        } catch {
+          // não bloqueia o envio; feedback é best-effort
+        }
+        clearSuggestion();
+      }
     } catch (err) {
       console.error('Error sending message:', err);
       setError(err instanceof Error ? err.message : 'Falha ao enviar mensagem.');
@@ -187,10 +217,10 @@ export function MessageInput({
   const applyIASuggestion = useCallback(() => {
     if (suggestionResult?.suggestion) {
       setText(suggestionResult.suggestion);
-      clearSuggestion();
       textareaRef.current?.focus();
+      // não limpa a sugestão aqui; o feedback (wasUsed) será enviado no handleSubmit
     }
-  }, [suggestionResult?.suggestion, clearSuggestion]);
+  }, [suggestionResult?.suggestion]);
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="border-t p-3 sm:p-4 shrink-0">
