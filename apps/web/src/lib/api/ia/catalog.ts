@@ -82,6 +82,45 @@ export async function listProducts(filters?: { brand?: string; status?: string; 
   return (data ?? []) as ProductRow[];
 }
 
+/** Normaliza texto para comparação (minúsculo, sem acentos). */
+function normalizeForMatch(s: string): string {
+  return (s ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim();
+}
+
+/**
+ * Retorna produtos do catálogo cujo nome, slug, concurso ou cargo aparecem na mensagem.
+ * Usado pela sugestão de mensagem (suggestion.ts) para incluir links quando o lead menciona um produto.
+ */
+export async function getMatchingProducts(
+  messageBody: string,
+  brand?: string
+): Promise<ProductRow[]> {
+  if (!messageBody?.trim()) return [];
+  const text = normalizeForMatch(messageBody);
+  const words = text.split(/\s+/).filter((w) => w.length >= 2);
+  if (words.length === 0) return [];
+
+  const products = await listProducts({ is_active: true, brand: brand || undefined });
+  const matched: ProductRow[] = [];
+  for (const p of products) {
+    const nameNorm = normalizeForMatch(p.name);
+    const slugNorm = p.slug ? normalizeForMatch(p.slug) : '';
+    const examNorm = p.target_exam ? normalizeForMatch(p.target_exam) : '';
+    const roleNorm = p.target_role ? normalizeForMatch(p.target_role) : '';
+    const searchTerms = [nameNorm, slugNorm, examNorm, roleNorm].filter(Boolean);
+    const matchesName = searchTerms.some((term) => text.includes(term));
+    const matchesWords = words.some(
+      (w) => nameNorm.includes(w) || examNorm.includes(w) || roleNorm.includes(w)
+    );
+    if (matchesName || matchesWords) matched.push(p);
+  }
+  return matched;
+}
+
 export async function getProduct(id: string) {
   const { data, error } = await supabaseAdmin.from('products').select('*').eq('id', id).single();
   if (error) throw error;

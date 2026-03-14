@@ -32,8 +32,8 @@ export async function recordSuggestionFeedback(params: FeedbackParams): Promise<
   }
 
   // Quando o atendente NÃO usou a sugestão (ou editou), aprendemos com a resposta dele e criamos entrada na base de conhecimento
-  const shouldLearn = (!params.wasUsed || (params.wasEdited === true)) && params.editedResponse?.trim();
-  if (!shouldLearn) return;
+  const actualResponse = params.editedResponse?.trim();
+  if (!actualResponse || (params.wasUsed && !params.wasEdited)) return;
 
   let questionContext = params.questionContext?.trim();
   if (!questionContext) {
@@ -53,7 +53,7 @@ export async function recordSuggestionFeedback(params: FeedbackParams): Promise<
 
   await learnFromFeedback({
     questionContext,
-    actualResponse: params.editedResponse.trim(),
+    actualResponse,
     brand: params.brand ?? 'both',
   });
 }

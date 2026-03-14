@@ -26,6 +26,8 @@ const CATEGORIES = [
   'outro',
 ];
 
+type BrandOption = 'monster' | 'fagenius' | 'both';
+
 interface KnowledgeEntry {
   id: string;
   brand: string;
@@ -38,14 +40,24 @@ interface KnowledgeEntry {
   updated_at: string;
 }
 
-const emptyForm = {
-  brand: 'both' as const,
+interface KnowledgeForm {
+  brand: BrandOption;
+  category: string;
+  question_pattern: string;
+  gold_response: string;
+  frequency: number;
+  is_active: boolean;
+  tags: string[];
+}
+
+const emptyForm: KnowledgeForm = {
+  brand: 'both',
   category: 'outro',
   question_pattern: '',
   gold_response: '',
   frequency: 1,
   is_active: true,
-  tags: [] as string[],
+  tags: [],
 };
 
 export default function KnowledgeBasePage() {
@@ -60,7 +72,7 @@ export default function KnowledgeBasePage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState<'create' | KnowledgeEntry | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<KnowledgeForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -98,8 +110,11 @@ export default function KnowledgeBasePage() {
   };
 
   const openEdit = (entry: KnowledgeEntry) => {
+    const brandVal: BrandOption = BRAND_OPTIONS.some((b) => b.value === entry.brand)
+      ? (entry.brand as BrandOption)
+      : 'both';
     setForm({
-      brand: (BRAND_OPTIONS.some((b) => b.value === entry.brand) ? entry.brand : 'both') as 'monster' | 'fagenius' | 'both',
+      brand: brandVal,
       category: CATEGORIES.includes(entry.category) ? entry.category : 'outro',
       question_pattern: entry.question_pattern,
       gold_response: entry.gold_response,
@@ -378,7 +393,7 @@ export default function KnowledgeBasePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
                 <select
                   value={form.brand}
-                  onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value as 'monster' | 'fagenius' | 'both' }))}
+                  onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value as BrandOption }))}
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 focus:ring-2 focus:ring-[#7c3aed] text-sm"
                 >
                   {BRAND_OPTIONS.map((b) => (

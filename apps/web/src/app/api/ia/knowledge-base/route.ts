@@ -6,7 +6,10 @@ export const dynamic = 'force-dynamic';
 const BRANDS = ['monster', 'fagenius', 'both'] as const;
 const CATEGORIES = ['financeiro', 'acesso', 'matricula', 'academico', 'lead', 'tecnico', 'duvida', 'reclamacao', 'documento', 'outro'] as const;
 
-function parseBody<T>(body: unknown, schema: Record<string, (v: unknown) => T[keyof T] | undefined>): Partial<T> | null {
+function parseBody(
+  body: unknown,
+  schema: Record<string, (v: unknown) => unknown>
+): Record<string, unknown> | null {
   if (!body || typeof body !== 'object') return null;
   const o = body as Record<string, unknown>;
   const out: Record<string, unknown> = {};
@@ -14,7 +17,7 @@ function parseBody<T>(body: unknown, schema: Record<string, (v: unknown) => T[ke
     const v = fn(o[key]);
     if (v !== undefined) out[key] = v;
   }
-  return Object.keys(out).length ? (out as Partial<T>) : null;
+  return Object.keys(out).length ? out : null;
 }
 
 export async function GET(request: NextRequest) {
@@ -73,7 +76,15 @@ export async function POST(request: NextRequest) {
       is_active: (v: unknown) => (typeof v === 'boolean' ? v : true),
       tags: (v: unknown) => (Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string') : undefined),
     };
-    const parsed = parseBody(body, schema);
+    const parsed = parseBody(body, schema) as {
+      brand?: string;
+      category?: string;
+      question_pattern?: string;
+      gold_response?: string;
+      frequency?: number;
+      is_active?: boolean;
+      tags?: string[];
+    } | null;
     if (!parsed?.question_pattern || !parsed?.gold_response) {
       return NextResponse.json({ error: 'question_pattern e gold_response são obrigatórios' }, { status: 400 });
     }
