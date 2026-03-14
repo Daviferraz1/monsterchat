@@ -6,7 +6,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
-import { MessageSquare, Settings, Users, ShoppingBag, CreditCard, Megaphone, Bot, BookOpen } from 'lucide-react';
+import { MessageSquare, Settings, Users, ShoppingBag, CreditCard, Megaphone, Bot, BookOpen, Mail } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 
 interface SidebarProps {
@@ -68,6 +68,9 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
           </Link>
           <Link href="/settings/ia" className={navLinkClass(!!pathname?.startsWith('/settings/ia'))} onClick={onClose}>
             <Bot className="w-4 h-4 shrink-0" /> IA Atendimento
+          </Link>
+          <Link href="/settings/resend" className={navLinkClass(!!pathname?.startsWith('/settings/resend'))} onClick={onClose}>
+            <Mail className="w-4 h-4 shrink-0" /> E-mails (Resend)
           </Link>
         </nav>
       </div>

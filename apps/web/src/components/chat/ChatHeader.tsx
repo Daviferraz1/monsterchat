@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
-import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy } from 'lucide-react';
 import type { DigitalGuruMetadata } from '@/types';
 
 function formatDateTime(iso?: string | null): string {
@@ -36,6 +36,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [contactSales, setContactSales] = useState<Array<{ id: string; product_names: string; status: string | null; sold_at: string; payment_method?: string | null; payment_total?: number | null }>>([]);
+  const [accessCredentials, setAccessCredentials] = useState<Array<{ platform: string; platformLabel: string; login: string; password: string }>>([]);
   const headerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -93,6 +94,23 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
         if (!cancelled) setContactSales([]);
       }
     })();
+    return () => { cancelled = true; };
+  }, [contactId]);
+
+  useEffect(() => {
+    if (!contactId) {
+      setAccessCredentials([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/contacts/${contactId}/credentials`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data.credentials)) {
+          setAccessCredentials(data.credentials);
+        }
+      })
+      .catch(() => { if (!cancelled) setAccessCredentials([]); });
     return () => { cancelled = true; };
   }, [contactId]);
 
@@ -230,6 +248,39 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                 </div>
               )}
             </div>
+            {accessCredentials.length > 0 && (
+              <div className="pt-3 border-t space-y-2">
+                <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5" />
+                  Acesso às plataformas
+                </h4>
+                <div className="space-y-2">
+                  {accessCredentials.map((cred) => {
+                    const text = `Login: ${cred.login}\nSenha: ${cred.password}`;
+                    return (
+                      <div key={cred.platform} className="rounded-lg border border-gray-200 p-2 text-xs">
+                        <span className="font-medium text-muted-foreground block mb-1">{cred.platformLabel}</span>
+                        <p className="text-foreground break-all">Login: {cred.login}</p>
+                        <p className="text-foreground">Senha: ••••••••</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(text);
+                          }}
+                          className="mt-2 flex items-center gap-1 text-primary hover:underline"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copiar login e senha
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Cole no campo de mensagem e envie quando o aluno disser que não recebeu o acesso.
+                </p>
+              </div>
+            )}
             {channel && (
               <div className="pt-2 border-t text-xs text-muted-foreground">
                 Canal: {channel.name} ({channel.type})

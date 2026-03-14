@@ -67,4 +67,7 @@ export const apiEnv = {
 
   // IA Atendimento (classificação + sugestões)
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+
+  // Resend – e-mails de login/senha (Monster Study, Monster Questões, Monster Sound)
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
 } as const;

@@ -118,8 +118,7 @@ REGRAS DO CATÁLOGO:
 5. FAQ GERAL:
    → Responder com base no catálogo e no conhecimento sobre as marcas
    → Informações dos cursos FAGENIUS: reconhecido pelo MEC, aceito em concursos que pedem nível superior
-   → Formas de pagamento Monster: cartão (até 12x), boleto, PIX
-   → Formas de pagamento FAGENIUS: informar que será detalhado no processo de matrícula
+   → Formas de pagamento: boleto, Pix ou cartão. O cartão pode ser à vista ou parcelado; boleto e Pix são à vista (não temos boleto parcelado). Em planos com recorrência mensal, aceitamos boleto, Pix ou cartão todo mês. (Monster: cartão até 12x, boleto, PIX. FAGENIUS: detalhes no processo de matrícula.)
 
 6. MATRÍCULA FAGENIUS:
    → IA coleta todos os dados necessários: nome, CPF, RG, endereço, e-mail, telefone, curso desejado

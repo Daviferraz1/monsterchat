@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, Users, ShoppingBag, CreditCard, Settings, Megaphone, Bot } from 'lucide-react';
+import { MessageSquare, Users, ShoppingBag, CreditCard, Settings } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useTotalUnreadCount } from '@/hooks/useTotalUnreadCount';
 
@@ -18,9 +18,7 @@ const NAV_ITEMS = [
   { href: '/contacts', icon: Users, label: 'Contatos' },
   { href: '/sales', icon: ShoppingBag, label: 'Vendas' },
   { href: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
-  { href: '/settings/channels', icon: Settings, label: 'Canais' },
-  { href: '/settings/campanhas', icon: Megaphone, label: 'Campanhas' },
-  { href: '/settings/ia', icon: Bot, label: 'IA Atendimento' },
+  { href: '/settings', icon: Settings, label: 'Configurações' },
 ] as const;
 
 /** Formata o número para o badge: número real até 999, depois "999+" */
@@ -42,7 +40,7 @@ export function MobileNavRail() {
       <div className="flex flex-col items-center gap-1 flex-1 min-h-0">
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
           const isInbox = href === '/inbox';
-          const active = isInbox ? pathname?.startsWith('/inbox') : pathname?.startsWith(href);
+          const active = isInbox ? pathname?.startsWith('/inbox') : href === '/settings' ? pathname?.startsWith('/settings') : pathname?.startsWith(href);
 
           return (
             <Link
@@ -73,7 +71,7 @@ export function MobileNavRail() {
       <div className="pt-2 mt-auto border-t border-white/10">
         {user?.email ? (
           <Link
-            href="/settings/channels"
+            href="/settings"
             className="flex items-center justify-center w-12 h-12 rounded-xl overflow-hidden ring-2 ring-white/10 hover:ring-[#8b5cf6]/50 transition-all"
             aria-label="Conta e configurações"
           >
