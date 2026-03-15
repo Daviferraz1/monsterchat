@@ -91,9 +91,23 @@ function normalizeForMatch(s: string): string {
     .trim();
 }
 
+/** Palavras que não identificam qual produto (evita match por "curso", "valor", etc.). */
+const STOPWORDS = new Set([
+  'qual', 'oque', 'o', 'a', 'um', 'uma', 'valor', 'preco', 'preço', 'do', 'da', 'de', 'para', 'aluno',
+  'curso', 'cursos', 'quero', 'saber', 'informacao', 'informações', 'quanto', 'custa', 'valor do',
+  'preparatorio', 'preparatório', 'concurso', 'concursos', 'vagas', 'edital', 'inscricao',
+]);
+
+/** Palavras que indicam apenas estado/região; match só nelas não é suficiente (evita sugerir Guarda MG quando o lead pede Bombeiro MG). */
+const STATE_WORDS = new Set([
+  'minas', 'mg', 'gerais', 'sp', 'paulista', 'rj', 'janeiro', 'ba', 'bahia', 'go', 'goias', 'goiás',
+  'pr', 'parana', 'paraná', 'sc', 'catarina', 'rs', 'sul', 'pe', 'pernambuco', 'ce', 'ceara', 'df', 'brasilia',
+]);
+
 /**
- * Retorna produtos do catálogo cujo nome, slug, concurso ou cargo aparecem na mensagem.
- * Usado pela sugestão de mensagem (suggestion.ts) para incluir links quando o lead menciona um produto.
+ * Retorna produtos do catálogo cujo nome, concurso ou cargo batem na mensagem.
+ * Melhora de precisão: ignora stopwords; exige match em cargo/concurso (não só em estado);
+ * pontua e ordena por relevância para sugerir o curso certo (ex.: bombeiro militar de minas → curso de bombeiro, não guarda municipal).
  */
 export async function getMatchingProducts(
   messageBody: string,
@@ -101,24 +115,48 @@ export async function getMatchingProducts(
 ): Promise<ProductRow[]> {
   if (!messageBody?.trim()) return [];
   const text = normalizeForMatch(messageBody);
-  const words = text.split(/\s+/).filter((w) => w.length >= 2);
-  if (words.length === 0) return [];
+  const allWords = text.split(/\s+/).filter((w) => w.length >= 2);
+  const contentWords = allWords.filter((w) => !STOPWORDS.has(w));
+  const wordsToUse = contentWords.length >= 1 ? contentWords : allWords;
+  if (wordsToUse.length === 0) return [];
 
   const products = await listProducts({ is_active: true, brand: brand || undefined });
-  const matched: ProductRow[] = [];
+  const scored: { product: ProductRow; score: number; onlyState: boolean }[] = [];
+
   for (const p of products) {
     const nameNorm = normalizeForMatch(p.name);
     const slugNorm = p.slug ? normalizeForMatch(p.slug) : '';
     const examNorm = p.target_exam ? normalizeForMatch(p.target_exam) : '';
     const roleNorm = p.target_role ? normalizeForMatch(p.target_role) : '';
-    const searchTerms = [nameNorm, slugNorm, examNorm, roleNorm].filter(Boolean);
-    const matchesName = searchTerms.some((term) => text.includes(term));
-    const matchesWords = words.some(
-      (w) => nameNorm.includes(w) || examNorm.includes(w) || roleNorm.includes(w)
-    );
-    if (matchesName || matchesWords) matched.push(p);
+    const productText = [nameNorm, slugNorm, examNorm, roleNorm].filter(Boolean).join(' ');
+
+    const fullPhraseMatch =
+      (nameNorm.length >= 8 && text.includes(nameNorm)) ||
+      (examNorm.length >= 6 && text.includes(examNorm)) ||
+      (roleNorm.length >= 6 && text.includes(roleNorm));
+    if (fullPhraseMatch) {
+      scored.push({ product: p, score: 10, onlyState: false });
+      continue;
+    }
+
+    let score = 0;
+    let onlyState = true;
+    for (const w of wordsToUse) {
+      if (!productText.includes(w)) continue;
+      score += 1;
+      if (!STATE_WORDS.has(w)) onlyState = false;
+    }
+
+    if (score === 0) continue;
+    if (onlyState && score < 2) continue;
+    scored.push({ product: p, score, onlyState });
   }
-  return matched;
+
+  scored.sort((a, b) => {
+    if (a.onlyState !== b.onlyState) return a.onlyState ? 1 : -1;
+    return b.score - a.score;
+  });
+  return scored.map((s) => s.product);
 }
 
 export async function getProduct(id: string) {

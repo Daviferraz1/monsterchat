@@ -33,34 +33,123 @@ function greeting(contactName: string | undefined): string {
   return `Oi, ${first}! `;
 }
 
+/** Substitui placeholders de nome do aluno pelo primeiro nome do contato (base de conhecimento pode ter {nome_aluno}). */
+function replaceNamePlaceholders(text: string | null, contactName?: string): string | null {
+  if (!text?.trim()) return text;
+  const firstName = contactName?.trim() ? getFirstName(contactName) : '';
+  const name = firstName || '';
+  let out = text
+    .replace(/\{nome_aluno\}/gi, name)
+    .replace(/\{nome\}/gi, name)
+    .replace(/\[nome_aluno\]/gi, name)
+    .replace(/\[nome\]/gi, name);
+  if (!name) {
+    out = out.replace(/\s*,\s*!\s*/g, '! ').replace(/\s{2,}/g, ' ');
+  }
+  return out.trim();
+}
+
 /** Texto padrão sobre formas de pagamento (boleto, Pix, cartão; recorrência mensal). Parcelado só no cartão. */
 const PAYMENT_METHODS_INFO =
-  'Formas de pagamento: boleto, Pix ou cartão. O cartão pode ser à vista ou parcelado; boleto e Pix são à vista. Em planos com recorrência mensal, aceitamos boleto, Pix ou cartão todo mês.';
+  'Pix, boleto ou cartão.\n(No cartão você pode parcelar; Pix e boleto são à vista.)';
 
-/** Monta uma sugestão completa com dados do curso, tom humano e foco em conversão/suporte. */
-function formatProductSuggestion(products: ProductRow[], contactName?: string): string {
-  const lead = greeting(contactName);
-  const intro =
-    products.length > 1
-      ? `${lead}Pelo que você comentou, acho que esses cursos combinam com o que você busca:`
-      : `${lead}Pelo que você comentou, acho que esse curso combina com o que você busca:`;
-  const blocks: string[] = [intro, ''];
-  for (const p of products) {
+/** Apenas o concurso (target_exam) para a frase de objetivo; fallback no nome do produto. */
+function concursoLabel(p: ProductRow): string {
+  if (p.target_exam?.trim()) return p.target_exam.trim();
+  return p.name;
+}
+
+/** Concordância em português: "no" (masculino) ou "na" (feminino) + concurso. Ex.: "no Bombeiro Militar de Minas", "na Guarda Municipal". */
+function preposicaoConcurso(concurso: string): string {
+  const firstWord = concurso.toLowerCase().trim().split(/\s+/)[0] ?? '';
+  const feminino = ['guarda', 'polícia', 'policia', 'prefeitura', 'defensoria'];
+  const usaNa = feminino.some((w) => firstWord === w || firstWord.startsWith(w));
+  return usaNa ? `na ${concurso}` : `no ${concurso}`;
+}
+
+/** Bloco "o que você recebe": usa includes/highlights do produto ou lista padrão. */
+function formatWhatYouGet(p: ProductRow): string {
+  if (p.includes?.trim() || p.highlights?.trim()) {
     const parts: string[] = [];
-    parts.push(`${p.name}`);
-    parts.push(`• Valor à vista: ${p.price_display}`);
-    if (p.price_recurring_display?.trim())
-      parts.push(`• Ou no plano: ${p.price_recurring_display}`);
-    parts.push(`• ${PAYMENT_METHODS_INFO}`);
-    if (p.includes?.trim()) parts.push(`• Inclui: ${p.includes}`);
-    if (p.duration?.trim()) parts.push(`• Duração: ${p.duration}`);
-    if (p.highlights?.trim()) parts.push(`• ${p.highlights}`);
-    parts.push('');
-    parts.push(`Aqui está o link para garantir sua vaga: ${p.checkout_url}`);
-    if (p.checkout_url_subscription?.trim())
-      parts.push(`Se preferir o plano mensal: ${p.checkout_url_subscription.trim()}`);
-    blocks.push(parts.join('\n'));
+    if (p.includes?.trim()) parts.push(p.includes.trim());
+    if (p.highlights?.trim()) parts.push(p.highlights.trim());
+    return parts
+      .join('\n')
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `✅ ${line}`)
+      .join('\n');
   }
+  return `✅ Videoaulas completas
+Centenas de horas cobrindo 100% do conteúdo do edital.
+
+✅ Material em PDF
+Apostilas, resumos e mapas mentais para baixar e estudar offline.
+
+✅ Monster Questões
+Mais de 100 mil questões comentadas para treinar até chegar no nível da prova.
+
+✅ Monster Study
+Cronograma inteligente que organiza seus estudos e te mostra exatamente o que estudar todos os dias.
+
+✅ Monster Sound
+Aulas em áudio para estudar no carro, caminhando ou treinando.
+
+✅ Professores especialistas
+Equipe experiente em concursos e aprovações.`;
+}
+
+/** Monta sugestão de curso no modelo comercial (nome, objetivo, investimento, o que recebe, link, acesso imediato). */
+function formatProductSuggestion(products: ProductRow[], contactName?: string): string {
+  const firstName = contactName?.trim() ? getFirstName(contactName) : null;
+  const lead = firstName ? `Oi, ${firstName}! Tudo bem?\n\n` : '';
+
+  const blocks: string[] = [];
+  products.forEach((p, index) => {
+    const concurso = concursoLabel(p);
+    const noNaConcurso = preposicaoConcurso(concurso);
+    const parts: string[] = [];
+
+    if (index === 0) parts.push(lead);
+    parts.push(
+      `Se o seu objetivo é conquistar a vaga ${noNaConcurso}, esse curso é a preparação certa para chegar competitivo na prova. Todo o conteúdo é direcionado para o edital e focado no que realmente cai.`
+    );
+    parts.push('');
+    parts.push('💰 Investimento:');
+    parts.push(`• ${p.price_display} à vista`);
+    if (p.price_recurring_display?.trim()) {
+      parts.push(`ou ${p.price_recurring_display} no cartão.`);
+    } else {
+      parts.push('(valores no link abaixo)');
+    }
+    parts.push('');
+    parts.push('💳 Formas de pagamento:');
+    parts.push(PAYMENT_METHODS_INFO);
+    parts.push('');
+    parts.push('📚 O que você recebe no curso:');
+    parts.push('');
+    parts.push(formatWhatYouGet(p));
+    if (p.duration?.trim()) {
+      parts.push('');
+      parts.push(`⏳ Acesso por ${p.duration}, para estudar com tranquilidade até a prova.`);
+    } else {
+      parts.push('');
+      parts.push('⏳ Acesso para estudar com tranquilidade até a prova.');
+    }
+    parts.push('');
+    parts.push(`🚨 Se seu objetivo é passar ${noNaConcurso}, o ideal é começar a preparação agora, antes que a concorrência avance nos estudos.`);
+    parts.push('');
+    parts.push('👉 Garanta sua vaga aqui:');
+    parts.push(p.checkout_url);
+    if (p.checkout_url_subscription?.trim()) {
+      parts.push(`(Plano mensal: ${p.checkout_url_subscription.trim()})`);
+    }
+    parts.push('');
+    parts.push('Assim que confirmar o pagamento, seu acesso é liberado imediatamente e você já inicia a preparação.');
+
+    blocks.push(parts.join('\n'));
+  });
   return blocks.join('\n\n');
 }
 
@@ -184,7 +273,7 @@ export async function getSuggestion(
     if (isAskingAboutMissingAccess(text)) {
       return {
         confidence: 'high',
-        suggestion: SUGGESTION_ASK_EMAIL_ACCESS,
+        suggestion: replaceNamePlaceholders(SUGGESTION_ASK_EMAIL_ACCESS, contactName),
         category: 'acesso',
         alternatives: [],
       };
@@ -200,7 +289,7 @@ export async function getSuggestion(
         );
         return {
           confidence: 'high',
-          suggestion,
+          suggestion: replaceNamePlaceholders(suggestion, contactName),
           category: 'acesso',
           alternatives: [],
         };
@@ -231,9 +320,12 @@ export async function getSuggestion(
       if (aiSuggestion) {
         return {
           confidence: 'high',
-          suggestion: aiSuggestion,
+          suggestion: replaceNamePlaceholders(aiSuggestion, contactName),
           category: matchingProducts.length > 0 ? 'produto' : kbResult.category,
-          alternatives: kbResult.alternatives,
+          alternatives: kbResult.alternatives.map((a) => ({
+            ...a,
+            gold_response: replaceNamePlaceholders(a.gold_response, contactName) ?? a.gold_response,
+          })),
         };
       }
     }
@@ -242,17 +334,24 @@ export async function getSuggestion(
       const suggestion = formatProductSuggestion(matchingProducts, contactName);
       return {
         confidence: 'high',
-        suggestion,
+        suggestion: replaceNamePlaceholders(suggestion, contactName),
         category: 'produto',
-        alternatives: kbResult.alternatives,
+        alternatives: kbResult.alternatives.map((a) => ({
+          ...a,
+          gold_response: replaceNamePlaceholders(a.gold_response, contactName) ?? a.gold_response,
+        })),
       };
     }
 
+    const kbSuggestionFinal = wrapWithGreeting(kbResult.suggestion, contactName);
     return {
       confidence: kbResult.confidence,
-      suggestion: wrapWithGreeting(kbResult.suggestion, contactName),
+      suggestion: replaceNamePlaceholders(kbSuggestionFinal, contactName),
       category: kbResult.category,
-      alternatives: kbResult.alternatives,
+      alternatives: kbResult.alternatives.map((a) => ({
+        ...a,
+        gold_response: replaceNamePlaceholders(a.gold_response, contactName) ?? a.gold_response,
+      })),
     };
   } catch (err) {
     console.error('[IA getSuggestion]', err);

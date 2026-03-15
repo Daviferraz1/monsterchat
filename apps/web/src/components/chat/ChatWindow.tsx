@@ -46,6 +46,12 @@ export function ChatWindow() {
     return null;
   }, [messages]);
 
+  /** Última mensagem é do operador/bot → não sugerir resposta (evita gastar IA). */
+  const lastMessageFromOperator = useMemo(
+    () => messages.length > 0 && messages[messages.length - 1].direction === 'outbound',
+    [messages]
+  );
+
   const operatorTookOver = lastOutboundSender === 'agent';
   const [returningToBot, setReturningToBot] = useState(false);
   const handleReturnToBot = async () => {
@@ -131,6 +137,7 @@ export function ChatWindow() {
         conversationId={conversationId}
         lastInboundBody={lastInboundBody}
         suggestionEnabled={suggestionEnabled}
+        lastMessageFromOperator={lastMessageFromOperator}
       />
     </div>
   );

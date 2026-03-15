@@ -32,6 +32,8 @@ interface MessageInputProps {
   conversationId: string;
   lastInboundBody?: string | null;
   suggestionEnabled?: boolean;
+  /** Quando true, não busca sugestão (última msg é do operador — evita gastar IA). */
+  lastMessageFromOperator?: boolean;
 }
 
 type SpellMenu = {
@@ -46,6 +48,7 @@ export function MessageInput({
   conversationId,
   lastInboundBody = null,
   suggestionEnabled = false,
+  lastMessageFromOperator = false,
 }: MessageInputProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -70,12 +73,16 @@ export function MessageInput({
   const closeSpellMenu = useCallback(() => setSpellMenu(null), []);
 
   useEffect(() => {
+    if (lastMessageFromOperator) {
+      clearSuggestion();
+      return;
+    }
     if (suggestionEnabled && lastInboundBody?.trim()) {
       fetchSuggestion(lastInboundBody.trim(), undefined, conversationId);
     } else {
       clearSuggestion();
     }
-  }, [suggestionEnabled, lastInboundBody, conversationId, fetchSuggestion, clearSuggestion]);
+  }, [suggestionEnabled, lastInboundBody, conversationId, lastMessageFromOperator, fetchSuggestion, clearSuggestion]);
 
   // Auto-expand textarea conforme o texto (até TEXTAREA_MAX_HEIGHT)
   useEffect(() => {
