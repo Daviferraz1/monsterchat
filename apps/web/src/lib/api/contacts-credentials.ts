@@ -4,7 +4,7 @@
  * pesquisamos contatos com esse e-mail e retornamos as credenciais já salvas (vindas do Resend).
  */
 
-import { supabaseAdmin } from '../supabase';
+import { supabaseAdmin } from './supabase';
 
 const PLATFORM_LABELS: Record<string, string> = {
   monster_study: 'Monster Study',
