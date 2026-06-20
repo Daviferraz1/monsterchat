@@ -11,6 +11,7 @@ import { getMatchingProducts, listProducts } from './catalog';
 import type { ProductRow } from './catalog';
 import { getCredentialsByEmail } from '../contacts-credentials';
 import { searchKnowledge } from './knowledge-search';
+import { fetchGuruTransactionsLive } from '../integrations/guru-live';
 
 const MODEL = 'claude-sonnet-4-6';
 const MAX_ITERATIONS = 6;
@@ -30,6 +31,8 @@ export interface AgentContext {
   nowHint?: string;
   /** Memória da conversa (resumo + ficha) para conversas longas. */
   memoryBlock?: string;
+  /** Dados pessoais já registrados no cadastro do contato (nome completo, CPF, etc.). */
+  contactDataBlock?: string;
 }
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -98,7 +101,7 @@ const tools: Anthropic.Tool[] = [
   {
     name: 'consultar_pagamento',
     description:
-      'Consulta as compras/pagamentos do contato (produto, status, data). Use quando o aluno pergunta sobre status de pagamento/boleto ou diz que já comprou.',
+      'Situação de pagamento do contato NO SISTEMA: compras avulsas + assinaturas/mensalidades (status da fatura, se está EM ATRASO e link para pagar). Use quando o aluno fala de pagamento/boleto/mensalidade ou diz que já comprou.',
     input_schema: {
       type: 'object',
       properties: {
@@ -106,6 +109,18 @@ const tools: Anthropic.Tool[] = [
           type: 'string',
           description: 'E-mail da compra, se o aluno informar. Opcional — sem ele, busca pelo contato atual.',
         },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'consultar_guru_online',
+    description:
+      'Confere o pagamento DIRETO na API do Guru, em tempo real (mais confiável que o sistema local). Use quando precisar confirmar e o local não bastar, ou o aluno contestar ("paguei e não consta"). Pode levar alguns segundos.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', description: 'E-mail da compra, se o aluno informar (ajuda a localizar).' },
       },
       required: [],
     },
@@ -120,6 +135,22 @@ const tools: Anthropic.Tool[] = [
         email: { type: 'string', description: 'E-mail usado na compra' },
       },
       required: ['email'],
+    },
+  },
+  {
+    name: 'salvar_dados_contato',
+    description:
+      'Registra no cadastro do contato os DADOS PESSOAIS que o aluno informar (para suporte e uso futuro). Chame sempre que ele fornecer nome completo, CPF, telefone, endereço ou e-mail. Registre só o que ele realmente informou — não invente nem fique pedindo dados sem motivo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nome_completo: { type: 'string' },
+        cpf: { type: 'string' },
+        telefone: { type: 'string' },
+        endereco: { type: 'string' },
+        email: { type: 'string' },
+      },
+      required: [],
     },
   },
   {
@@ -259,6 +290,82 @@ async function lookupSales(ctx: AgentContext, email?: string): Promise<SaleRow[]
   return [];
 }
 
+/** Assinaturas/mensalidades do contato (guru_subscriptions): status da fatura, atraso, link de pagamento. */
+async function lookupSubscriptions(ctx: AgentContext, email?: string): Promise<string[]> {
+  const select =
+    'product_name, last_status, current_invoice_status, current_invoice_value, current_invoice_charge_at, current_invoice_payment_url, is_overdue, days_overdue';
+  const fmt = (rows: Array<Record<string, any>>): string[] =>
+    rows.map((s) => {
+      const p: string[] = [`Assinatura: ${s.product_name || '-'}`, `status: ${s.last_status || '-'}`];
+      if (s.current_invoice_status) p.push(`fatura: ${s.current_invoice_status}`);
+      if (s.is_overdue) p.push(`EM ATRASO${s.days_overdue != null ? ` há ${s.days_overdue} dias` : ''}`);
+      if (s.current_invoice_value != null) p.push(`valor: R$ ${Number(s.current_invoice_value).toFixed(2)}`);
+      if (s.current_invoice_charge_at) p.push(`cobrança: ${s.current_invoice_charge_at}`);
+      if (s.current_invoice_payment_url) p.push(`link p/ pagar: ${s.current_invoice_payment_url}`);
+      return p.join(' | ');
+    });
+
+  if (ctx.contactId) {
+    const { data } = await supabaseAdmin
+      .from('guru_subscriptions')
+      .select(select)
+      .eq('contact_id', ctx.contactId)
+      .order('updated_at', { ascending: false })
+      .limit(3);
+    if (data?.length) return fmt(data);
+  }
+  if (email) {
+    const { data } = await supabaseAdmin
+      .from('guru_subscriptions')
+      .select(select)
+      .ilike('subscriber_email', email)
+      .order('updated_at', { ascending: false })
+      .limit(3);
+    if (data?.length) return fmt(data);
+  }
+  if (ctx.contactPhone) {
+    const digits = ctx.contactPhone.replace(/\D/g, '').slice(-8);
+    if (digits) {
+      const { data } = await supabaseAdmin
+        .from('guru_subscriptions')
+        .select(select)
+        .ilike('subscriber_phone', `%${digits}%`)
+        .order('updated_at', { ascending: false })
+        .limit(3);
+      if (data?.length) return fmt(data);
+    }
+  }
+  return [];
+}
+
+/** Registra/atualiza dados pessoais do contato (merge em contacts.metadata.dados). Idempotente. */
+async function salvarDadosContato(ctx: AgentContext, input: Record<string, unknown>): Promise<string> {
+  if (!ctx.contactId) return 'Não foi possível salvar (contato não identificado).';
+  const campos = ['nome_completo', 'cpf', 'telefone', 'endereco', 'email'] as const;
+  const novos: Record<string, string> = {};
+  for (const f of campos) {
+    const v = input?.[f];
+    if (typeof v === 'string' && v.trim()) novos[f] = v.trim();
+  }
+  if (Object.keys(novos).length === 0) return 'Nada para salvar (nenhum dado informado).';
+
+  const { data: c } = await supabaseAdmin
+    .from('contacts')
+    .select('metadata, email, phone')
+    .eq('id', ctx.contactId)
+    .maybeSingle();
+
+  const metadata = ((c?.metadata as Record<string, unknown>) || {});
+  metadata.dados = { ...((metadata.dados as Record<string, unknown>) || {}), ...novos };
+
+  const update: Record<string, unknown> = { metadata, updated_at: new Date().toISOString() };
+  if (novos.email && !(c?.email as string)?.trim()) update.email = novos.email;
+  if (novos.telefone && !(c?.phone as string)?.trim()) update.phone = novos.telefone;
+
+  await supabaseAdmin.from('contacts').update(update).eq('id', ctx.contactId);
+  return `Dados salvos no cadastro do contato: ${Object.keys(novos).join(', ')}.`;
+}
+
 async function execTool(name: string, input: Record<string, unknown>, ctx: AgentContext): Promise<string> {
   switch (name) {
     case 'buscar_conhecimento': {
@@ -290,15 +397,40 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
       return parts.join('\n\n');
     }
     case 'consultar_pagamento': {
-      const rows = await lookupSales(ctx, input?.email ? String(input.email) : undefined);
-      if (!rows.length) return 'Nenhuma compra encontrada para este contato.';
-      return rows
-        .map((s) => {
-          const total = s.payment_total != null ? ` | Valor: R$ ${Number(s.payment_total).toFixed(2)}` : '';
-          const pay = s.payment_method ? ` | Pagamento: ${s.payment_method}` : '';
-          return `Produto: ${s.product_names} | Status: ${s.status ?? 'N/A'} | Data: ${new Date(s.sold_at).toLocaleDateString('pt-BR')}${pay}${total}`;
-        })
-        .join('\n');
+      const email = input?.email ? String(input.email) : undefined;
+      const [rows, subs] = await Promise.all([lookupSales(ctx, email), lookupSubscriptions(ctx, email)]);
+      const blocks: string[] = [];
+      if (rows.length) {
+        blocks.push(
+          'Compras avulsas:\n' +
+            rows
+              .map((s) => {
+                const total = s.payment_total != null ? ` | Valor: R$ ${Number(s.payment_total).toFixed(2)}` : '';
+                const pay = s.payment_method ? ` | Pagamento: ${s.payment_method}` : '';
+                return `Produto: ${s.product_names} | Status: ${s.status ?? 'N/A'} | Data: ${new Date(s.sold_at).toLocaleDateString('pt-BR')}${pay}${total}`;
+              })
+              .join('\n')
+        );
+      }
+      if (subs.length) blocks.push('Assinaturas/mensalidades:\n' + subs.join('\n'));
+      if (!blocks.length) {
+        return 'Nenhuma compra ou assinatura encontrada no sistema local para este contato. Para confirmar em tempo real, use consultar_guru_online.';
+      }
+      return blocks.join('\n\n');
+    }
+    case 'consultar_guru_online': {
+      const email = input?.email ? String(input.email) : undefined;
+      const result = await fetchGuruTransactionsLive({ email, phone: ctx.contactPhone });
+      if (!result.configured) {
+        return 'Consulta ao vivo no Guru não está configurada (falta DIGITAL_GURU_USER_TOKEN/URL). Use os dados locais (consultar_pagamento).';
+      }
+      if (!result.ok) {
+        return `Não consegui consultar o Guru ao vivo agora (${result.error ?? 'erro'}). Use os dados locais (consultar_pagamento) e, se precisar, avise que vai confirmar e retornar.`;
+      }
+      if (!result.summaries.length) {
+        return 'Guru (ao vivo): nenhuma transação encontrada para este e-mail/telefone nos últimos 180 dias.';
+      }
+      return 'Guru (ao vivo, últimos 180 dias):\n' + result.summaries.join('\n');
     }
     case 'buscar_credenciais': {
       const email = String(input?.email ?? '').trim().toLowerCase();
@@ -307,6 +439,8 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
       if (!creds.length) return 'Nenhum acesso encontrado para esse e-mail.';
       return creds.map((c) => `${c.platformLabel} — Login: ${c.login} | Senha: ${c.password}`).join('\n');
     }
+    case 'salvar_dados_contato':
+      return salvarDadosContato(ctx, input);
     case 'classificar_lead': {
       const interesse = String(input?.interesse ?? '').trim();
       if (!interesse) return 'Informe o interesse do lead para classificar.';
@@ -324,7 +458,7 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
 function buildSystemPrompt(ctx: AgentContext): string {
   const nome = ctx.contactName?.trim() ? ctx.contactName.trim().split(/\s+/)[0] : '';
   return `Você é o copiloto de atendimento do MONSTER CONCURSOS (cursos para concursos) e da FAGENIUS (faculdade, Gestão de Segurança Pública). Sua tarefa: redigir UMA mensagem pronta para o ATENDENTE enviar ao aluno/lead no WhatsApp.
-${ctx.memoryBlock ? `\nMEMÓRIA DA CONVERSA (contexto do que já rolou — pode estar resumido; complementa as mensagens abaixo):\n${ctx.memoryBlock}\n` : ''}
+${ctx.memoryBlock ? `\nMEMÓRIA DA CONVERSA (contexto do que já rolou — pode estar resumido; complementa as mensagens abaixo):\n${ctx.memoryBlock}\n` : ''}${ctx.contactDataBlock ? `\nDADOS DO CONTATO (já no cadastro — use no suporte; não peça de novo o que já temos):\n${ctx.contactDataBlock}\n` : ''}
 AUTONOMIA — responda de verdade:
 - Responda à pergunta que o aluno REALMENTE fez, usando o seu próprio conhecimento quando for dúvida de conteúdo/acadêmica (uma questão, gabarito, matéria, regra de gramática como crase, interpretação, cálculo, etc.). NÃO se limite à base de conhecimento — ela é só apoio.
 - Se o aluno enviar uma imagem (print de questão, tela, comprovante), analise a imagem e responda com base no que vê.
@@ -336,10 +470,12 @@ CONVERSA:
 
 FERRAMENTAS (use só quando precisar de um dado que você não tem; para dúvida de conteúdo, responda direto):
 - buscar_produto: preço, link, o que inclui (interesse em curso).
-- consultar_pagamento: status de compra/boleto, quando o aluno fala de pagamento ou diz que comprou.
+- consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou.
+- consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
 - buscar_credenciais: acesso/login/senha — só quando o aluno pede E informou o e-mail.
 - buscar_conhecimento: procedimentos/FAQ de atendimento.
 - classificar_lead: quando NÃO há solução imediata e será preciso contatar o lead depois (o curso/concurso que ele quer não existe no catálogo e ele quer ser avisado no lançamento; pediu retorno futuro). Chame ANTES de redigir e, na mensagem, confirme que vai avisá-lo.
+- salvar_dados_contato: registre no cadastro os dados pessoais que o aluno informar (nome completo, CPF, telefone, endereço, e-mail) — para suporte futuro. Só o que ele fornecer; não fique pedindo à toa.
 
 NUNCA invente: não cite e-mail, status, valor, login, nome ou qualquer dado que você não obteve de uma ferramenta ou da conversa. NÃO traga assuntos que o aluno não levantou (ex.: não fale de pagamento, acesso ou e-mail se ele não perguntou sobre isso).
 

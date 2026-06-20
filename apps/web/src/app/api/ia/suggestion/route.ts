@@ -56,14 +56,25 @@ export async function POST(request: NextRequest) {
       agentCtx.conversationId = conversationId;
       const { data } = await supabaseAdmin
         .from('conversations')
-        .select('contact:contacts(id, name, phone)')
+        .select('contact:contacts(id, name, phone, metadata)')
         .eq('id', conversationId)
         .single();
-      const contact = (data as { contact?: { id?: string; name?: string; phone?: string } } | null)?.contact;
+      const contact = (
+        data as {
+          contact?: { id?: string; name?: string; phone?: string; metadata?: Record<string, unknown> };
+        } | null
+      )?.contact;
       if (contact) {
         agentCtx.contactId = contact.id;
         agentCtx.contactPhone = contact.phone ?? undefined;
         if (!contactName && contact.name?.trim()) contactName = contact.name.trim();
+        const dados = contact.metadata?.dados as Record<string, unknown> | undefined;
+        if (dados && typeof dados === 'object') {
+          const lines = Object.entries(dados)
+            .filter(([, v]) => v != null && String(v).trim() !== '')
+            .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`);
+          if (lines.length) agentCtx.contactDataBlock = lines.join(' | ');
+        }
       }
 
       // Conversa completa (aluno + atendente) para a IA entender o que já foi respondido.

@@ -48,6 +48,8 @@ export interface SuggestionAgentContext {
   nowHint?: string;
   /** Memória da conversa (resumo + ficha) para conversas longas. */
   memoryBlock?: string;
+  /** Dados pessoais já no cadastro do contato. */
+  contactDataBlock?: string;
 }
 
 const EMPTY_RESULT: SuggestionResult = {
@@ -333,6 +335,7 @@ export async function getSuggestion(
         images: agentCtx?.images,
         nowHint: agentCtx?.nowHint,
         memoryBlock: agentCtx?.memoryBlock,
+        contactDataBlock: agentCtx?.contactDataBlock,
       });
       if (aiSuggestion) {
         return {
