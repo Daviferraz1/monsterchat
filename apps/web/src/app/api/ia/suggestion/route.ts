@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSuggestionEnabled, isSuggestionAIEnabled } from '@/lib/api/ia/autopilot';
-import { getSuggestion } from '@/lib/api/ia/suggestion';
+import { getSuggestion, type SuggestionAgentContext } from '@/lib/api/ia/suggestion';
+import { refreshConversationMemory, buildMemoryBlock } from '@/lib/api/ia/conversation-memory';
 import { supabaseAdmin } from '@/lib/api/supabase';
 
 export const dynamic = 'force-dynamic';
@@ -35,32 +36,95 @@ export async function POST(request: NextRequest) {
     let contactName = typeof body.contactName === 'string' ? body.contactName.trim() || undefined : undefined;
     const conversationId = typeof body.conversationId === 'string' ? body.conversationId : undefined;
 
+    // Saudação conforme o horário atual (fuso de São Paulo), independente do fuso do servidor.
+    const now = new Date();
+    const spTime = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(now);
+    const spHour = Number(
+      new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(now)
+    );
+    const sauda = spHour < 12 ? 'bom dia' : spHour < 18 ? 'boa tarde' : 'boa noite';
+    const nowHint = `Horário atual (São Paulo): ${spTime}. Se for cumprimentar, a saudação correta agora é "${sauda}".`;
+
+    let agentCtx: SuggestionAgentContext = { nowHint };
+
     if (conversationId) {
-      if (!contactName) {
-        const { data } = await supabaseAdmin
-          .from('conversations')
-          .select('contact:contacts(name)')
-          .eq('id', conversationId)
-          .single();
-        const contact = (data as { contact?: { name?: string } } | null)?.contact;
-        if (contact?.name?.trim()) contactName = contact.name.trim();
+      agentCtx.conversationId = conversationId;
+      const { data } = await supabaseAdmin
+        .from('conversations')
+        .select('contact:contacts(id, name, phone)')
+        .eq('id', conversationId)
+        .single();
+      const contact = (data as { contact?: { id?: string; name?: string; phone?: string } } | null)?.contact;
+      if (contact) {
+        agentCtx.contactId = contact.id;
+        agentCtx.contactPhone = contact.phone ?? undefined;
+        if (!contactName && contact.name?.trim()) contactName = contact.name.trim();
       }
-      const { data: recentMessages } = await supabaseAdmin
+
+      // Conversa completa (aluno + atendente) para a IA entender o que já foi respondido.
+      const { data: convMsgs } = await supabaseAdmin
         .from('messages')
-        .select('body')
+        .select('direction, body')
         .eq('conversation_id', conversationId)
-        .eq('direction', 'inbound')
         .eq('content_type', 'text')
         .not('body', 'is', null)
         .neq('body', '')
         .order('created_at', { ascending: false })
-        .limit(15);
-      const bodies = (recentMessages ?? [])
-        .map((m: { body: string }) => m.body?.trim())
-        .filter(Boolean)
+        .limit(20);
+      const ordered = ((convMsgs ?? []) as Array<{ direction: string; body: string }>).reverse();
+      if (ordered.length > 0) {
+        agentCtx.transcript = ordered
+          .map((m) => `${m.direction === 'inbound' ? 'ALUNO' : 'ATENDENTE'}: ${m.body.trim()}`)
+          .join('\n');
+        const inbound = ordered
+          .filter((m) => m.direction === 'inbound')
+          .map((m) => m.body.trim())
+          .filter(Boolean);
+        if (inbound.length > 0) messageBody = inbound.join('\n');
+      }
+
+      // Memória da conversa (resumo + ficha) — para conversas longas não perderem o contexto antigo.
+      if (agentCtx.transcript) {
+        const { count: msgCount } = await supabaseAdmin
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('conversation_id', conversationId)
+          .eq('content_type', 'text')
+          .not('body', 'is', null)
+          .neq('body', '');
+        const mem = await refreshConversationMemory({
+          conversationId,
+          transcript: agentCtx.transcript,
+          totalCount: msgCount ?? 0,
+        });
+        const block = buildMemoryBlock(mem);
+        if (block) agentCtx.memoryBlock = block;
+      }
+
+      // Imagens recentes do aluno (print de questão, comprovante, tela) para a IA analisar
+      const { data: imgRows } = await supabaseAdmin
+        .from('messages')
+        .select('media_url, media_mime_type')
+        .eq('conversation_id', conversationId)
+        .eq('direction', 'inbound')
+        .eq('content_type', 'image')
+        .not('media_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(2);
+      const images = (imgRows ?? [])
+        .map((m: { media_url: string | null; media_mime_type: string | null }) => ({
+          url: m.media_url as string,
+          mime: m.media_mime_type,
+        }))
+        .filter((i) => i.url)
         .reverse();
-      if (bodies.length > 0) {
-        messageBody = bodies.join('\n');
+      if (images.length > 0) {
+        agentCtx.images = images;
       }
     }
 
@@ -69,7 +133,8 @@ export async function POST(request: NextRequest) {
       messageBody,
       brand,
       contactName,
-      suggestionAiEnabled
+      suggestionAiEnabled,
+      agentCtx
     );
     return NextResponse.json({
       confidence: result.confidence,

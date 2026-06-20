@@ -14,6 +14,7 @@ import { classifyIncomingMessage } from './classify';
 import { apiEnv } from '../env';
 
 const ESCALAR_REGEX = /\[ESCALAR:\s*(.+?)\]/s;
+const WEB_QUERY_HINT_REGEX = /(edital|banca|inscri|cronograma|data da prova|gabarito|resultado|site oficial|concorr|vagas)/i;
 
 export interface ReplyContext {
   conversationId: string;
@@ -24,6 +25,60 @@ export interface ReplyContext {
   contactMetadata?: Record<string, unknown> | null;
   contactId: string;
   messageBody: string;
+}
+
+type WebSnippet = { title: string; url: string };
+
+function shouldRunBroadWebSearch(messageBody: string, historyText: string): boolean {
+  const haystack = `${messageBody}\n${historyText}`;
+  return WEB_QUERY_HINT_REGEX.test(haystack);
+}
+
+async function fetchTextWithTimeout(url: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'MonsterChatBot/1.0' },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+function htmlToPlainText(input: string): string {
+  return input
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function getBroadWebContext(query: string): Promise<string | null> {
+  const q = query.trim().slice(0, 180);
+  if (!q) return null;
+  const html = await fetchTextWithTimeout(`https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`, 4500);
+  if (!html) return null;
+
+  const matches = [...html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const snippets: WebSnippet[] = [];
+  for (const m of matches.slice(0, 5)) {
+    const url = m[1] ?? '';
+    const title = htmlToPlainText(m[2] ?? '');
+    if (!url || !title) continue;
+    snippets.push({ title, url });
+  }
+  if (snippets.length === 0) return null;
+  return snippets.map((s, i) => `${i + 1}. ${s.title}\nFonte: ${s.url}`).join('\n\n');
 }
 
 /**
@@ -145,6 +200,10 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
     )
     .join('\n');
 
+  const webContext = shouldRunBroadWebSearch(ctx.messageBody, historyText)
+    ? await getBroadWebContext(`${ctx.messageBody}\n${historyText}`.slice(0, 400))
+    : null;
+
   const catalogJSON = await getCatalogJSON();
   const contactMeta = ctx.contactMetadata as any;
   const systemPrompt = await buildSystemPrompt(
@@ -161,7 +220,9 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
     messages: [
       {
         role: 'user',
-        content: `HISTÓRICO:\n${historyText || '(sem histórico)'}\n\nNOVA MENSAGEM DO ALUNO:\n${ctx.messageBody}`,
+        content: `HISTÓRICO:\n${historyText || '(sem histórico)'}\n\nNOVA MENSAGEM DO ALUNO:\n${ctx.messageBody}${
+          webContext ? `\n\nPESQUISA WEB (contexto auxiliar, priorize fontes oficiais):\n${webContext}` : ''
+        }`,
       },
     ],
   });
@@ -186,7 +247,8 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
     return;
   }
 
-  if (cleanReply) {
+  // Quando escalar internamente, NÃO responder ao aluno.
+  if (!escalarMatch && cleanReply) {
     try {
       await sendWhatsAppText({
         phoneNumberId,
@@ -201,14 +263,16 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
     }
   }
 
-  await createMessage({
-    conversationId: ctx.conversationId,
-    direction: 'outbound',
-    senderType: 'system',
-    contentType: 'text',
-    body: cleanReply || undefined,
-    status: 'sent',
-  });
+  if (!escalarMatch && cleanReply) {
+    await createMessage({
+      conversationId: ctx.conversationId,
+      direction: 'outbound',
+      senderType: 'system',
+      contentType: 'text',
+      body: cleanReply || undefined,
+      status: 'sent',
+    });
+  }
 
   const now = new Date().toISOString();
 
@@ -216,7 +280,7 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
     await updateConversation(ctx.conversationId, {
       status: 'aguardando_interno',
       lastMessageAt: now,
-      lastMessagePreview: cleanReply?.slice(0, 100) || '[IA escalou]',
+      lastMessagePreview: '[IA escalou internamente]',
     });
 
     const noteBody = `🤖 IA ESCALOU: ${motivoEscalar}\n\nContexto: ${analysis?.intent ?? ''}\nCategoria: ${analysis?.category ?? ''}\nMarca: ${analysis?.brand ?? ''}`;

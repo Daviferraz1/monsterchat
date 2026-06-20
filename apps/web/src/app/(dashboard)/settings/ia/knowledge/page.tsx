@@ -8,10 +8,12 @@ const BRANDS = [
   { value: '', label: 'Todas as marcas' },
   { value: 'monster', label: 'Monster' },
   { value: 'fagenius', label: 'FAGENIUS' },
-  { value: 'both', label: 'Ambas' },
+  { value: 'both', label: 'Humano' },
 ];
 
 const BRAND_OPTIONS = BRANDS.filter((b) => b.value);
+
+const getBrandLabel = (value: string) => BRANDS.find((b) => b.value === value)?.label ?? value;
 
 const CATEGORIES = [
   'financeiro',
@@ -292,7 +294,7 @@ export default function KnowledgeBasePage() {
                       className="text-left flex-1 min-w-0 flex flex-wrap items-center gap-2 hover:bg-gray-100 rounded transition-colors -m-2 p-2"
                     >
                       <span className="text-xs px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700">
-                        {entry.brand}
+                        {getBrandLabel(entry.brand)}
                       </span>
                       <span className="text-xs px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700">
                         {entry.category}

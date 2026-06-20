@@ -1,15 +1,31 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { supabaseAdmin } from '../supabase';
 import { getMatchingProducts } from './catalog';
 import type { ProductRow } from './catalog';
 import { apiEnv } from '../env';
 import { getCredentialsByEmail } from '../contacts-credentials';
+import { searchKnowledge } from './knowledge-search';
+import type { KbRow } from './knowledge-search';
+import { generateAgenticSuggestion } from './agent';
 
+/** Confiança para a busca por palavra-chave (ts_rank, valores pequenos). */
 function similarityToConfidence(similarity: number): 'high' | 'medium' | 'low' | 'none' {
   if (similarity >= 0.5) return 'high';
   if (similarity >= 0.2) return 'medium';
   if (similarity > 0) return 'low';
   return 'none';
+}
+
+/** Confiança para a busca semântica (similaridade de cosseno, ~0–1). */
+function cosineToConfidence(similarity: number): 'high' | 'medium' | 'low' | 'none' {
+  if (similarity >= 0.78) return 'high';
+  if (similarity >= 0.68) return 'medium';
+  if (similarity >= 0.55) return 'low';
+  return 'none';
+}
+
+function shouldUseCatalogSuggestion(messageBody: string): boolean {
+  const t = messageBody.toLowerCase();
+  // Catálogo deve entrar forte quando o lead está em intenção comercial.
+  return /(preco|preço|valor|quanto|custa|investimento|parcel|boleto|pix|carta[oã]|checkout|link|comprar|assinatura)/.test(t);
 }
 
 export interface SuggestionResult {
@@ -18,6 +34,28 @@ export interface SuggestionResult {
   category: string | null;
   alternatives: Array<{ question_pattern: string; gold_response: string; frequency: number; similarity: number }>;
 }
+
+/** Contexto do contato para as ferramentas do agente (pagamento/acesso/imagens). */
+export interface SuggestionAgentContext {
+  contactId?: string;
+  contactPhone?: string;
+  conversationId?: string;
+  /** Imagens recentes enviadas pelo aluno (print de questão, comprovante, tela). */
+  images?: Array<{ url: string; mime?: string | null }>;
+  /** Conversa completa (aluno + atendente) para a IA saber o que já foi respondido. */
+  transcript?: string;
+  /** Saudação conforme o horário atual (ex.: "boa tarde"). */
+  nowHint?: string;
+  /** Memória da conversa (resumo + ficha) para conversas longas. */
+  memoryBlock?: string;
+}
+
+const EMPTY_RESULT: SuggestionResult = {
+  confidence: 'none',
+  suggestion: null,
+  category: null,
+  alternatives: [],
+};
 
 /** Primeiro nome para uso em saudação (evita "Maria Silva" -> "Olá, Maria!"). */
 function getFirstName(fullName: string): string {
@@ -140,10 +178,17 @@ function formatProductSuggestion(products: ProductRow[], contactName?: string): 
     parts.push('');
     parts.push(`🚨 Se seu objetivo é passar ${noNaConcurso}, o ideal é começar a preparação agora, antes que a concorrência avance nos estudos.`);
     parts.push('');
-    parts.push('👉 Garanta sua vaga aqui:');
-    parts.push(p.checkout_url);
-    if (p.checkout_url_subscription?.trim()) {
-      parts.push(`(Plano mensal: ${p.checkout_url_subscription.trim()})`);
+    const salesPage = p.sales_page_url?.trim();
+    if (salesPage) {
+      // Lead avaliando o curso → página de vendas (o checkout fica para quando ele decidir comprar).
+      parts.push('👉 Veja todos os detalhes e garanta sua vaga aqui:');
+      parts.push(salesPage);
+    } else {
+      parts.push('👉 Garanta sua vaga aqui:');
+      parts.push(p.checkout_url);
+      if (p.checkout_url_subscription?.trim()) {
+        parts.push(`(Plano mensal: ${p.checkout_url_subscription.trim()})`);
+      }
     }
     parts.push('');
     parts.push('Assim que confirmar o pagamento, seu acesso é liberado imediatamente e você já inicia a preparação.');
@@ -198,75 +243,55 @@ function formatAccessSuggestion(
   return lines.join('\n').trim();
 }
 
-/**
- * Gera sugestão usando Claude (análise contextual, tom humano/comercial).
- */
-async function getSuggestionWithClaude(
-  context: {
-    conversationText: string;
-    productBlock: string | null;
-    kbSuggestion: string | null;
-    contactFirstName: string | null;
-  }
-): Promise<string | null> {
-  if (!apiEnv.ANTHROPIC_API_KEY) return null;
-  const systemPrompt = `Você ajuda o atendente a responder leads e alunos. Gere UMA sugestão de mensagem curta (1 a 3 parágrafos) que o atendente pode enviar no WhatsApp.
+function mapAlternatives(rows: SuggestionResult['alternatives'], contactName?: string) {
+  return rows.map((a) => ({
+    ...a,
+    gold_response: replaceNamePlaceholders(a.gold_response, contactName) ?? a.gold_response,
+  }));
+}
 
-Regras:
-- Tom humano, comercial e de suporte. Objetivo: converter lead ou dar suporte a quem já comprou.
-- Em português brasileiro. Use o primeiro nome do lead na abertura se for informado.
-- Inclua informações concretas quando houver produto (preço, link, o que inclui). Não invente dados.
-- Sobre pagamento: quando falar de boleto, Pix ou cartão, deixe claro que o cartão pode ser à vista ou parcelado; boleto e Pix são à vista (não temos boleto parcelado). Em recorrência mensal, aceitamos boleto, Pix ou cartão todo mês.
-- Não use marcadores como [ESCALAR]. Apenas o texto da mensagem.
-- Seja direto e útil. Evite respostas genéricas.`;
+function buildKbResult(
+  rows: KbRow[],
+  confidenceOf: (similarity: number) => 'high' | 'medium' | 'low' | 'none'
+): SuggestionResult {
+  if (!rows.length) return EMPTY_RESULT;
+  const top = rows[0];
+  return {
+    confidence: confidenceOf(top.similarity),
+    suggestion: top.gold_response,
+    category: top.category,
+    alternatives: rows.slice(1).map((r) => ({
+      question_pattern: r.question_pattern,
+      gold_response: r.gold_response,
+      frequency: r.frequency,
+      similarity: r.similarity,
+    })),
+  };
+}
 
-  const parts: string[] = ['Mensagens recentes do lead (contexto):', context.conversationText];
-  parts.push('', 'Informação de formas de pagamento (use quando falar de pagamento):', PAYMENT_METHODS_INFO);
-  if (context.productBlock) {
-    parts.push('', 'Dados do(s) produto(s) identificado(s) (use na resposta):', context.productBlock);
-  }
-  if (context.kbSuggestion) {
-    parts.push('', 'Sugestão da base de conhecimento (pode inspirar ou incorporar):', context.kbSuggestion);
-  }
-  if (context.contactFirstName) {
-    parts.push('', `Nome do lead para personalizar: ${context.contactFirstName}`);
-  }
-  parts.push('', 'Gere apenas o texto da sugestão, sem prefixos ou explicações.');
-
-  try {
-    const anthropic = new Anthropic({ apiKey: apiEnv.ANTHROPIC_API_KEY });
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: parts.join('\n') }],
-    });
-    const text =
-      response.content[0].type === 'text' ? response.content[0].text : '';
-    return text?.trim() || null;
-  } catch (err) {
-    console.error('[IA getSuggestion] Claude:', err);
-    return null;
-  }
+/** Base de conhecimento (semântica + fallback full-text), no formato de sugestão. */
+async function searchKnowledgeBase(messageBody: string, brand?: string): Promise<SuggestionResult> {
+  const { rows, semantic } = await searchKnowledge(messageBody, brand);
+  return buildKbResult(rows, semantic ? cosineToConfidence : similarityToConfidence);
 }
 
 /**
- * Busca sugestão na base de conhecimento e no catálogo de produtos.
- * Tanto com IA quanto sem IA: a base de conhecimento é sempre consultada (search_knowledge_base).
- * - Sem IA: retorna a resposta da KB (gold_response) quando há match, ou do catálogo.
- * - Com IA: envia a sugestão da KB (kbSuggestion) no prompt do Claude para inspirar a resposta.
+ * Gera a sugestão de resposta para o atendente.
+ * - Atalhos determinísticos (não recebeu acesso / e-mail → credenciais) rodam sempre.
+ * - useAi (copiloto): agente Claude com ferramentas (catálogo, base, pagamento, acesso).
+ * - Sem IA (ou se o agente falhar): catálogo + base de conhecimento.
  */
 export async function getSuggestion(
   messageBody: string,
   brand?: string,
   contactName?: string,
-  useAi: boolean = false
+  useAi: boolean = false,
+  agentCtx?: SuggestionAgentContext
 ): Promise<SuggestionResult> {
-  if (!messageBody?.trim()) {
-    return { confidence: 'none', suggestion: null, category: null, alternatives: [] };
-  }
+  const hasImages = (agentCtx?.images?.length ?? 0) > 0;
+  if (!messageBody?.trim() && !hasImages) return EMPTY_RESULT;
 
-  const text = messageBody.trim();
+  const text = (messageBody ?? '').trim();
 
   try {
     // 1) Aluno disse que não recebeu o acesso → sugerir pedir o e-mail da compra
@@ -279,7 +304,7 @@ export async function getSuggestion(
       };
     }
 
-    // 2) Mensagem contém um e-mail → buscar credenciais (Resend/contatos) e sugerir os acessos
+    // 2) Mensagem contém um e-mail → buscar credenciais e sugerir os acessos
     const email = extractEmail(text);
     if (email) {
       const credentials = await getCredentialsByEmail(email);
@@ -296,50 +321,43 @@ export async function getSuggestion(
       }
     }
 
-    const [kbResult, matchingProducts] = await Promise.all([
-      searchKnowledgeBase(messageBody, brand),
-      getMatchingProducts(messageBody, brand),
-    ]);
-
-    const productBlock =
-      matchingProducts.length > 0
-        ? formatProductSuggestion(matchingProducts, contactName)
-        : null;
-    const kbSuggestion = kbResult.suggestion ?? null;
-    const contactFirstName = contactName?.trim()
-      ? getFirstName(contactName)
-      : null;
-
+    // 3) Modo IA (copiloto): agente com ferramentas
     if (useAi && apiEnv.ANTHROPIC_API_KEY) {
-      const aiSuggestion = await getSuggestionWithClaude({
-        conversationText: messageBody,
-        productBlock,
-        kbSuggestion,
-        contactFirstName,
+      const aiSuggestion = await generateAgenticSuggestion({
+        conversationText: agentCtx?.transcript || messageBody,
+        contactName,
+        brand,
+        contactId: agentCtx?.contactId,
+        contactPhone: agentCtx?.contactPhone,
+        conversationId: agentCtx?.conversationId,
+        images: agentCtx?.images,
+        nowHint: agentCtx?.nowHint,
+        memoryBlock: agentCtx?.memoryBlock,
       });
       if (aiSuggestion) {
         return {
           confidence: 'high',
           suggestion: replaceNamePlaceholders(aiSuggestion, contactName),
-          category: matchingProducts.length > 0 ? 'produto' : kbResult.category,
-          alternatives: kbResult.alternatives.map((a) => ({
-            ...a,
-            gold_response: replaceNamePlaceholders(a.gold_response, contactName) ?? a.gold_response,
-          })),
+          category: 'ia',
+          alternatives: [],
         };
       }
+      // se o agente falhar, cai no caminho determinístico abaixo
     }
 
-    if (matchingProducts.length > 0) {
+    // 4) Determinístico: catálogo (intenção comercial) ou base de conhecimento
+    const [kbResult, matchingProducts] = await Promise.all([
+      searchKnowledgeBase(messageBody, brand),
+      getMatchingProducts(messageBody, brand),
+    ]);
+
+    if (shouldUseCatalogSuggestion(messageBody) && matchingProducts.length > 0) {
       const suggestion = formatProductSuggestion(matchingProducts, contactName);
       return {
         confidence: 'high',
         suggestion: replaceNamePlaceholders(suggestion, contactName),
         category: 'produto',
-        alternatives: kbResult.alternatives.map((a) => ({
-          ...a,
-          gold_response: replaceNamePlaceholders(a.gold_response, contactName) ?? a.gold_response,
-        })),
+        alternatives: mapAlternatives(kbResult.alternatives, contactName),
       };
     }
 
@@ -348,57 +366,10 @@ export async function getSuggestion(
       confidence: kbResult.confidence,
       suggestion: replaceNamePlaceholders(kbSuggestionFinal, contactName),
       category: kbResult.category,
-      alternatives: kbResult.alternatives.map((a) => ({
-        ...a,
-        gold_response: replaceNamePlaceholders(a.gold_response, contactName) ?? a.gold_response,
-      })),
+      alternatives: mapAlternatives(kbResult.alternatives, contactName),
     };
   } catch (err) {
     console.error('[IA getSuggestion]', err);
-    return { confidence: 'none', suggestion: null, category: null, alternatives: [] };
-  }
-}
-
-async function searchKnowledgeBase(
-  messageBody: string,
-  brand?: string
-): Promise<SuggestionResult> {
-  try {
-    const { data, error } = await supabaseAdmin.rpc('search_knowledge_base', {
-      search_text: messageBody,
-      search_brand: brand ?? null,
-      max_results: 3,
-    });
-
-    if (error || !data?.length) {
-      return { confidence: 'none', suggestion: null, category: null, alternatives: [] };
-    }
-
-    const results = data as Array<{
-      id: string;
-      brand: string;
-      category: string;
-      question_pattern: string;
-      gold_response: string;
-      frequency: number;
-      similarity: number;
-    }>;
-
-    const top = results[0];
-    const confidence = similarityToConfidence(top.similarity);
-
-    return {
-      confidence,
-      suggestion: top.gold_response,
-      category: top.category,
-      alternatives: results.slice(1).map((r) => ({
-        question_pattern: r.question_pattern,
-        gold_response: r.gold_response,
-        frequency: r.frequency,
-        similarity: r.similarity,
-      })),
-    };
-  } catch {
-    return { confidence: 'none', suggestion: null, category: null, alternatives: [] };
+    return EMPTY_RESULT;
   }
 }

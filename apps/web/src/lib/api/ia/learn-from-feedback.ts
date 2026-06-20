@@ -2,6 +2,20 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../supabase';
 import { apiEnv } from '../env';
 import { isLearnFromFeedbackUseAi } from './autopilot';
+import { embedText, isEmbeddingsEnabled } from './embeddings';
+
+/** Gera e grava o embedding da pergunta-tipo para que a nova entrada seja localizável na busca semântica. */
+async function storeEmbedding(id: string | undefined, text: string): Promise<void> {
+  if (!id || !isEmbeddingsEnabled()) return;
+  try {
+    const emb = await embedText(text, 'RETRIEVAL_DOCUMENT');
+    if (emb) {
+      await supabaseAdmin.from('knowledge_base').update({ embedding: emb }).eq('id', id);
+    }
+  } catch (err) {
+    console.warn('[IA learnFromFeedback] embedding', err);
+  }
+}
 
 const CATEGORIES = ['financeiro', 'acesso', 'matricula', 'academico', 'lead', 'tecnico', 'duvida', 'reclamacao', 'documento', 'outro'] as const;
 const BRANDS = ['monster', 'fagenius', 'both'] as const;
@@ -56,6 +70,7 @@ export async function learnFromFeedback(params: LearnFromFeedbackParams): Promis
       console.warn('[IA learnFromFeedback] insert (sem IA)', error.message);
       return { skipped: error.message };
     }
+    await storeEmbedding(data?.id, questionPattern);
     return { id: data?.id };
   }
 
@@ -122,6 +137,7 @@ Responda APENAS com um JSON válido, sem markdown e sem texto antes ou depois. E
       console.warn('[IA learnFromFeedback] insert', error.message);
       return { skipped: error.message };
     }
+    await storeEmbedding(data?.id, entry.question_pattern.trim());
     return { id: data?.id };
   } catch (err) {
     console.error('[IA learnFromFeedback]', err);

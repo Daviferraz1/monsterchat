@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle } from 'lucide-react';
+import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle, Users } from 'lucide-react';
 
 interface IAStats {
   conversationsAnalyzed: number;
@@ -19,6 +19,8 @@ export default function IAPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<IAStats | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -127,6 +129,45 @@ export default function IAPage() {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBackfillEmbeddings = async () => {
+    setBackfilling(true);
+    setBackfillMsg('Gerando embeddings...');
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    try {
+      let total = 0;
+      for (let i = 0; i < 200; i++) {
+        const res = await fetch('/api/ia/embeddings/backfill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batchSize: 100 }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setBackfillMsg(data.error || 'Falha ao gerar embeddings.');
+          return;
+        }
+        total += data.processed ?? 0;
+        if (data.rateLimited) {
+          setBackfillMsg(
+            `Limite do plano grátis do Gemini atingido. Geradas ${total} • ainda faltam ${data.remaining ?? 0}. Aguarde alguns minutos e clique de novo, ou ative o faturamento no Google AI Studio para gerar tudo de uma vez.`
+          );
+          return;
+        }
+        if (data.done) {
+          setBackfillMsg(`Concluído: ${total} entradas indexadas para busca semântica.`);
+          return;
+        }
+        setBackfillMsg(`Geradas ${total} • restam ${data.remaining ?? 0}...`);
+        await sleep(600);
+      }
+      setBackfillMsg(`Geradas ${total}. Clique novamente para continuar (base grande).`);
+    } catch {
+      setBackfillMsg('Erro ao gerar embeddings.');
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -320,12 +361,47 @@ export default function IAPage() {
             <p className="text-xs text-gray-500 mb-4 ml-7">
               Quando ativo, o Claude normaliza a pergunta e a resposta antes de salvar. Quando desativado, salva a pergunta e a resposta do atendente como estão (sem IA).
             </p>
+
+            <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+              <p className="text-sm font-medium text-gray-800 mb-1">Busca semântica (embeddings)</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Gera os embeddings das entradas já existentes para a IA encontrar respostas mesmo com sinônimos ou outras palavras. Rode uma vez após configurar a <code className="bg-gray-100 px-1 rounded">GEMINI_API_KEY</code> e a migração 030.
+              </p>
+              <button
+                type="button"
+                onClick={handleBackfillEmbeddings}
+                disabled={backfilling}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-60 transition-colors text-sm font-medium"
+              >
+                {backfilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                {backfilling ? 'Gerando...' : 'Gerar embeddings da base'}
+              </button>
+              {backfillMsg && <p className="text-xs text-gray-600 mt-2">{backfillMsg}</p>}
+            </div>
+
             <Link
               href="/settings/ia/knowledge"
               className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-colors font-medium"
             >
               <BookOpen className="w-5 h-5" />
               Ver base de conhecimento
+            </Link>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#7c3aed]" />
+              Leads para follow-up
+            </h2>
+            <p className="text-gray-700 text-sm mb-4">
+              Contatos que a IA classificou para retorno futuro (ex.: curso que o aluno quer ainda não está disponível). A equipe contata quando houver novidade.
+            </p>
+            <Link
+              href="/settings/ia/leads"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-colors font-medium"
+            >
+              <Users className="w-5 h-5" />
+              Ver leads
             </Link>
           </div>
 

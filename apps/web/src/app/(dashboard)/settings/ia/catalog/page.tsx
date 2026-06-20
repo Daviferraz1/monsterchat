@@ -68,6 +68,11 @@ export default function CatalogPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [jsonPreview, setJsonPreview] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importJson, setImportJson] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -230,6 +235,56 @@ export default function CatalogPage() {
     }
   };
 
+  const openImport = () => {
+    setImportJson('');
+    setImportError(null);
+    setImportResult(null);
+    setImportOpen(true);
+  };
+
+  const importProductsFromJson = async () => {
+    setImportError(null);
+    setImportResult(null);
+    const raw = importJson.trim();
+    if (!raw) {
+      setImportError('Cole um JSON válido.');
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      setImportError('JSON inválido. Verifique vírgulas, aspas e estrutura.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const res = await fetch('/api/ia/catalog/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao importar.');
+      }
+      const created = data.created ?? 0;
+      const updated = data.updated ?? 0;
+      const errors: string[] = data.errors ?? [];
+      let msg = `✅ ${created} novo(s), ${updated} atualizado(s) de ${data.total ?? created + updated}.`;
+      if (errors.length) {
+        msg += ` ${errors.length} com erro: ${errors.slice(0, 5).join(' • ')}`;
+      }
+      setImportResult(msg);
+      await load();
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Erro ao importar produtos.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const statusBadge = (status: string) =>
     STATUS_OPTIONS.find((s) => s.value === status)?.badge ?? status;
 
@@ -290,6 +345,13 @@ export default function CatalogPage() {
           >
             <Plus className="w-4 h-4" />
             Novo produto
+          </button>
+          <button
+            type="button"
+            onClick={openImport}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium"
+          >
+            Colar JSON
           </button>
         </div>
 
@@ -663,6 +725,58 @@ export default function CatalogPage() {
                     Excluir
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {importOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-2">Importar / atualizar via JSON</h2>
+              <p className="text-sm text-gray-600 mb-3">
+                Aceita o seu <code className="bg-gray-100 px-1 rounded">cursos.json</code> (com a chave <code className="bg-gray-100 px-1 rounded">&quot;cursos&quot;</code>) ou produtos no formato nativo — objeto único ou array.
+                <br />
+                <strong>Atualiza os que já existem</strong> (casa por id/slug → link de checkout → nome) e cria os novos. Não duplica.
+              </p>
+              {importError && (
+                <p className="mb-3 text-sm text-red-600" role="alert">
+                  {importError}
+                </p>
+              )}
+              {importResult && (
+                <p className="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-2" role="status">
+                  {importResult}
+                </p>
+              )}
+              <textarea
+                value={importJson}
+                onChange={(e) => setImportJson(e.target.value)}
+                className="w-full min-h-[260px] rounded-lg border border-gray-300 text-gray-900 font-mono text-xs p-3"
+                placeholder={`{
+  "brand": "monster",
+  "name": "Curso PM MG Soldado",
+  "price_display": "R$ 497,00",
+  "checkout_url": "https://..."
+}`}
+              />
+              <div className="flex flex-wrap gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={importProductsFromJson}
+                  disabled={importing}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#7c3aed] text-white hover:bg-[#6d28d9] disabled:opacity-50 font-medium"
+                >
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Importar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium"
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
