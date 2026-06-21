@@ -12,6 +12,7 @@ import type { ProductRow } from './catalog';
 import { getCredentialsByEmail } from '../contacts-credentials';
 import { searchKnowledge } from './knowledge-search';
 import { fetchGuruTransactionsLive } from '../integrations/guru-live';
+import { diagnosticarAcesso } from '../integrations/platform-access';
 
 const MODEL = 'claude-sonnet-4-6';
 const MAX_ITERATIONS = 6;
@@ -121,6 +122,19 @@ const tools: Anthropic.Tool[] = [
       type: 'object',
       properties: {
         email: { type: 'string', description: 'E-mail da compra, se o aluno informar (ajuda a localizar).' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'verificar_acesso_plataforma',
+    description:
+      'Diagnostica o ACESSO do aluno na plataforma (Monster Questões + Study): se tem cadastro, se Questões/curso estão liberados e válidos, e o último webhook do Guru. Use quando o aluno diz que comprou e não recebeu acesso, ou não consegue acessar. Informe o e-mail (ou CPF) da compra.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', description: 'E-mail da compra' },
+        cpf: { type: 'string', description: 'CPF (opcional)' },
       },
       required: [],
     },
@@ -432,6 +446,13 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
       }
       return 'Guru (ao vivo, últimos 180 dias):\n' + result.summaries.join('\n');
     }
+    case 'verificar_acesso_plataforma': {
+      const r = await diagnosticarAcesso({
+        email: input?.email ? String(input.email) : undefined,
+        cpf: input?.cpf ? String(input.cpf) : undefined,
+      });
+      return r.resumo;
+    }
     case 'buscar_credenciais': {
       const email = String(input?.email ?? '').trim().toLowerCase();
       if (!email) return 'É preciso o e-mail da compra para localizar o acesso.';
@@ -472,6 +493,7 @@ FERRAMENTAS (use só quando precisar de um dado que você não tem; para dúvida
 - buscar_produto: preço, link, o que inclui (interesse em curso).
 - consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou.
 - consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
+- verificar_acesso_plataforma: diagnostica se o acesso do aluno está liberado na plataforma (Questões + cursos) e o último webhook. Use quando ele diz que comprou e não recebeu acesso / não consegue acessar.
 - buscar_credenciais: acesso/login/senha — só quando o aluno pede E informou o e-mail.
 - buscar_conhecimento: procedimentos/FAQ de atendimento.
 - classificar_lead: quando NÃO há solução imediata e será preciso contatar o lead depois (o curso/concurso que ele quer não existe no catálogo e ele quer ser avisado no lançamento; pediu retorno futuro). Chame ANTES de redigir e, na mensagem, confirme que vai avisá-lo.
@@ -490,9 +512,13 @@ PAGAMENTO: ${PAYMENT_METHODS_INFO}
 
 LINKS: lead interessado/avaliando um curso → PÁGINA DE VENDAS; LINK DE CHECKOUT só quando já decidiu comprar; sem página de vendas, use o checkout.
 
+ACESSO ("comprei e não recebi" / "não consigo acessar"): 1) confirme o pagamento (consultar_pagamento; se preciso, consultar_guru_online); 2) rode verificar_acesso_plataforma com o e-mail da compra; 3) se o acesso JÁ está liberado → oriente entrar e, se esqueceu a senha, redefinir a senha; 4) se está PAGO e DENTRO do prazo mas sem acesso (ou sem cadastro) → diga que vai liberar e que o atendente vai ativar (sem prometer prazo); NÃO afirme que já liberou — quem libera é o atendente. 5) se o acesso JÁ VENCEU (prazo acabou) → NÃO é liberação: oriente renovação/nova compra com gentileza; nunca prometa reativar acesso expirado.
+
 OUTRAS REGRAS:
 - Reembolso/cancelamento: oriente a enviar e-mail para atendimento@monsterconcursos.com.br (nome, CPF, e-mail da compra e motivo); prazo de 7 dias (CDC art. 49); resposta em até 48h úteis. Não prometa reembolso.
 - Mensagens curtas e diretas (WhatsApp), no máximo 3 parágrafos.
+
+FORMATAÇÃO (WhatsApp, NÃO Markdown): negrito com *um asterisco* (ex.: *Polícia Penal RS*) — NUNCA use ** (dois asteriscos); itálico com _underscore_; nada de títulos (#) ou tabelas.
 
 SAÍDA: responda APENAS com o texto da mensagem para o aluno — sem prefixos, aspas, explicações ou marcadores.`;
 }

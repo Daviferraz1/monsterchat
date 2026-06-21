@@ -3,7 +3,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSendMessage } from '@/hooks/useSendMessage';
 import { useSuggestion } from '@/hooks/useSuggestion';
-import { Send, Smile, Paperclip, Mic, Video, Loader2, MessageCircle, Check, Plus, X, FileText } from 'lucide-react';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { Send, Smile, Paperclip, Mic, Video, Camera, Loader2, MessageCircle, Check, Plus, X, FileText, Square } from 'lucide-react';
+
+function formatSeconds(total: number): string {
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 
 const EMOJIS = [
   '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂',
@@ -25,6 +32,23 @@ function PendingImagePreview({ file }: { file: File }) {
   if (!url) return <div className="w-14 h-14 rounded-lg bg-muted animate-pulse" />;
   return (
     <img src={url} alt="" className="w-14 h-14 object-cover rounded-lg" />
+  );
+}
+
+function PendingAudioPreview({ file }: { file: File }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+        <Mic className="w-5 h-5 text-muted-foreground" />
+      </div>
+      {url && <audio src={url} controls className="h-9 max-w-[220px]" />}
+    </div>
   );
 }
 
@@ -62,13 +86,25 @@ export function MessageInput({
   const imageVideoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const spellMenuRef = useRef<HTMLDivElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const { sendMessage, uploadAndSendMedia, sending, uploading } = useSendMessage();
   const { result: suggestionResult, loading: suggestionLoading, fetchSuggestion, clear: clearSuggestion } = useSuggestion();
+  const recorder = useVoiceRecorder();
   const busy = sending || uploading;
+
+  const stopRecordingToPending = async () => {
+    const file = await recorder.stop();
+    if (file) {
+      setPendingFile(file);
+      setError(null);
+    } else {
+      setError('Gravação vazia ou cancelada.');
+    }
+  };
 
   const closeSpellMenu = useCallback(() => setSpellMenu(null), []);
 
@@ -326,10 +362,42 @@ export function MessageInput({
           )}
         </div>
       )}
+      {recorder.error && (
+        <div className="mb-2 text-sm text-red-600" role="alert">
+          {recorder.error}
+        </div>
+      )}
+      {recorder.recording && (
+        <div className="mb-2 flex items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-2.5">
+          <span className="flex items-center gap-2 text-sm font-medium text-red-600">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            Gravando {formatSeconds(recorder.seconds)}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={recorder.cancel}
+              className="px-3 py-1.5 rounded-lg border text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={stopRecordingToPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+            >
+              <Square className="w-3.5 h-3.5" />
+              Parar
+            </button>
+          </div>
+        </div>
+      )}
       {pendingFile && (
         <div className="mb-2 flex items-center gap-2 rounded-xl border bg-muted/50 p-2">
           {pendingFile.type.startsWith('image/') ? (
             <PendingImagePreview file={pendingFile} />
+          ) : pendingFile.type.startsWith('audio/') ? (
+            <PendingAudioPreview file={pendingFile} />
           ) : (
             <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center">
               <Video className="w-6 h-6 text-muted-foreground" />
@@ -380,6 +448,14 @@ export function MessageInput({
               capture="environment"
               className="hidden"
               onChange={handleFile}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleImageVideoSelect}
             />
             <div className="relative flex-shrink-0" ref={attachMenuRef}>
               <button
@@ -439,19 +515,6 @@ export function MessageInput({
                   <button
                     type="button"
                     onClick={() => {
-                      audioInputRef.current?.click();
-                      setAttachMenuOpen(false);
-                    }}
-                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
-                    title="Enviar áudio"
-                    aria-label="Áudio"
-                    disabled={busy}
-                  >
-                    <Mic className="w-5 h-5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
                       videoInputRef.current?.click();
                       setAttachMenuOpen(false);
                     }}
@@ -506,6 +569,34 @@ export function MessageInput({
                 aria-label="Mensagem"
               />
             </div>
+            {!text.trim() && (
+              <div className="flex items-center flex-shrink-0 pr-0.5">
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
+                  title="Tirar foto (abre a câmera no celular)"
+                  aria-label="Abrir câmera"
+                  disabled={busy || recorder.recording}
+                >
+                  <Camera className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachMenuOpen(false);
+                    setEmojiOpen(false);
+                    recorder.start();
+                  }}
+                  className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
+                  title="Gravar áudio"
+                  aria-label="Gravar áudio"
+                  disabled={busy || recorder.recording}
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <button

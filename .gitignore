@@ -36,3 +36,15 @@ Thumbs.db
 
 # Supabase
 .supabase/
+
+# Turborepo cache/logs
+.turbo/
+
+# Claude Code (config local)
+.claude/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# WhatsApp (Baileys) session credentials — NUNCA commitar
+apps/api/sessions/

@@ -7,6 +7,23 @@ import { cn } from '@/lib/utils';
 
 const RETURN_TO_BOT_BODY = '[Conversa devolvida para a IA]';
 
+/** Renderiza formatação do WhatsApp: *negrito*, _itálico_, ~tachado~, `mono`. */
+function renderWhatsApp(text: string) {
+  const tokens = text.split(/(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|`[^`\n]+`)/g);
+  return tokens.map((t, i) => {
+    if (!t) return null;
+    const first = t[0];
+    if (t.length >= 3 && first === t[t.length - 1] && '*_~`'.includes(first)) {
+      const inner = t.slice(1, -1);
+      if (first === '*') return <strong key={i}>{inner}</strong>;
+      if (first === '_') return <em key={i}>{inner}</em>;
+      if (first === '~') return <s key={i}>{inner}</s>;
+      return <code key={i} className="px-1 rounded bg-black/10 text-[0.95em]">{inner}</code>;
+    }
+    return <span key={i}>{t}</span>;
+  });
+}
+
 interface MessageBubbleProps {
   message: Message;
 }
@@ -54,7 +71,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <p className="whitespace-pre-wrap">
             {message.direction === 'outbound' && !message.body?.trim()
               ? '\u00A0'
-              : message.body?.trim() || '(mensagem vazia)'}
+              : message.body?.trim()
+                ? renderWhatsApp(message.body.trim())
+                : '(mensagem vazia)'}
           </p>
         )}
         {message.media_url && (

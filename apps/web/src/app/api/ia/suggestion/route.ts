@@ -6,6 +6,12 @@ import { supabaseAdmin } from '@/lib/api/supabase';
 
 export const dynamic = 'force-dynamic';
 
+/** Converte negrito Markdown (**texto** / __texto__) para o formato do WhatsApp (*texto*). */
+function toWhatsApp(s: string | null): string | null {
+  if (!s) return s;
+  return s.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/__(.+?)__/g, '*$1*');
+}
+
 /**
  * Sugestão de resposta com base na base de conhecimento e no catálogo de produtos.
  *
@@ -149,9 +155,12 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json({
       confidence: result.confidence,
-      suggestion: result.suggestion,
+      suggestion: toWhatsApp(result.suggestion),
       category: result.category,
-      alternatives: result.alternatives ?? [],
+      alternatives: (result.alternatives ?? []).map((a) => ({
+        ...a,
+        gold_response: toWhatsApp(a.gold_response) ?? a.gold_response,
+      })),
     });
   } catch (err) {
     console.error('[API ia/suggestion]', err);

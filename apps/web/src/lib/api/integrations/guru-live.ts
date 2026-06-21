@@ -77,7 +77,16 @@ export interface GuruLiveResult {
   ok: boolean;
   configured: boolean;
   summaries: string[];
+  /** true se há ao menos 1 transação paga/aprovada (ou assinatura ativa) para o contato. */
+  approved?: boolean;
   error?: string;
+}
+
+const APPROVED_STATUS = new Set(['approved', 'paid', 'completed', 'active', 'authorized']);
+
+function isApprovedTx(t: Record<string, unknown>): boolean {
+  const s = String(t.status ?? '').toLowerCase();
+  return APPROVED_STATUS.has(s);
 }
 
 export async function fetchGuruTransactionsLive(params: {
@@ -112,7 +121,7 @@ export async function fetchGuruTransactionsLive(params: {
     const data = await res.json().catch(() => ({}));
     let txs = extractArray(data);
     if (email || phone) txs = txs.filter((t) => matches(t, email, phone));
-    return { ok: true, configured: true, summaries: txs.slice(0, 5).map(txSummary) };
+    return { ok: true, configured: true, summaries: txs.slice(0, 5).map(txSummary), approved: txs.some(isApprovedTx) };
   } catch (err) {
     const isAbort = err instanceof Error && err.name === 'AbortError';
     return { ok: false, configured: true, summaries: [], error: isAbort ? 'timeout' : 'erro de rede' };

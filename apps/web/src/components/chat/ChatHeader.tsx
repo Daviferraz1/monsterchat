@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
-import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw } from 'lucide-react';
 import type { DigitalGuruMetadata } from '@/types';
 
 function formatDateTime(iso?: string | null): string {
@@ -37,6 +37,10 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [contactSales, setContactSales] = useState<Array<{ id: string; product_names: string; status: string | null; sold_at: string; payment_method?: string | null; payment_total?: number | null }>>([]);
   const [accessCredentials, setAccessCredentials] = useState<Array<{ platform: string; platformLabel: string; login: string; password: string }>>([]);
+  const [accessDiag, setAccessDiag] = useState<string | null>(null);
+  const [accessChecking, setAccessChecking] = useState(false);
+  const [liberando, setLiberando] = useState(false);
+  const [liberarMsg, setLiberarMsg] = useState<string | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -144,6 +148,45 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const initials = displayName && displayName !== 'Contato sem nome'
     ? displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
+
+  const verificarAcesso = async () => {
+    setAccessChecking(true);
+    setAccessDiag(null);
+    setLiberarMsg(null);
+    try {
+      const res = await fetch('/api/ia/access/diagnose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId, email: contact?.email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setAccessDiag(data.resumo || 'Sem resposta do diagnóstico.');
+    } catch {
+      setAccessDiag('Falha ao verificar o acesso.');
+    } finally {
+      setAccessChecking(false);
+    }
+  };
+
+  const liberarAcessoUI = async () => {
+    if (!confirm('Reprocessar/liberar o acesso deste aluno na plataforma? (use só com pagamento confirmado)')) return;
+    setLiberando(true);
+    setLiberarMsg(null);
+    try {
+      const res = await fetch('/api/ia/access/liberar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId, email: contact?.email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setLiberarMsg(data.message || (data.ok ? 'Liberado.' : 'Falha ao liberar.'));
+      setTimeout(() => verificarAcesso(), 1500);
+    } catch {
+      setLiberarMsg('Falha ao liberar o acesso.');
+    } finally {
+      setLiberando(false);
+    }
+  };
 
   return (
     <div ref={headerRef} className="relative flex items-stretch">
@@ -279,6 +322,49 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                 </p>
               </div>
             )}
+            <div className="pt-3 border-t space-y-2">
+              <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Unlock className="w-3.5 h-3.5" />
+                Acesso na plataforma
+              </h4>
+              {!contact.email ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Sem e-mail no cadastro — peça o e-mail da compra para diagnosticar/liberar o acesso.
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={verificarAcesso}
+                      disabled={accessChecking}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium hover:bg-muted disabled:opacity-50"
+                    >
+                      {accessChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Verificar acesso
+                    </button>
+                    <button
+                      type="button"
+                      onClick={liberarAcessoUI}
+                      disabled={liberando}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                    >
+                      {liberando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5" />}
+                      Liberar acesso
+                    </button>
+                  </div>
+                  {accessDiag && (
+                    <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words bg-muted/50 rounded-md p-2 mt-1 font-sans">
+                      {accessDiag}
+                    </pre>
+                  )}
+                  {liberarMsg && (
+                    <p className="text-[11px] text-foreground bg-muted/50 rounded-md p-2">{liberarMsg}</p>
+                  )}
+                </>
+              )}
+            </div>
+
             {channel && (
               <div className="pt-2 border-t text-xs text-muted-foreground">
                 Canal: {channel.name} ({channel.type})

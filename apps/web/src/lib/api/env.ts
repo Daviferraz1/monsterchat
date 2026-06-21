@@ -71,6 +71,10 @@ export const apiEnv = {
   // Embeddings da base de conhecimento (busca semântica) — Google Gemini
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
 
+  // Plataforma de alunos (Monster Questões + Study) — 2º Supabase (diagnóstico/liberação de acesso)
+  PLATFORM_SUPABASE_URL: process.env.PLATFORM_SUPABASE_URL,
+  PLATFORM_SUPABASE_SERVICE_KEY: process.env.PLATFORM_SUPABASE_SERVICE_KEY,
+
   // Resend – e-mails de login/senha (Monster Study, Monster Questões, Monster Sound)
   RESEND_API_KEY: process.env.RESEND_API_KEY,
 } as const;
