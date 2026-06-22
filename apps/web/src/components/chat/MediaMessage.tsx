@@ -11,6 +11,8 @@ interface MediaMessageProps {
   direction?: 'inbound' | 'outbound';
   /** Foto do contato (mostrada no voice note recebido, estilo WhatsApp). */
   avatarUrl?: string | null;
+  /** Nome do contato — iniciais no voice note quando não há foto (ex.: WhatsApp não envia foto). */
+  avatarName?: string | null;
 }
 
 /** URL temporária da Meta (WhatsApp) — exige token, retorna 401 no navegador. Não dá para tocar/baixar. */
@@ -39,7 +41,7 @@ function isAudio(mime?: string, contentType?: string): boolean {
   return contentType === 'audio';
 }
 
-export function MediaMessage({ url, mimeType, filename, contentType, direction, avatarUrl }: MediaMessageProps) {
+export function MediaMessage({ url, mimeType, filename, contentType, direction, avatarUrl, avatarName }: MediaMessageProps) {
   const isUnavailable = isTemporaryMetaUrl(url);
 
   if (isUnavailable) {
@@ -107,7 +109,7 @@ export function MediaMessage({ url, mimeType, filename, contentType, direction, 
   if (isAudio(mimeType, contentType)) {
     return (
       <div className="space-y-1">
-        <VoiceNote url={url} outbound={direction === 'outbound'} avatarUrl={avatarUrl} />
+        <VoiceNote url={url} outbound={direction === 'outbound'} avatarUrl={avatarUrl} avatarName={avatarName} />
         <a
           href={url}
           target="_blank"

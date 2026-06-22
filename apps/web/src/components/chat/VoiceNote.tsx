@@ -27,9 +27,18 @@ interface VoiceNoteProps {
   url: string;
   outbound?: boolean;
   avatarUrl?: string | null;
+  /** Nome do contato — usado para mostrar iniciais quando não há foto (ex.: WhatsApp não envia foto). */
+  avatarName?: string | null;
 }
 
-export function VoiceNote({ url, outbound, avatarUrl }: VoiceNoteProps) {
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export function VoiceNote({ url, outbound, avatarUrl, avatarName }: VoiceNoteProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const detectingRef = useRef(false);
   const [playing, setPlaying] = useState(false);
@@ -80,12 +89,20 @@ export function VoiceNote({ url, outbound, avatarUrl }: VoiceNoteProps) {
   const unplayedColor = outbound ? 'bg-white/40' : 'bg-foreground/25';
   const timeColor = outbound ? 'text-primary-foreground/70' : 'text-muted-foreground';
 
+  const initials = avatarName ? initialsOf(avatarName) : '';
   const avatar = (
     <div className="relative shrink-0 w-11 h-11">
-      <div className="w-11 h-11 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+      <div
+        className={cn(
+          'w-11 h-11 rounded-full overflow-hidden flex items-center justify-center',
+          avatarUrl || !initials ? 'bg-muted' : 'bg-gradient-to-br from-[#8b5cf6] to-[#ec4899]'
+        )}
+      >
         {avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase/Meta)
           <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+        ) : initials ? (
+          <span className="text-sm font-semibold text-white">{initials}</span>
         ) : (
           <Mic className="w-5 h-5 text-muted-foreground" />
         )}

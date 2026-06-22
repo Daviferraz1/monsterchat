@@ -18,22 +18,23 @@ export function ChatWindow() {
   const { messages, refresh } = useRealtimeMessages(conversationId);
   const [refreshing, setRefreshing] = useState(false);
   const [contactAvatarUrl, setContactAvatarUrl] = useState<string | null>(null);
+  const [contactName, setContactName] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Foto do contato — usada nos voice notes (estilo WhatsApp)
+  // Foto/nome do contato — usados nos voice notes (estilo WhatsApp; WhatsApp não envia foto, cai nas iniciais)
   useEffect(() => {
     if (!conversationId) return;
     let cancelled = false;
     supabase
       .from('conversations')
-      .select('contact:contacts(profile_pic_url)')
+      .select('contact:contacts(profile_pic_url, name)')
       .eq('id', conversationId)
       .single()
       .then(({ data }) => {
         if (cancelled) return;
-        const url =
-          (data as { contact?: { profile_pic_url?: string | null } } | null)?.contact?.profile_pic_url ?? null;
-        setContactAvatarUrl(url);
+        const contact = (data as { contact?: { profile_pic_url?: string | null; name?: string | null } } | null)?.contact;
+        setContactAvatarUrl(contact?.profile_pic_url ?? null);
+        setContactName(contact?.name ?? null);
       });
     return () => {
       cancelled = true;
@@ -151,7 +152,7 @@ export function ChatWindow() {
         className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 overscroll-behavior-contain"
       >
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} contactAvatarUrl={contactAvatarUrl} />
+          <MessageBubble key={message.id} message={message} contactAvatarUrl={contactAvatarUrl} contactName={contactName} />
         ))}
       </div>
       <MessageInput
