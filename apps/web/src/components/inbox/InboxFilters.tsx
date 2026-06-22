@@ -17,8 +17,9 @@ interface InboxFiltersProps {
   notRepliedCount?: number;
 }
 
-/** Linha de pills rolável na horizontal (sem quebrar em várias linhas) — estilo WhatsApp. */
-const ROW = 'flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
+/** Pills: rolagem horizontal no mobile (estilo WhatsApp); quebra em linhas no desktop (mostra tudo). */
+const ROW =
+  'flex gap-1.5 overflow-x-auto md:flex-wrap md:overflow-x-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
 const CHIP = 'shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all';
 
 function chipStyle(selected: boolean) {
