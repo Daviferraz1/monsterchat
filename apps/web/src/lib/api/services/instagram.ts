@@ -3,6 +3,10 @@ import { sanitizeTokenForHeader } from '../utils';
 
 const GRAPH_API_VERSION = 'v23.0';
 
+/** Base/versão da API nova do Instagram (Instagram Login) — mesma usada para enviar mensagens. */
+const INSTAGRAM_GRAPH_BASE = 'https://graph.instagram.com';
+const INSTAGRAM_API_VERSION = 'v21.0';
+
 /** Resposta da API de perfil do usuário Instagram (User Profile API). */
 export interface InstagramUserProfile {
   name?: string;
@@ -25,30 +29,47 @@ export async function getInstagramUserProfile(
   igScopedUserId: string,
   accessToken: string
 ): Promise<InstagramUserProfile | null> {
-  try {
-    const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(igScopedUserId)}`;
-    const token = sanitizeTokenForHeader(accessToken);
-    const { data } = await axios.get<InstagramUserProfile>(url, {
-      params: { fields: 'name,username,profile_pic', access_token: token },
-      timeout: 10000,
-    });
-    return data;
-  } catch (err) {
-    const data = axios.isAxiosError(err) ? err.response?.data?.error : undefined;
-    const msg = typeof data?.message === 'string' ? data.message : null;
-    const code = data?.code;
-    // 803 = IGSID not found; 100 = page not linked / IG not professional — perfil indisponível, mensagem segue normalmente
-    const isExpectedProfileError =
-      code === 803 ||
-      code === 100 ||
-      (msg && /IGSID not found|consent|required|blocked|page is not linked|not professional account/i.test(String(msg)));
-    if (isExpectedProfileError) {
-      console.debug('[Instagram] Perfil não disponível:', msg || `code ${code}`);
-    } else if (msg || err) {
-      console.warn('[Instagram] Erro ao buscar perfil:', msg || err);
+  const token = sanitizeTokenForHeader(accessToken);
+  const id = encodeURIComponent(igScopedUserId);
+  const fields = 'name,username,profile_pic';
+
+  // Ordem: API nova (Instagram Login, graph.instagram.com — mesma do envio) e, como
+  // fallback, a API antiga (Page token, graph.facebook.com). O token do canal aqui é
+  // de Instagram Login, então o graph.facebook.com antigo não resolvia o IGSID (erro 803)
+  // e o nome caía no fallback "Instagram <id>".
+  const endpoints = [
+    `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/${id}`,
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${id}`,
+  ];
+
+  let lastErr: unknown;
+  for (const url of endpoints) {
+    try {
+      const { data } = await axios.get<InstagramUserProfile>(url, {
+        params: { fields, access_token: token },
+        timeout: 10000,
+      });
+      if (data && (data.name || data.username || data.profile_pic)) return data;
+    } catch (err) {
+      lastErr = err;
+      // tenta o próximo endpoint
     }
-    return null;
   }
+
+  const data = axios.isAxiosError(lastErr) ? lastErr.response?.data?.error : undefined;
+  const msg = typeof data?.message === 'string' ? data.message : null;
+  const code = data?.code;
+  // 803 = IGSID not found; 100 = page not linked / IG not professional — perfil indisponível, mensagem segue normalmente
+  const isExpectedProfileError =
+    code === 803 ||
+    code === 100 ||
+    (msg && /IGSID not found|consent|required|blocked|page is not linked|not professional account/i.test(String(msg)));
+  if (isExpectedProfileError) {
+    console.debug('[Instagram] Perfil não disponível:', msg || `code ${code}`);
+  } else if (msg || lastErr) {
+    console.warn('[Instagram] Erro ao buscar perfil:', msg || lastErr);
+  }
+  return null;
 }
 
 export interface InstagramSendTextParams {
@@ -69,10 +90,6 @@ export interface InstagramSendMessageResponse {
   recipient_id: string;
   message_id: string;
 }
-
-/** Base da API nova do Instagram (permissões instagram_business_manage_messages, etc.). */
-const INSTAGRAM_GRAPH_BASE = 'https://graph.instagram.com';
-const INSTAGRAM_API_VERSION = 'v21.0';
 
 export async function sendInstagramText(params: InstagramSendTextParams) {
   const url = `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/me/messages`;
