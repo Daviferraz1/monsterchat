@@ -150,22 +150,22 @@ export function ChatWindow() {
           type="button"
           onClick={handleFinalize}
           disabled={finalizing}
-          className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] text-sm rounded-lg transition-colors disabled:opacity-50 ${
+          className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 ${
             isClosed
-              ? 'text-green-600 hover:bg-green-500/10'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20'
+              : 'border-green-600/40 bg-green-600/10 text-green-700 hover:bg-green-600/20'
           }`}
           title={isClosed ? 'Reabrir conversa' : 'Finalizar conversa (sai de “Não respondido”)'}
         >
           {isClosed ? (
             <>
               <RotateCcw className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">Reabrir</span>
+              <span>Reabrir conversa</span>
             </>
           ) : (
             <>
               <CheckCheck className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">{finalizing ? 'Finalizando...' : 'Finalizar'}</span>
+              <span>{finalizing ? 'Finalizando...' : 'Finalizar conversa'}</span>
             </>
           )}
         </button>
