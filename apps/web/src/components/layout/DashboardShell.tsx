@@ -2,16 +2,19 @@
 
 import { usePathname } from 'next/navigation';
 import { MobileNavRail } from './MobileNavRail';
+import { MobileBottomNav } from './MobileBottomNav';
 import { MobileInboxContent } from './MobileInboxContent';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isInboxList = pathname === '/inbox';
   const isInboxSection = pathname?.startsWith('/inbox') ?? false;
+  // Conversa aberta (/inbox/[id]): no mobile o chat ocupa a tela toda e a barra inferior some.
+  const isConversationOpen = isInboxSection && !isInboxList;
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      {/* Rail de ícones à esquerda (mobile + desktop, estilo WhatsApp Web) */}
+      {/* Rail de ícones à esquerda (somente desktop, estilo WhatsApp Web) */}
       <MobileNavRail />
 
       {/* Desktop: coluna do meio com lista de conversas quando está na área Inbox */}
@@ -35,6 +38,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         >
           {children}
         </main>
+
+        {/* Barra de navegação inferior (mobile): some quando uma conversa está aberta */}
+        {!isConversationOpen && <MobileBottomNav />}
       </div>
     </div>
   );

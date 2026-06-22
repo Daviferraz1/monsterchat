@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, Users, ShoppingBag, CreditCard, Settings } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useTotalUnreadCount } from '@/hooks/useTotalUnreadCount';
+import { NAV_ITEMS, isNavActive, formatUnreadBadge } from './navItems';
 
 function getInitials(email: string): string {
   const part = email.split('@')[0];
@@ -13,20 +13,7 @@ function getInitials(email: string): string {
   return part[0].toUpperCase();
 }
 
-const NAV_ITEMS = [
-  { href: '/inbox', icon: MessageSquare, label: 'Conversas' },
-  { href: '/contacts', icon: Users, label: 'Contatos' },
-  { href: '/sales', icon: ShoppingBag, label: 'Vendas' },
-  { href: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
-  { href: '/settings', icon: Settings, label: 'Configurações' },
-] as const;
-
-/** Formata o número para o badge: número real até 999, depois "999+" */
-function formatUnreadBadge(n: number): string {
-  if (n <= 0) return '';
-  return n > 999 ? '999+' : String(n);
-}
-
+/** Rail de ícones à esquerda — apenas desktop (md+); no mobile usamos a barra inferior. */
 export function MobileNavRail() {
   const pathname = usePathname();
   const { user } = useUser();
@@ -34,13 +21,13 @@ export function MobileNavRail() {
 
   return (
     <nav
-      className="flex flex-col items-center w-14 flex-shrink-0 border-r border-white/10 bg-[#0a0a18] py-2"
+      className="hidden md:flex flex-col items-center w-14 flex-shrink-0 border-r border-white/10 bg-[#0a0a18] py-2"
       aria-label="Menu principal"
     >
       <div className="flex flex-col items-center gap-1 flex-1 min-h-0">
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
           const isInbox = href === '/inbox';
-          const active = isInbox ? pathname?.startsWith('/inbox') : href === '/settings' ? pathname?.startsWith('/settings') : pathname?.startsWith(href);
+          const active = isNavActive(pathname, href);
 
           return (
             <Link
