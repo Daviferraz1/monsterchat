@@ -6,9 +6,10 @@ import { useState } from 'react';
 import { formatLastMessageTime } from '@/lib/utils';
 import { orderStatusBadge, effectiveSituationFromDg } from '@/lib/orderStatusBadge';
 import { ChannelBadge } from '../layout/ChannelBadge';
+import { isFinalized } from '@/lib/conversationStatus';
 import type { Conversation } from '@/types';
 import type { DigitalGuruMetadata, LeadCampaign } from '@/types';
-import { Megaphone } from 'lucide-react';
+import { Megaphone, CheckCheck } from 'lucide-react';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -56,6 +57,7 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
   const situationBadge = effectiveSituation ? orderStatusBadge(effectiveSituation) : null;
   const campaign = contact?.metadata?.campaign as LeadCampaign | undefined;
   const isLeadFromAd = !!(campaign?.utm_source || campaign?.utm_medium || campaign?.utm_campaign);
+  const finalized = isFinalized(conversation);
 
   return (
     <Link
@@ -108,6 +110,15 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
             (conversation.last_message_at ? 'Mensagem' : 'Sem mensagens')}
         </p>
         <div className="flex flex-wrap items-center gap-1.5 mt-1">
+          {finalized && (
+            <span
+              className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit bg-green-500/15 text-green-400 border-green-500/30"
+              title="Conversa finalizada"
+            >
+              <CheckCheck className="w-3 h-3 shrink-0" />
+              Finalizada
+            </span>
+          )}
           {isLeadFromAd && (
             <span
               className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit bg-blue-500/20 text-blue-300 border-blue-500/30"

@@ -8,7 +8,7 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 import { ChatHeader } from './ChatHeader';
 import { useParams } from 'next/navigation';
-import { RefreshCw, Bot } from 'lucide-react';
+import { RefreshCw, Bot, CheckCheck, RotateCcw } from 'lucide-react';
 
 export function ChatWindow() {
   const params = useParams();
@@ -19,27 +19,51 @@ export function ChatWindow() {
   const [refreshing, setRefreshing] = useState(false);
   const [contactAvatarUrl, setContactAvatarUrl] = useState<string | null>(null);
   const [contactName, setContactName] = useState<string | null>(null);
+  const [convStatus, setConvStatus] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Foto/nome do contato — usados nos voice notes (estilo WhatsApp; WhatsApp não envia foto, cai nas iniciais)
+  // Foto/nome do contato (voice notes) + status da conversa (finalizada ou não)
   useEffect(() => {
     if (!conversationId) return;
     let cancelled = false;
     supabase
       .from('conversations')
-      .select('contact:contacts(profile_pic_url, name)')
+      .select('status, contact:contacts(profile_pic_url, name)')
       .eq('id', conversationId)
       .single()
       .then(({ data }) => {
         if (cancelled) return;
-        const contact = (data as { contact?: { profile_pic_url?: string | null; name?: string | null } } | null)?.contact;
-        setContactAvatarUrl(contact?.profile_pic_url ?? null);
-        setContactName(contact?.name ?? null);
+        const row = data as {
+          status?: string | null;
+          contact?: { profile_pic_url?: string | null; name?: string | null };
+        } | null;
+        setContactAvatarUrl(row?.contact?.profile_pic_url ?? null);
+        setContactName(row?.contact?.name ?? null);
+        setConvStatus(row?.status ?? null);
       });
     return () => {
       cancelled = true;
     };
   }, [conversationId, supabase]);
+
+  const isClosed = convStatus === 'closed';
+  const handleFinalize = async () => {
+    if (!conversationId || finalizing) return;
+    setFinalizing(true);
+    const closing = !isClosed;
+    const { error } = await supabase
+      .from('conversations')
+      .update({
+        status: closing ? 'closed' : 'open',
+        closed_at: closing ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+    if (error) console.error('Falha ao finalizar conversa:', error);
+    else setConvStatus(closing ? 'closed' : 'open');
+    setFinalizing(false);
+  };
 
   // Ao abrir a conversa ou receber novas mensagens, rolar até o final
   useEffect(() => {
@@ -121,7 +145,30 @@ export function ChatWindow() {
   return (
     <div className="flex flex-col h-full min-h-0">
       <ChatHeader conversationId={conversationId} />
-      <div className="flex items-center justify-end px-2 py-1.5 border-b bg-muted/30 shrink-0">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b bg-muted/30 shrink-0">
+        <button
+          type="button"
+          onClick={handleFinalize}
+          disabled={finalizing}
+          className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] text-sm rounded-lg transition-colors disabled:opacity-50 ${
+            isClosed
+              ? 'text-green-600 hover:bg-green-500/10'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+          }`}
+          title={isClosed ? 'Reabrir conversa' : 'Finalizar conversa (sai de “Não respondido”)'}
+        >
+          {isClosed ? (
+            <>
+              <RotateCcw className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Reabrir</span>
+            </>
+          ) : (
+            <>
+              <CheckCheck className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">{finalizing ? 'Finalizando...' : 'Finalizar'}</span>
+            </>
+          )}
+        </button>
         <button
           type="button"
           onClick={handleRefresh}

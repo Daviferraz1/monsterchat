@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSupabase } from './useSupabase';
+import { needsReply } from '@/lib/conversationStatus';
 import type { Conversation } from '@/types';
 
 export type ChannelTypeFilter = 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
@@ -49,11 +50,6 @@ export function useConversations(filters?: {
       if (filters?.channel_id) {
         query = query.eq('channel_id', filters.channel_id);
       }
-      if (repliedFilter === 'replied') {
-        query = query.not('last_agent_reply_at', 'is', null);
-      } else if (repliedFilter === 'not_replied') {
-        query = query.is('last_agent_reply_at', null);
-      }
 
       const { data, error } = await query;
 
@@ -72,6 +68,13 @@ export function useConversations(filters?: {
           }
           return channelType === filters.channel_type;
         });
+      }
+      // "Não respondido" = última mensagem foi do contato e não foi respondida (e não finalizada).
+      // "Respondido" = o complemento (já respondida ou finalizada).
+      if (repliedFilter === 'not_replied') {
+        list = list.filter((c) => needsReply(c as Conversation));
+      } else if (repliedFilter === 'replied') {
+        list = list.filter((c) => !needsReply(c as Conversation));
       }
       setConversations(list);
       setLoading(false);
