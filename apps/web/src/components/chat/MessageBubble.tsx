@@ -26,9 +26,11 @@ function renderWhatsApp(text: string) {
 
 interface MessageBubbleProps {
   message: Message;
+  /** Foto do contato — exibida no voice note recebido (estilo WhatsApp). */
+  contactAvatarUrl?: string | null;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, contactAvatarUrl }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const isFromIA = message.sender_type === 'system' || message.sender_type === 'bot';
   const isInternalOnly =
@@ -82,6 +84,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             mimeType={message.media_mime_type}
             filename={message.media_filename}
             contentType={message.content_type}
+            direction={message.direction}
+            avatarUrl={isOutbound ? undefined : contactAvatarUrl}
           />
         )}
         {!message.media_url && message.content_type !== 'text' && message.content_type !== 'reaction' && (

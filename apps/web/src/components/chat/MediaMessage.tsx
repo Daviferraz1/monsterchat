@@ -1,10 +1,16 @@
 'use client';
 
+import { VoiceNote } from './VoiceNote';
+
 interface MediaMessageProps {
   url: string;
   mimeType?: string;
   filename?: string;
   contentType?: string;
+  /** Direção da mensagem — usada para posicionar/colorir o voice note. */
+  direction?: 'inbound' | 'outbound';
+  /** Foto do contato (mostrada no voice note recebido, estilo WhatsApp). */
+  avatarUrl?: string | null;
 }
 
 /** URL temporária da Meta (WhatsApp) — exige token, retorna 401 no navegador. Não dá para tocar/baixar. */
@@ -33,7 +39,7 @@ function isAudio(mime?: string, contentType?: string): boolean {
   return contentType === 'audio';
 }
 
-export function MediaMessage({ url, mimeType, filename, contentType }: MediaMessageProps) {
+export function MediaMessage({ url, mimeType, filename, contentType, direction, avatarUrl }: MediaMessageProps) {
   const isUnavailable = isTemporaryMetaUrl(url);
 
   if (isUnavailable) {
@@ -100,22 +106,17 @@ export function MediaMessage({ url, mimeType, filename, contentType }: MediaMess
 
   if (isAudio(mimeType, contentType)) {
     return (
-      <div className="space-y-2">
-        <audio
-          src={url}
-          controls
-          preload="metadata"
-          className="w-full max-w-sm"
-        >
-          Seu navegador não suporta áudio.
-        </audio>
+      <div className="space-y-1">
+        <VoiceNote url={url} outbound={direction === 'outbound'} avatarUrl={avatarUrl} />
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-primary hover:underline block"
+          className={`text-[11px] hover:underline block ${
+            direction === 'outbound' ? 'text-primary-foreground/70' : 'text-muted-foreground'
+          }`}
         >
-          Abrir ou baixar áudio
+          Abrir ou baixar
         </a>
       </div>
     );

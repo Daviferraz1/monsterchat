@@ -17,7 +17,28 @@ export function ChatWindow() {
   const { enabled: autopilotEnabled, suggestionEnabled } = useAutopilot();
   const { messages, refresh } = useRealtimeMessages(conversationId);
   const [refreshing, setRefreshing] = useState(false);
+  const [contactAvatarUrl, setContactAvatarUrl] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Foto do contato — usada nos voice notes (estilo WhatsApp)
+  useEffect(() => {
+    if (!conversationId) return;
+    let cancelled = false;
+    supabase
+      .from('conversations')
+      .select('contact:contacts(profile_pic_url)')
+      .eq('id', conversationId)
+      .single()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const url =
+          (data as { contact?: { profile_pic_url?: string | null } } | null)?.contact?.profile_pic_url ?? null;
+        setContactAvatarUrl(url);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, supabase]);
 
   // Ao abrir a conversa ou receber novas mensagens, rolar até o final
   useEffect(() => {
@@ -130,7 +151,7 @@ export function ChatWindow() {
         className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 overscroll-behavior-contain"
       >
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} contactAvatarUrl={contactAvatarUrl} />
         ))}
       </div>
       <MessageInput
