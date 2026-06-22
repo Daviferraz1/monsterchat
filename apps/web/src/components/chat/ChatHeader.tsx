@@ -189,7 +189,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   };
 
   return (
-    <div ref={headerRef} className="relative flex items-stretch">
+    <div ref={headerRef} className="relative flex items-stretch shrink-0">
       {/* Botão voltar: apenas em mobile */}
       <Link
         href="/inbox"

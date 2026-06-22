@@ -32,9 +32,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <MobileInboxContent />
           </main>
         )}
-        {/* Conteúdo da rota: chat, estado vazio ou outras páginas */}
+        {/* Conteúdo da rota: chat, estado vazio ou outras páginas.
+            Na conversa aberta, o scroll é interno da ChatWindow (mensagens) — o main NÃO rola,
+            assim o header e o campo de envio ficam fixos. Nas demais páginas, o main rola. */}
         <main
-          className={`flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden ${isInboxList ? 'hidden md:flex' : ''}`}
+          className={`flex-1 flex flex-col min-h-0 overflow-x-hidden ${
+            isConversationOpen ? 'overflow-y-hidden' : 'overflow-y-auto'
+          } ${isInboxList ? 'hidden md:flex' : ''}`}
         >
           {children}
         </main>
