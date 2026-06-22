@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@breezystack/lamejs": "^1.2.7",
     "@supabase/ssr": "^0.0.10",
     "@supabase/supabase-js": "^2.38.4",
     "axios": "^1.6.2",
@@ -18,6 +19,7 @@
     "date-fns": "^3.0.0",
     "lucide-react": "^0.303.0",
     "next": "^14.0.4",
+    "opus-recorder": "^8.0.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "resend": "^6.9.3",

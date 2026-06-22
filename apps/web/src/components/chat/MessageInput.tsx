@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSendMessage } from '@/hooks/useSendMessage';
 import { useSuggestion } from '@/hooks/useSuggestion';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { transcodeToMp3 } from '@/lib/audio/transcodeToMp3';
 import { Send, Smile, Paperclip, Mic, Video, Camera, Loader2, MessageCircle, Check, Plus, X, FileText, Square } from 'lucide-react';
 
 function formatSeconds(total: number): string {
@@ -94,15 +95,32 @@ export function MessageInput({
   const { sendMessage, uploadAndSendMedia, sending, uploading } = useSendMessage();
   const { result: suggestionResult, loading: suggestionLoading, fetchSuggestion, clear: clearSuggestion } = useSuggestion();
   const recorder = useVoiceRecorder();
+  const [converting, setConverting] = useState(false);
   const busy = sending || uploading;
 
   const stopRecordingToPending = async () => {
     const file = await recorder.stop();
-    if (file) {
-      setPendingFile(file);
-      setError(null);
-    } else {
+    if (!file) {
       setError('Gravação vazia ou cancelada.');
+      return;
+    }
+    setError(null);
+    // ogg/opus já é o formato de voice note do WhatsApp — envia direto.
+    if (file.type.includes('ogg')) {
+      setPendingFile(file);
+      return;
+    }
+    // Fallback (navegador sem opus-recorder): converte p/ MP3 — a Cloud API rejeita webm/mp4.
+    setConverting(true);
+    try {
+      const mp3 = await transcodeToMp3(file, file.name.replace(/\.[^.]+$/, '') || 'gravacao');
+      setPendingFile(mp3);
+    } catch (err) {
+      console.error('Falha ao converter áudio para MP3:', err);
+      setPendingFile(file);
+      setError('Não consegui converter o áudio; enviando no formato original (pode não tocar no WhatsApp).');
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -392,6 +410,12 @@ export function MessageInput({
           </div>
         </div>
       )}
+      {converting && (
+        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          Convertendo áudio...
+        </div>
+      )}
       {pendingFile && (
         <div className="mb-2 flex items-center gap-2 rounded-xl border bg-muted/50 p-2">
           {pendingFile.type.startsWith('image/') ? (
@@ -577,7 +601,7 @@ export function MessageInput({
                   className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
                   title="Tirar foto (abre a câmera no celular)"
                   aria-label="Abrir câmera"
-                  disabled={busy || recorder.recording}
+                  disabled={busy || recorder.recording || converting}
                 >
                   <Camera className="w-5 h-5" />
                 </button>
@@ -591,7 +615,7 @@ export function MessageInput({
                   className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg"
                   title="Gravar áudio"
                   aria-label="Gravar áudio"
-                  disabled={busy || recorder.recording}
+                  disabled={busy || recorder.recording || converting}
                 >
                   <Mic className="w-5 h-5" />
                 </button>
