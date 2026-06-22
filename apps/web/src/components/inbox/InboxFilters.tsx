@@ -32,6 +32,17 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
   const replied = filters.replied ?? 'all';
   const search = filters.search ?? '';
 
+  // Filtro de status unificado (seleção única): Todos / Abertas / Respondido / Não respondido.
+  // Os status Pendentes/Fechadas/Adiadas foram removidos (não estavam em uso).
+  const statusOptions: { key: string; label: string; apply: InboxFiltersProps['filters'] }[] = [
+    { key: 'all', label: 'Todos', apply: { status: undefined, replied: 'all' } },
+    { key: 'open', label: 'Abertas', apply: { status: 'open', replied: 'all' } },
+    { key: 'replied', label: 'Respondido', apply: { status: undefined, replied: 'replied' } },
+    { key: 'not_replied', label: 'Não respondido', apply: { status: undefined, replied: 'not_replied' } },
+  ];
+  const activeStatus =
+    replied === 'replied' ? 'replied' : replied === 'not_replied' ? 'not_replied' : status === 'open' ? 'open' : 'all';
+
   return (
     <div className="p-3 border-b border-white/5 space-y-2 bg-[#0f0f1e]">
       {/* Pesquisar conversa */}
@@ -77,45 +88,17 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
         </div>
       </div>
 
-      {/* Status */}
+      {/* Status (inclui respondido / não respondido) */}
       <div>
         <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Status</p>
         <div className={ROW}>
-          {[
-            { label: 'Todos', value: '' },
-            { label: 'Abertas', value: 'open' },
-            { label: 'Pendentes', value: 'pending' },
-            { label: 'Fechadas', value: 'closed' },
-            { label: 'Adiadas', value: 'snoozed' },
-          ].map((opt) => (
+          {statusOptions.map((opt) => (
             <button
-              key={opt.value || 'all'}
+              key={opt.key}
               type="button"
-              onClick={() => onFiltersChange({ ...filters, status: opt.value === '' ? undefined : opt.value })}
+              onClick={() => onFiltersChange({ ...filters, ...opt.apply })}
               className={CHIP}
-              style={chipStyle(status === opt.value)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Respondido / Não respondido */}
-      <div>
-        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Respondido</p>
-        <div className={ROW}>
-          {[
-            { label: 'Todos', value: 'all' as const },
-            { label: 'Respondido', value: 'replied' as const },
-            { label: 'Não respondido', value: 'not_replied' as const },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onFiltersChange({ ...filters, replied: opt.value })}
-              className={CHIP}
-              style={chipStyle(replied === opt.value)}
+              style={chipStyle(activeStatus === opt.key)}
             >
               {opt.label}
             </button>
