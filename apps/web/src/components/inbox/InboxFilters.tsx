@@ -37,11 +37,20 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
   const statusOptions: { key: string; label: string; apply: InboxFiltersProps['filters'] }[] = [
     { key: 'all', label: 'Todos', apply: { status: undefined, replied: 'all' } },
     { key: 'open', label: 'Abertas', apply: { status: 'open', replied: 'all' } },
-    { key: 'replied', label: 'Respondido', apply: { status: undefined, replied: 'replied' } },
     { key: 'not_replied', label: 'Não respondido', apply: { status: undefined, replied: 'not_replied' } },
+    { key: 'replied', label: 'Respondido', apply: { status: undefined, replied: 'replied' } },
+    { key: 'finalized', label: 'Finalizadas', apply: { status: 'closed', replied: 'all' } },
   ];
   const activeStatus =
-    replied === 'replied' ? 'replied' : replied === 'not_replied' ? 'not_replied' : status === 'open' ? 'open' : 'all';
+    replied === 'replied'
+      ? 'replied'
+      : replied === 'not_replied'
+        ? 'not_replied'
+        : status === 'closed'
+          ? 'finalized'
+          : status === 'open'
+            ? 'open'
+            : 'all';
 
   return (
     <div className="p-3 border-b border-white/5 space-y-2 bg-[#0f0f1e]">
