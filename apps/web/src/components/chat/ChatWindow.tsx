@@ -205,7 +205,7 @@ export function ChatWindow() {
       <MessageInput
         conversationId={conversationId}
         lastInboundBody={lastInboundBody}
-        suggestionEnabled={suggestionEnabled}
+        suggestionEnabled={suggestionEnabled && !isClosed}
         lastMessageFromOperator={lastMessageFromOperator}
       />
     </div>
