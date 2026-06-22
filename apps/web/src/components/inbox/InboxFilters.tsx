@@ -15,6 +15,17 @@ interface InboxFiltersProps {
   onFiltersChange: (filters: InboxFiltersProps['filters']) => void;
 }
 
+/** Linha de pills rolável na horizontal (sem quebrar em várias linhas) — estilo WhatsApp. */
+const ROW = 'flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
+const CHIP = 'shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all';
+
+function chipStyle(selected: boolean) {
+  return {
+    background: selected ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.04)',
+    color: selected ? '#a78bfa' : '#94a3b8',
+  };
+}
+
 export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
   const channelType = filters.channel_type ?? 'all';
   const status = filters.status ?? '';
@@ -22,7 +33,7 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
   const search = filters.search ?? '';
 
   return (
-    <div className="p-4 border-b border-white/5 space-y-3 bg-[#0f0f1e]">
+    <div className="p-3 border-b border-white/5 space-y-2 bg-[#0f0f1e]">
       {/* Pesquisar conversa */}
       <div>
         <label htmlFor="inbox-search" className="sr-only">
@@ -41,10 +52,10 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
         </div>
       </div>
 
-      {/* Abas por canal */}
+      {/* Canal */}
       <div>
-        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">Canal</p>
-        <div className="flex flex-wrap gap-1.5">
+        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Canal</p>
+        <div className={ROW}>
           {[
             { label: 'Todos', value: 'all' as const, icon: null },
             { label: 'WhatsApp', value: 'whatsapp' as const, icon: 'whatsapp' },
@@ -55,11 +66,8 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
               key={tab.value}
               type="button"
               onClick={() => onFiltersChange({ ...filters, channel_type: tab.value })}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{
-                background: channelType === tab.value ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.04)',
-                color: channelType === tab.value ? '#a78bfa' : '#94a3b8',
-              }}
+              className={CHIP}
+              style={chipStyle(channelType === tab.value)}
             >
               {tab.icon === 'whatsapp' && <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />}
               {tab.icon === 'instagram' && <Instagram className="w-3.5 h-3.5 text-pink-500" />}
@@ -71,61 +79,47 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
 
       {/* Status */}
       <div>
-        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">Status</p>
-        <div className="flex flex-wrap gap-1.5">
+        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Status</p>
+        <div className={ROW}>
           {[
             { label: 'Todos', value: '' },
             { label: 'Abertas', value: 'open' },
             { label: 'Pendentes', value: 'pending' },
             { label: 'Fechadas', value: 'closed' },
             { label: 'Adiadas', value: 'snoozed' },
-          ].map((opt) => {
-            const isSelected = status === opt.value;
-            return (
-              <button
-                key={opt.value || 'all'}
-                type="button"
-                onClick={() =>
-                  onFiltersChange({ ...filters, status: opt.value === '' ? undefined : opt.value })
-                }
-                className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: isSelected ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.04)',
-                  color: isSelected ? '#a78bfa' : '#94a3b8',
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
+          ].map((opt) => (
+            <button
+              key={opt.value || 'all'}
+              type="button"
+              onClick={() => onFiltersChange({ ...filters, status: opt.value === '' ? undefined : opt.value })}
+              className={CHIP}
+              style={chipStyle(status === opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Respondido / Não respondido */}
       <div>
-        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">Respondido</p>
-        <div className="flex flex-wrap gap-1.5">
+        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Respondido</p>
+        <div className={ROW}>
           {[
             { label: 'Todos', value: 'all' as const },
             { label: 'Respondido', value: 'replied' as const },
             { label: 'Não respondido', value: 'not_replied' as const },
-          ].map((opt) => {
-            const isSelected = replied === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => onFiltersChange({ ...filters, replied: opt.value })}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: isSelected ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.04)',
-                  color: isSelected ? '#a78bfa' : '#94a3b8',
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onFiltersChange({ ...filters, replied: opt.value })}
+              className={CHIP}
+              style={chipStyle(replied === opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>
