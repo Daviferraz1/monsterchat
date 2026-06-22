@@ -15,7 +15,7 @@ export function MobileInboxContent() {
     replied?: RepliedFilter;
     search?: string;
   }>({});
-  const { conversations, loading } = useConversations(filters);
+  const { conversations, loading, notRepliedCount } = useConversations(filters);
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#0d0d1a]" style={{ color: '#e2e8f0' }}>
@@ -26,6 +26,7 @@ export function MobileInboxContent() {
       <InboxFilters
         filters={filters}
         onFiltersChange={setFilters}
+        notRepliedCount={notRepliedCount}
       />
       <div className="flex-1 overflow-y-auto min-h-0" style={{ scrollbarColor: '#333 transparent' }}>
         <ConversationList

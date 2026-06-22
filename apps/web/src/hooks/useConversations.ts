@@ -19,6 +19,7 @@ export function useConversations(filters?: {
   const supabase = useSupabase();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notRepliedCount, setNotRepliedCount] = useState(0);
 
   const statusFilter = filters?.status != null ? String(filters.status).trim() : '';
   const applyStatus =
@@ -41,9 +42,6 @@ export function useConversations(filters?: {
         `)
         .order('last_message_at', { ascending: false, nullsFirst: false });
 
-      if (applyStatus && statusFilter) {
-        query = query.eq('status', statusFilter);
-      }
       if (filters?.assigned_to) {
         query = query.eq('assigned_to', filters.assigned_to);
       }
@@ -68,6 +66,14 @@ export function useConversations(filters?: {
           }
           return channelType === filters.channel_type;
         });
+      }
+      // Contagem de "não respondidas" — sobre o canal atual, antes dos filtros de status/respondido,
+      // para o badge ficar estável independente do chip selecionado.
+      setNotRepliedCount(list.filter((c) => needsReply(c as Conversation)).length);
+
+      // Filtro de status (cliente): Abertas (open) / Finalizadas (closed)
+      if (applyStatus && statusFilter) {
+        list = list.filter((c) => (c as Conversation).status === statusFilter);
       }
       // "Não respondido" = última mensagem foi do contato e não foi respondida (e não finalizada).
       // "Respondido" = o complemento (já respondida ou finalizada).
@@ -130,5 +136,5 @@ export function useConversations(filters?: {
     });
   }, [conversations, searchQuery]);
 
-  return { conversations: filteredConversations, loading };
+  return { conversations: filteredConversations, loading, notRepliedCount };
 }

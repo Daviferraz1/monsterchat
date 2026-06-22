@@ -13,6 +13,8 @@ interface InboxFiltersProps {
     search?: string;
   };
   onFiltersChange: (filters: InboxFiltersProps['filters']) => void;
+  /** Quantidade de conversas não respondidas (badge vermelho no chip). */
+  notRepliedCount?: number;
 }
 
 /** Linha de pills rolável na horizontal (sem quebrar em várias linhas) — estilo WhatsApp. */
@@ -26,7 +28,7 @@ function chipStyle(selected: boolean) {
   };
 }
 
-export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
+export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: InboxFiltersProps) {
   const channelType = filters.channel_type ?? 'all';
   const status = filters.status ?? '';
   const replied = filters.replied ?? 'all';
@@ -110,6 +112,11 @@ export function InboxFilters({ filters, onFiltersChange }: InboxFiltersProps) {
               style={chipStyle(activeStatus === opt.key)}
             >
               {opt.label}
+              {opt.key === 'not_replied' && notRepliedCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-bold rounded-full bg-red-500 text-white">
+                  {notRepliedCount > 99 ? '99+' : notRepliedCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
