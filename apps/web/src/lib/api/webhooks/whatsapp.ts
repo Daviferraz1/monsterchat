@@ -98,6 +98,21 @@ export async function handleWhatsAppWebhook(body: any) {
           messageCount: value.messages?.length || 0,
         });
 
+        // Status de entrega/leitura (sent/delivered/read/failed) NÃO dependem do canal:
+        // processa direto e independente. Evita a busca de canal desnecessária (era onde o
+        // webhook de status travava e estourava o timeout de 30s da Vercel).
+        if (value.statuses && value.statuses.length > 0) {
+          for (const status of value.statuses) {
+            await processWhatsAppStatus(status);
+          }
+        }
+
+        // Sem mensagens recebidas: nada mais a fazer (não precisa buscar canal).
+        if (!value.messages || value.messages.length === 0) {
+          console.log('[WhatsApp Webhook] No messages in this webhook');
+          continue;
+        }
+
         if (!phoneNumberId) {
           console.warn('[WhatsApp Webhook] Missing phone_number_id in metadata');
           continue;
@@ -139,31 +154,20 @@ export async function handleWhatsAppWebhook(body: any) {
           channelName: channel.name,
         });
 
-        // Processar mensagens recebidas
-        if (value.messages && value.messages.length > 0) {
-          console.log('[WhatsApp Webhook] Processing', value.messages.length, 'message(s), channelId:', channel.id);
-          for (const message of value.messages) {
-            try {
-              await withRetry(
-                () => processWhatsAppMessage(message, value, channel.id, channel.access_token),
-                { retries: 2, isRetryable: isNetworkError }
-              );
-              console.log('[WhatsApp Webhook] Message processed successfully:', message.id);
-            } catch (error) {
-              console.error('[WhatsApp Webhook] Error processing message:', error, {
-                messageId: message.id,
-                from: message.from,
-              });
-            }
-          }
-        } else {
-          console.log('[WhatsApp Webhook] No messages in this webhook');
-        }
-
-        // Processar status de mensagens
-        if (value.statuses && value.statuses.length > 0) {
-          for (const status of value.statuses) {
-            await processWhatsAppStatus(status);
+        // Processar mensagens recebidas (canal já garantido acima)
+        console.log('[WhatsApp Webhook] Processing', value.messages.length, 'message(s), channelId:', channel.id);
+        for (const message of value.messages) {
+          try {
+            await withRetry(
+              () => processWhatsAppMessage(message, value, channel.id, channel.access_token),
+              { retries: 2, isRetryable: isNetworkError }
+            );
+            console.log('[WhatsApp Webhook] Message processed successfully:', message.id);
+          } catch (error) {
+            console.error('[WhatsApp Webhook] Error processing message:', error, {
+              messageId: message.id,
+              from: message.from,
+            });
           }
         }
       }
