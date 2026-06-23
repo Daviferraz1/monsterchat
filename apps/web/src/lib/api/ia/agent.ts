@@ -13,10 +13,11 @@ import { getCredentialsByEmail } from '../contacts-credentials';
 import { searchKnowledge } from './knowledge-search';
 import { fetchGuruTransactionsLive } from '../integrations/guru-live';
 import { diagnosticarAcesso } from '../integrations/platform-access';
+import { getAgentModel } from './autopilot';
 
-const MODEL = 'claude-sonnet-4-6';
 const MAX_ITERATIONS = 6;
 const MAX_TOKENS = 800;
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export interface AgentContext {
   /** Conversa (ALUNO/ATENDENTE em ordem) ou, na falta, mensagens recentes do aluno. */
@@ -38,12 +39,12 @@ export interface AgentContext {
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
-/** Baixa as imagens e converte em blocos base64 para o Claude analisar (best-effort). */
-async function fetchImageBlocks(
+/** Baixa as imagens recentes do aluno como base64 (best-effort, máx 2, ~5MB cada). */
+async function fetchImagesRaw(
   images?: Array<{ url: string; mime?: string | null }>
-): Promise<Anthropic.ImageBlockParam[]> {
+): Promise<Array<{ mimeType: string; base64: string }>> {
   if (!images?.length) return [];
-  const blocks: Anthropic.ImageBlockParam[] = [];
+  const out: Array<{ mimeType: string; base64: string }> = [];
   for (const img of images.slice(0, 2)) {
     if (!img?.url) continue;
     try {
@@ -53,19 +54,26 @@ async function fetchImageBlocks(
       clearTimeout(timer);
       if (!res.ok) continue;
       const ct = (img.mime || res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-      const mediaType = (ALLOWED_IMAGE_TYPES.has(ct) ? ct : 'image/jpeg') as
-        | 'image/jpeg'
-        | 'image/png'
-        | 'image/gif'
-        | 'image/webp';
+      const mimeType = ALLOWED_IMAGE_TYPES.has(ct) ? ct : 'image/jpeg';
       const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length === 0 || buf.length > 4_500_000) continue; // limite ~5MB do Anthropic
-      blocks.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: buf.toString('base64') } });
+      if (buf.length === 0 || buf.length > 4_500_000) continue; // limite ~5MB
+      out.push({ mimeType, base64: buf.toString('base64') });
     } catch (err) {
       console.error('[IA agent] falha ao baixar imagem', err);
     }
   }
-  return blocks;
+  return out;
+}
+
+/** Blocos de imagem no formato do Anthropic. */
+async function fetchImageBlocks(
+  images?: Array<{ url: string; mime?: string | null }>
+): Promise<Anthropic.ImageBlockParam[]> {
+  const raw = await fetchImagesRaw(images);
+  return raw.map((r) => ({
+    type: 'image',
+    source: { type: 'base64', media_type: r.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: r.base64 },
+  }));
 }
 
 const PAYMENT_METHODS_INFO =
@@ -186,6 +194,46 @@ const tools: Anthropic.Tool[] = [
     },
   },
 ];
+
+// --- Gemini: converte as tools (formato Anthropic) para function_declarations ---
+type GeminiSchema = {
+  type: string;
+  description?: string;
+  enum?: string[];
+  properties?: Record<string, GeminiSchema>;
+  required?: string[];
+  items?: GeminiSchema;
+};
+
+function toGeminiSchema(s: unknown): GeminiSchema {
+  const obj = (s ?? {}) as Record<string, unknown>;
+  const typeMap: Record<string, string> = {
+    object: 'OBJECT',
+    string: 'STRING',
+    number: 'NUMBER',
+    integer: 'INTEGER',
+    boolean: 'BOOLEAN',
+    array: 'ARRAY',
+  };
+  const out: GeminiSchema = { type: typeMap[String(obj.type)] || 'STRING' };
+  if (typeof obj.description === 'string') out.description = obj.description;
+  if (Array.isArray(obj.enum)) out.enum = obj.enum as string[];
+  if (obj.properties && typeof obj.properties === 'object') {
+    out.properties = {};
+    for (const [k, v] of Object.entries(obj.properties as Record<string, unknown>)) {
+      out.properties[k] = toGeminiSchema(v);
+    }
+  }
+  if (Array.isArray(obj.required) && obj.required.length) out.required = obj.required as string[];
+  if (obj.items) out.items = toGeminiSchema(obj.items);
+  return out;
+}
+
+const geminiFunctionDeclarations = tools.map((t) => ({
+  name: t.name,
+  description: t.description,
+  parameters: toGeminiSchema(t.input_schema),
+}));
 
 /** Classifica o lead para follow-up. Idempotente (não duplica ao regerar a sugestão). */
 async function registrarLead(
@@ -523,43 +571,31 @@ FORMATAÇÃO (WhatsApp, NÃO Markdown): negrito com *um asterisco* (ex.: *Políc
 SAÍDA: responda APENAS com o texto da mensagem para o aluno — sem prefixos, aspas, explicações ou marcadores.`;
 }
 
-/**
- * Roda o loop agêntico e devolve o texto sugerido (ou null em caso de falha,
- * para o chamador cair no caminho determinístico).
- */
-export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
-  if (!apiEnv.ANTHROPIC_API_KEY) return null;
-  if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
+/** Texto do turno do usuário (a conversa, ou o pedido de análise quando só há imagem). */
+function buildUserText(ctx: AgentContext): string {
+  return ctx.conversationText?.trim()
+    ? `Conversa até agora (ALUNO = aluno/lead; ATENDENTE = você/equipe):\n${ctx.conversationText}\n\nResponda à(s) última(s) pergunta(s) em aberto do aluno, sem repetir o que o ATENDENTE já respondeu.`
+    : 'O aluno enviou a(s) imagem(ns) abaixo, sem texto. Analise e redija a mensagem que o atendente deve enviar agora.';
+}
 
+/** Loop agêntico com Claude (Anthropic). */
+async function runAnthropicAgent(ctx: AgentContext, model: string): Promise<string | null> {
+  if (!apiEnv.ANTHROPIC_API_KEY) return null;
   const anthropic = new Anthropic({ apiKey: apiEnv.ANTHROPIC_API_KEY });
   const system = buildSystemPrompt(ctx);
 
-  const textPart = ctx.conversationText?.trim()
-    ? `Conversa até agora (ALUNO = aluno/lead; ATENDENTE = você/equipe):\n${ctx.conversationText}\n\nResponda à(s) última(s) pergunta(s) em aberto do aluno, sem repetir o que o ATENDENTE já respondeu.`
-    : 'O aluno enviou a(s) imagem(ns) abaixo, sem texto. Analise e redija a mensagem que o atendente deve enviar agora.';
-
   const content: Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> = [
-    { type: 'text', text: textPart },
+    { type: 'text', text: buildUserText(ctx) },
   ];
-  const imageBlocks = await fetchImageBlocks(ctx.images);
-  content.push(...imageBlocks);
-
+  content.push(...(await fetchImageBlocks(ctx.images)));
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content }];
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const res = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system,
-        tools,
-        messages,
-      });
+      const res = await anthropic.messages.create({ model, max_tokens: MAX_TOKENS, system, tools, messages });
 
       if (res.stop_reason === 'tool_use') {
-        const toolUses = res.content.filter(
-          (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
-        );
+        const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
         messages.push({ role: 'assistant', content: res.content });
         const results: Anthropic.ToolResultBlockParam[] = [];
         for (const tu of toolUses) {
@@ -576,7 +612,6 @@ export async function generateAgenticSuggestion(ctx: AgentContext): Promise<stri
         continue;
       }
 
-      // Resposta final
       const text = res.content
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map((b) => b.text)
@@ -590,4 +625,85 @@ export async function generateAgenticSuggestion(ctx: AgentContext): Promise<stri
     console.error('[IA agent]', err);
     return null;
   }
+}
+
+/** Loop agêntico com Gemini (REST generateContent + function calling + visão). */
+async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string | null> {
+  const key = apiEnv.GEMINI_API_KEY;
+  if (!key) {
+    console.warn('[IA agent gemini] GEMINI_API_KEY ausente');
+    return null;
+  }
+  const system = buildSystemPrompt(ctx);
+  const userParts: Array<Record<string, unknown>> = [{ text: buildUserText(ctx) }];
+  for (const im of await fetchImagesRaw(ctx.images)) {
+    userParts.push({ inlineData: { mimeType: im.mimeType, data: im.base64 } });
+  }
+  const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = [
+    { role: 'user', parts: userParts },
+  ];
+  const url = `${GEMINI_BASE}/${model}:generateContent?key=${key}`;
+
+  try {
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents,
+          tools: [{ functionDeclarations: geminiFunctionDeclarations }],
+          generationConfig: { maxOutputTokens: MAX_TOKENS, temperature: 0.7 },
+        }),
+      });
+      if (!res.ok) {
+        console.error('[IA agent gemini] HTTP', res.status, (await res.text().catch(() => '')).slice(0, 600));
+        return null;
+      }
+      const json = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<Record<string, any>> } }>;
+      };
+      const parts = json?.candidates?.[0]?.content?.parts ?? [];
+      const fnCalls = parts.filter((p) => p && p.functionCall);
+      if (fnCalls.length) {
+        contents.push({ role: 'model', parts });
+        const respParts: Array<Record<string, unknown>> = [];
+        for (const p of fnCalls) {
+          const name = String(p.functionCall.name ?? '');
+          const args = (p.functionCall.args ?? {}) as Record<string, unknown>;
+          let out: string;
+          try {
+            out = await execTool(name, args, ctx);
+          } catch (err) {
+            console.error('[IA agent gemini] tool', name, err);
+            out = 'Erro ao executar a ferramenta.';
+          }
+          respParts.push({ functionResponse: { name, response: { result: out } } });
+        }
+        contents.push({ role: 'user', parts: respParts });
+        continue;
+      }
+      const text = parts
+        .filter((p) => typeof p.text === 'string')
+        .map((p) => p.text as string)
+        .join('\n')
+        .trim();
+      return text || null;
+    }
+    console.warn('[IA agent gemini] limite de iterações atingido');
+    return null;
+  } catch (err) {
+    console.error('[IA agent gemini]', err);
+    return null;
+  }
+}
+
+/**
+ * Gera a sugestão com o modelo escolhido no admin (Claude por padrão; Gemini se selecionado).
+ * Devolve null em caso de falha, para o chamador cair no caminho determinístico.
+ */
+export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
+  if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
+  const model = await getAgentModel();
+  return model.startsWith('gemini') ? runGeminiAgent(ctx, model) : runAnthropicAgent(ctx, model);
 }

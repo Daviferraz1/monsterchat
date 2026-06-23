@@ -4,6 +4,44 @@ const AUTOPILOT_KEY = 'autopilot_enabled';
 const SUGGESTION_KEY = 'suggestion_enabled';
 const SUGGESTION_AI_KEY = 'suggestion_ai_enabled';
 const LEARN_KB_USE_AI_KEY = 'learn_kb_use_ai';
+const AGENT_MODEL_KEY = 'agent_model';
+
+/** Modelo padrão do agente de sugestão (Claude Sonnet). */
+export const DEFAULT_AGENT_MODEL = 'claude-sonnet-4-6';
+
+/** Modelos permitidos para o agente de sugestão (admin escolhe). */
+export const AGENT_MODEL_OPTIONS: { value: string; label: string; provider: 'anthropic' | 'gemini' }[] = [
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — melhor qualidade (padrão)', provider: 'anthropic' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 — Claude mais barato', provider: 'anthropic' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — Google, barato', provider: 'gemini' },
+  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite — o mais barato', provider: 'gemini' },
+];
+
+/** Modelo do agente de sugestão escolhido no admin (cai no padrão se não setado/ inválido). */
+export async function getAgentModel(): Promise<string> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('ia_settings')
+      .select('value')
+      .eq('key', AGENT_MODEL_KEY)
+      .single();
+    if (error || !data?.value) return DEFAULT_AGENT_MODEL;
+    const v = data.value as { model?: string };
+    const m = typeof v?.model === 'string' ? v.model.trim() : '';
+    return AGENT_MODEL_OPTIONS.some((o) => o.value === m) ? m : DEFAULT_AGENT_MODEL;
+  } catch {
+    return DEFAULT_AGENT_MODEL;
+  }
+}
+
+export async function setAgentModel(model: string): Promise<void> {
+  await supabaseAdmin
+    .from('ia_settings')
+    .upsert(
+      { key: AGENT_MODEL_KEY, value: { model }, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+}
 
 export async function isAutopilotEnabled(): Promise<boolean> {
   try {

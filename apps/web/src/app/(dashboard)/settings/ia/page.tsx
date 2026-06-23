@@ -15,6 +15,8 @@ export default function IAPage() {
   const [suggestionEnabled, setSuggestionEnabled] = useState(false);
   const [suggestionAiEnabled, setSuggestionAiEnabled] = useState(true);
   const [learnFromFeedbackUseAi, setLearnFromFeedbackUseAi] = useState(true);
+  const [agentModel, setAgentModel] = useState('claude-sonnet-4-6');
+  const [agentModelOptions, setAgentModelOptions] = useState<{ value: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +46,8 @@ export default function IAPage() {
       setSuggestionEnabled(autopilotData.suggestionEnabled === true);
       setSuggestionAiEnabled(autopilotData.suggestionAiEnabled !== false);
       setLearnFromFeedbackUseAi(autopilotData.learnFromFeedbackUseAi !== false);
+      setAgentModel(autopilotData.agentModel || 'claude-sonnet-4-6');
+      setAgentModelOptions(autopilotData.agentModelOptions || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -125,6 +129,25 @@ export default function IAPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
       setLearnFromFeedbackUseAi(data.learnFromFeedbackUseAi !== false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangeModel = async (value: string) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/ia/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentModel: value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      if (data.agentModel) setAgentModel(data.agentModel);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -309,12 +332,35 @@ export default function IAPage() {
                         className="rounded border-gray-400 bg-white text-[#7c3aed] focus:ring-[#7c3aed]"
                       />
                       <span className="text-gray-800 text-sm">
-                        Usar IA (Claude) nas sugestões
+                        Usar IA nas sugestões
                       </span>
                     </label>
                     <p className="text-xs text-gray-500 mt-1 ml-7">
-                      Quando ativo, o Claude analisa o contexto e gera a sugestão. Quando desativado, usa apenas base de conhecimento e catálogo (sem IA).
+                      Quando ativo, a IA analisa o contexto e gera a sugestão. Quando desativado, usa apenas base de conhecimento e catálogo (sem IA).
                     </p>
+                    {suggestionAiEnabled && (
+                      <div className="mt-4 ml-7">
+                        <label htmlFor="agent-model" className="block text-sm font-medium text-gray-800 mb-1">
+                          Modelo da IA
+                        </label>
+                        <select
+                          id="agent-model"
+                          value={agentModel}
+                          onChange={(e) => handleChangeModel(e.target.value)}
+                          disabled={saving}
+                          className="w-full max-w-sm rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:ring-[#7c3aed] focus:border-[#7c3aed] disabled:opacity-60"
+                        >
+                          {agentModelOptions.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Gemini (Google) é mais barato; Claude Sonnet tem a melhor qualidade. Vale para a sugestão do copiloto. Gemini exige <code className="bg-gray-100 px-1 rounded">GEMINI_API_KEY</code> no ambiente; Claude exige <code className="bg-gray-100 px-1 rounded">ANTHROPIC_API_KEY</code>.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
