@@ -112,7 +112,10 @@ export async function POST(request: NextRequest) {
         }
         const sendRes = await fetch(`${apiUrl}/baileys/send`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-secret': apiEnv.INTERNAL_API_SECRET || '',
+          },
           body: JSON.stringify(body),
         });
         const sendData = await sendRes.json().catch(() => ({}));

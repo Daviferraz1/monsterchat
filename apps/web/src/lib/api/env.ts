@@ -65,6 +65,10 @@ export const apiEnv = {
   API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001',
 
+  // Segredo compartilhado que autentica as chamadas server-to-server ao apps/api
+  // (header x-internal-secret). Defina a MESMA string aqui e no apps/api.
+  INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET,
+
   // IA Atendimento (classificação + sugestões)
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
 

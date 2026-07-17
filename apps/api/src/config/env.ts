@@ -33,6 +33,10 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   API_URL: process.env.API_URL || 'http://localhost:3001',
+
+  // Segredo compartilhado que autentica as chamadas internas vindas do apps/web
+  // (header x-internal-secret). Defina a MESMA string aqui e no apps/web.
+  INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET || '',
 } as const;
 
 // Validar variáveis obrigatórias (Meta opcional se só usar Baileys)

@@ -10,6 +10,7 @@ import conversationRoutes from './routes/conversation.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import channelRoutes from './routes/channel.routes.js';
 import baileysRoutes from './routes/baileys.routes.js';
+import { requireInternalSecret } from './middlewares/internal-auth.middleware.js';
 
 const app = express();
 
@@ -37,12 +38,14 @@ app.get('/health', (_req, res) => {
   return res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
+// Webhooks da Meta: abertos (verificação por assinatura no próprio handler).
 app.use('/webhooks', webhookRoutes);
-app.use('/api/conversations', conversationRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/channels', channelRoutes);
-app.use('/baileys', baileysRoutes);
+
+// Rotas internas: só o apps/web (com o segredo compartilhado) pode chamar.
+app.use('/api/conversations', requireInternalSecret, conversationRoutes);
+app.use('/api/messages', requireInternalSecret, messageRoutes);
+app.use('/api/channels', requireInternalSecret, channelRoutes);
+app.use('/baileys', requireInternalSecret, baileysRoutes);
 
 // Error handler
 app.use(errorHandler);
