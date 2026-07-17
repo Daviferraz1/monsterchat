@@ -77,4 +77,8 @@ export const apiEnv = {
 
   // Resend – e-mails de login/senha (Monster Study, Monster Questões, Monster Sound)
   RESEND_API_KEY: process.env.RESEND_API_KEY,
+
+  // Controle de ponto – segredo que valida o Monitor do Control iD (iDFace)
+  // Configure no aparelho como parte do path/query do servidor de monitoramento.
+  CONTROLID_WEBHOOK_SECRET: process.env.CONTROLID_WEBHOOK_SECRET,
 } as const;
