@@ -1,0 +1,11 @@
+-- 036: remove a listagem do bucket público `media` (public_bucket_allows_listing)
+--
+-- O bucket `media` está marcado como PUBLIC no painel, então as URLs públicas
+-- (/storage/v1/object/public/media/...) funcionam SEM esta política — o endpoint
+-- público de bucket público não passa por RLS.
+--
+-- O app gera as URLs de mídia SEMPRE via getPublicUrl (media.service.ts,
+-- whatsapp-media.ts, api/upload) e nunca usa .list() nem createSignedUrl. Logo,
+-- remover a política "Public read media" não quebra a exibição de mídia e impede
+-- que qualquer um enumere todos os arquivos (fotos/áudios/docs) dos chats.
+drop policy if exists "Public read media" on storage.objects;
