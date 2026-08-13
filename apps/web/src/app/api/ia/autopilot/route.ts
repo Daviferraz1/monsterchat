@@ -8,6 +8,8 @@ import {
   setSuggestionAIEnabled,
   isLearnFromFeedbackUseAi,
   setLearnFromFeedbackUseAi,
+  isLearnOperatorStyleEnabled,
+  setLearnOperatorStyleEnabled,
   getAgentModel,
   setAgentModel,
   AGENT_MODEL_OPTIONS,
@@ -17,24 +19,27 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const [enabled, suggestionEnabled, suggestionAiEnabled, learnFromFeedbackUseAi, agentModel] = await Promise.all([
-      isAutopilotEnabled(),
-      isSuggestionEnabled(),
-      isSuggestionAIEnabled(),
-      isLearnFromFeedbackUseAi(),
-      getAgentModel(),
-    ]);
+    const [enabled, suggestionEnabled, suggestionAiEnabled, learnFromFeedbackUseAi, learnOperatorStyle, agentModel] =
+      await Promise.all([
+        isAutopilotEnabled(),
+        isSuggestionEnabled(),
+        isSuggestionAIEnabled(),
+        isLearnFromFeedbackUseAi(),
+        isLearnOperatorStyleEnabled(),
+        getAgentModel(),
+      ]);
     return NextResponse.json({
       enabled,
       suggestionEnabled,
       suggestionAiEnabled,
       learnFromFeedbackUseAi,
+      learnOperatorStyle,
       agentModel,
       agentModelOptions: AGENT_MODEL_OPTIONS,
     });
   } catch (err) {
     console.error('[API ia/autopilot GET]', err);
-    return NextResponse.json({ enabled: false, suggestionEnabled: false, suggestionAiEnabled: true, learnFromFeedbackUseAi: true, agentModel: 'claude-sonnet-4-6', agentModelOptions: AGENT_MODEL_OPTIONS });
+    return NextResponse.json({ enabled: false, suggestionEnabled: false, suggestionAiEnabled: true, learnFromFeedbackUseAi: true, learnOperatorStyle: true, agentModel: 'claude-sonnet-4-6', agentModelOptions: AGENT_MODEL_OPTIONS });
   }
 }
 
@@ -53,21 +58,27 @@ export async function POST(request: NextRequest) {
     if (typeof body.learnFromFeedbackUseAi === 'boolean') {
       await setLearnFromFeedbackUseAi(body.learnFromFeedbackUseAi);
     }
+    if (typeof body.learnOperatorStyle === 'boolean') {
+      await setLearnOperatorStyleEnabled(body.learnOperatorStyle);
+    }
     if (typeof body.agentModel === 'string' && AGENT_MODEL_OPTIONS.some((o) => o.value === body.agentModel)) {
       await setAgentModel(body.agentModel);
     }
-    const [enabled, suggestionEnabled, suggestionAiEnabled, learnFromFeedbackUseAi, agentModel] = await Promise.all([
-      isAutopilotEnabled(),
-      isSuggestionEnabled(),
-      isSuggestionAIEnabled(),
-      isLearnFromFeedbackUseAi(),
-      getAgentModel(),
-    ]);
+    const [enabled, suggestionEnabled, suggestionAiEnabled, learnFromFeedbackUseAi, learnOperatorStyle, agentModel] =
+      await Promise.all([
+        isAutopilotEnabled(),
+        isSuggestionEnabled(),
+        isSuggestionAIEnabled(),
+        isLearnFromFeedbackUseAi(),
+        isLearnOperatorStyleEnabled(),
+        getAgentModel(),
+      ]);
     return NextResponse.json({
       enabled,
       suggestionEnabled,
       suggestionAiEnabled,
       learnFromFeedbackUseAi,
+      learnOperatorStyle,
       agentModel,
       agentModelOptions: AGENT_MODEL_OPTIONS,
     });

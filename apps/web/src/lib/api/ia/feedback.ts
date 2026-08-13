@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { learnFromFeedback } from './learn-from-feedback';
+import { learnOperatorStyle } from './operator-style';
 
 export interface FeedbackParams {
   conversationId: string;
@@ -51,9 +52,20 @@ export async function recordSuggestionFeedback(params: FeedbackParams): Promise<
   }
   if (!questionContext) return;
 
-  await learnFromFeedback({
-    questionContext,
-    actualResponse,
-    brand: params.brand ?? 'both',
-  });
+  // Duas aprendizagens complementares a partir da mesma divergência:
+  // 1) CONTEÚDO -> entrada na base de conhecimento (o que responder);
+  // 2) FORMA    -> lição de estilo (como o atendente responde), que entra no prompt do agente.
+  await Promise.all([
+    learnFromFeedback({
+      questionContext,
+      actualResponse,
+      brand: params.brand ?? 'both',
+    }),
+    learnOperatorStyle({
+      suggestedResponse: params.suggestedResponse ?? '',
+      actualResponse,
+      questionContext,
+      brand: params.brand ?? 'both',
+    }),
+  ]);
 }

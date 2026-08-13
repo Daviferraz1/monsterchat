@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle, Users } from 'lucide-react';
+import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle, Users, Sparkles } from 'lucide-react';
 
 interface IAStats {
   conversationsAnalyzed: number;
@@ -15,6 +15,7 @@ export default function IAPage() {
   const [suggestionEnabled, setSuggestionEnabled] = useState(false);
   const [suggestionAiEnabled, setSuggestionAiEnabled] = useState(true);
   const [learnFromFeedbackUseAi, setLearnFromFeedbackUseAi] = useState(true);
+  const [learnOperatorStyle, setLearnOperatorStyle] = useState(true);
   const [agentModel, setAgentModel] = useState('claude-sonnet-4-6');
   const [agentModelOptions, setAgentModelOptions] = useState<{ value: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +47,7 @@ export default function IAPage() {
       setSuggestionEnabled(autopilotData.suggestionEnabled === true);
       setSuggestionAiEnabled(autopilotData.suggestionAiEnabled !== false);
       setLearnFromFeedbackUseAi(autopilotData.learnFromFeedbackUseAi !== false);
+      setLearnOperatorStyle(autopilotData.learnOperatorStyle !== false);
       setAgentModel(autopilotData.agentModel || 'claude-sonnet-4-6');
       setAgentModelOptions(autopilotData.agentModelOptions || []);
     } catch (e) {
@@ -129,6 +131,25 @@ export default function IAPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
       setLearnFromFeedbackUseAi(data.learnFromFeedbackUseAi !== false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleLearnOperatorStyle = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/ia/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ learnOperatorStyle: !learnOperatorStyle }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      setLearnOperatorStyle(data.learnOperatorStyle !== false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -431,6 +452,35 @@ export default function IAPage() {
             >
               <BookOpen className="w-5 h-5" />
               Ver base de conhecimento
+            </Link>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#7c3aed]" />
+              Padrão do atendente
+            </h2>
+            <p className="text-gray-700 text-sm mb-4">
+              Quando o atendente responde diferente da sugestão, a IA compara as duas mensagens e aprende o jeito da
+              equipe (tamanho, tom, o que mandar junto, o que nunca dizer). Nas próximas sugestões ela já segue esse
+              padrão.
+            </p>
+            <label className="flex items-start gap-3 cursor-pointer mb-4">
+              <input
+                type="checkbox"
+                checked={learnOperatorStyle}
+                onChange={handleToggleLearnOperatorStyle}
+                disabled={saving}
+                className="mt-1 rounded border-gray-300 text-[#7c3aed] focus:ring-[#7c3aed]"
+              />
+              <span className="text-gray-800 text-sm">Aprender o padrão do atendente automaticamente</span>
+            </label>
+            <Link
+              href="/settings/ia/estilo"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-colors font-medium"
+            >
+              <Sparkles className="w-5 h-5" />
+              Ver o que a IA aprendeu
             </Link>
           </div>
 

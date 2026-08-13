@@ -14,6 +14,7 @@ import { searchKnowledge } from './knowledge-search';
 import { fetchGuruTransactionsLive } from '../integrations/guru-live';
 import { diagnosticarAcesso } from '../integrations/platform-access';
 import { getAgentModel } from './autopilot';
+import { getOperatorStyleBlock } from './operator-style';
 
 const MAX_ITERATIONS = 6;
 const MAX_TOKENS = 800;
@@ -35,6 +36,8 @@ export interface AgentContext {
   memoryBlock?: string;
   /** Dados pessoais já registrados no cadastro do contato (nome completo, CPF, etc.). */
   contactDataBlock?: string;
+  /** Lições de estilo aprendidas com as respostas reais da equipe (ver operator-style.ts). */
+  styleBlock?: string;
 }
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -555,7 +558,11 @@ TOM:
 - MONSTER: informal, acolhedor, 1–2 emojis no máximo, trate por "você".
 - FAGENIUS: formal, profissional, sem emoji.
 - Se ambíguo, neutro-profissional.${nome ? `\n- Use o primeiro nome quando fizer sentido: ${nome}.` : ''}
-
+${
+  ctx.styleBlock
+    ? `\nPADRÃO DO ATENDENTE (aprendido com as respostas que a equipe realmente enviou quando não usou a sugestão da IA). Quando a situação bater, siga estas preferências — elas têm PRIORIDADE sobre o TOM acima. Elas dizem respeito à FORMA de responder; nunca use como fonte de dado factual:\n${ctx.styleBlock}\n`
+    : ''
+}
 PAGAMENTO: ${PAYMENT_METHODS_INFO}
 
 LINKS: lead interessado/avaliando um curso → PÁGINA DE VENDAS; LINK DE CHECKOUT só quando já decidiu comprar; sem página de vendas, use o checkout.
@@ -704,6 +711,7 @@ async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string 
  */
 export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
   if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
-  const model = await getAgentModel();
-  return model.startsWith('gemini') ? runGeminiAgent(ctx, model) : runAnthropicAgent(ctx, model);
+  const [model, styleBlock] = await Promise.all([getAgentModel(), getOperatorStyleBlock()]);
+  const fullCtx: AgentContext = { ...ctx, styleBlock: ctx.styleBlock ?? styleBlock ?? undefined };
+  return model.startsWith('gemini') ? runGeminiAgent(fullCtx, model) : runAnthropicAgent(fullCtx, model);
 }

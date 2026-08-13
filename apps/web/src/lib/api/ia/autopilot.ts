@@ -4,6 +4,7 @@ const AUTOPILOT_KEY = 'autopilot_enabled';
 const SUGGESTION_KEY = 'suggestion_enabled';
 const SUGGESTION_AI_KEY = 'suggestion_ai_enabled';
 const LEARN_KB_USE_AI_KEY = 'learn_kb_use_ai';
+const LEARN_STYLE_KEY = 'learn_operator_style';
 const AGENT_MODEL_KEY = 'agent_model';
 
 /** Modelo padrão do agente de sugestão (Claude Sonnet). */
@@ -140,6 +141,32 @@ export async function setLearnFromFeedbackUseAi(enabled: boolean): Promise<void>
     .from('ia_settings')
     .upsert(
       { key: LEARN_KB_USE_AI_KEY, value: { enabled }, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+}
+
+/** Aprender o PADRÃO do atendente (estilo) quando ele responde diferente da sugestão. Ligado por padrão. */
+export async function isLearnOperatorStyleEnabled(): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('ia_settings')
+      .select('value')
+      .eq('key', LEARN_STYLE_KEY)
+      .single();
+
+    if (error || !data?.value) return true;
+    const v = data.value as { enabled?: boolean };
+    return v?.enabled !== false;
+  } catch {
+    return true;
+  }
+}
+
+export async function setLearnOperatorStyleEnabled(enabled: boolean): Promise<void> {
+  await supabaseAdmin
+    .from('ia_settings')
+    .upsert(
+      { key: LEARN_STYLE_KEY, value: { enabled }, updated_at: new Date().toISOString() },
       { onConflict: 'key' }
     );
 }

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../supabase';
 import { apiEnv } from '../env';
 import { isLearnFromFeedbackUseAi } from './autopilot';
 import { embedText, isEmbeddingsEnabled } from './embeddings';
+import { searchKnowledge } from './knowledge-search';
 
 /** Gera e grava o embedding da pergunta-tipo para que a nova entrada seja localizável na busca semântica. */
 async function storeEmbedding(id: string | undefined, text: string): Promise<void> {
@@ -14,6 +15,45 @@ async function storeEmbedding(id: string | undefined, text: string): Promise<voi
     }
   } catch (err) {
     console.warn('[IA learnFromFeedback] embedding', err);
+  }
+}
+
+/** Acima desta similaridade de cosseno a pergunta já está na base: reforçamos em vez de duplicar. */
+const DUPLICATE_SIMILARITY = 0.9;
+
+/**
+ * Se a base já tem uma entrada praticamente igual, atualiza a resposta dela com a que o
+ * atendente acabou de enviar (o padrão mais recente vale) e soma +1 na frequência.
+ * Evita encher a base de quase-duplicatas, que degradam a busca ao longo do tempo.
+ * Devolve o id reforçado, ou null quando é caso de criar entrada nova.
+ */
+async function reinforceExistingEntry(
+  questionPattern: string,
+  goldResponse: string,
+  brand: string
+): Promise<string | null> {
+  try {
+    const { rows, semantic } = await searchKnowledge(questionPattern, brand);
+    // Sem embeddings a busca cai no ts_rank, cuja escala não é comparável — aí não arriscamos.
+    if (!semantic) return null;
+    const top = rows[0];
+    if (!top || top.similarity < DUPLICATE_SIMILARITY) return null;
+    const { error } = await supabaseAdmin
+      .from('knowledge_base')
+      .update({
+        gold_response: goldResponse.slice(0, 8000),
+        frequency: (top.frequency ?? 1) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', top.id);
+    if (error) {
+      console.warn('[IA learnFromFeedback] reforçar', error.message);
+      return null;
+    }
+    return top.id;
+  } catch (err) {
+    console.warn('[IA learnFromFeedback] reforçar', err);
+    return null;
   }
 }
 
@@ -54,6 +94,8 @@ export async function learnFromFeedback(params: LearnFromFeedbackParams): Promis
 
   if (!useAi) {
     const questionPattern = questionContext.trim().slice(0, 1000) || 'Pergunta do aluno';
+    const reinforced = await reinforceExistingEntry(questionPattern, trimmed, brandVal);
+    if (reinforced) return { id: reinforced };
     const { data, error } = await supabaseAdmin
       .from('knowledge_base')
       .insert({
@@ -119,6 +161,13 @@ Responda APENAS com um JSON válido, sem markdown e sem texto antes ou depois. E
     const category = CATEGORIES.includes(entry.category as (typeof CATEGORIES)[number])
       ? entry.category
       : 'outro';
+
+    const reinforced = await reinforceExistingEntry(
+      entry.question_pattern.trim(),
+      entry.gold_response.trim(),
+      brandVal
+    );
+    if (reinforced) return { id: reinforced };
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base')

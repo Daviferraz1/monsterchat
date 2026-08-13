@@ -151,6 +151,25 @@ Assim, as conversas vão sendo **reclassificadas** conforme o cliente manda nova
 
 ---
 
+## 9. Padrão do operador (aprender COMO a equipe responde)
+
+**O que faz:** quando o atendente ignora a sugestão e envia outra mensagem, o sistema compara as duas e aprende o **jeito da casa** — não o conteúdo, que já vira entrada na base de conhecimento.
+
+**Passo a passo:**
+
+1. No envio, o `MessageInput` já chama **`POST /api/ia/feedback`** com a sugestão e a mensagem realmente enviada.
+2. `recordSuggestionFeedback` dispara duas aprendizagens em paralelo:
+   - **conteúdo** → `learnFromFeedback` (entrada na `knowledge_base`; se já existir uma pergunta praticamente igual — similaridade ≥ 0.9 na busca semântica — **reforça** a entrada existente em vez de duplicar);
+   - **forma** → `learnOperatorStyle` (`operator-style.ts`).
+3. `learnOperatorStyle` descarta o que não ensina nada (resposta com menos de 15 caracteres, ou praticamente igual à sugestão) e manda o par sugerido/enviado para o **Claude Haiku**, junto das lições já registradas. O modelo devolve `nova`, `reforcar` (com o id da lição existente) ou `ignorar`.
+4. `ignorar` é o caso comum: diferença só de dado do aluno, mensagem administrativa ("só um momento") ou correção de digitação.
+5. Lição gravada em **`ia_style_lessons`** (migração 037): gatilho (`quando`), regra, `hits` (quantas vezes o comportamento se repetiu) e até 3 exemplos para auditoria.
+6. Nas sugestões seguintes, `generateAgenticSuggestion` injeta as **12 lições ativas mais reforçadas** no system prompt, no bloco **PADRÃO DO ATENDENTE** (cache de 60s).
+
+**Controles:** toggle em Configurações → IA ("Aprender o padrão do atendente"), e a tela **`/settings/ia/estilo`** para ver, editar, desativar ou excluir cada lição. Teto de 50 lições ativas: passando disso, só reforço.
+
+---
+
 ## Resumo do fluxo
 
 | Etapa              | Quando        | Onde roda        | IA?   |
@@ -162,6 +181,7 @@ Assim, as conversas vão sendo **reclassificadas** conforme o cliente manda nova
 | Sugestão no chat   | Ao abrir conversa | Frontend → API  | Não (PostgreSQL) |
 | Feedback (usou/editou) | Ao enviar msg | Frontend → API  | Não   |
 | Melhoria semanal   | 1x por semana | Cron → API       | Sim (Sonnet) |
+| Padrão do operador | Ao enviar msg diferente da sugestão | API (feedback) | Sim (Haiku) |
 
 ---
 
@@ -171,6 +191,7 @@ Assim, as conversas vão sendo **reclassificadas** conforme o cliente manda nova
 - **Classificar mensagem (tempo real):** `apps/web/src/lib/api/ia/classify.ts`
 - **Buscar sugestão (SQL):** `apps/web/src/lib/api/ia/suggestion.ts` + função `search_knowledge_base` na migração 022
 - **Feedback:** `apps/web/src/lib/api/ia/feedback.ts`
+- **Padrão do operador (estilo):** `apps/web/src/lib/api/ia/operator-style.ts` + migração 037 + tela `.../settings/ia/estilo/page.tsx`
 - **Piloto (liga/desliga):** `apps/web/src/lib/api/ia/autopilot.ts`
 - **Melhoria semanal:** `apps/web/src/lib/api/ia/weekly.ts`
 - **Chamada no webhook:** `apps/web/src/lib/api/webhooks/whatsapp.ts` (trecho que chama `classifyIncomingMessage`)
