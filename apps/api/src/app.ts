@@ -10,6 +10,7 @@ import conversationRoutes from './routes/conversation.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import channelRoutes from './routes/channel.routes.js';
 import baileysRoutes from './routes/baileys.routes.js';
+import whatsappRoutes from './routes/whatsapp.routes.js';
 import { requireInternalSecret } from './middlewares/internal-auth.middleware.js';
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/conversations', requireInternalSecret, conversationRoutes);
 app.use('/api/messages', requireInternalSecret, messageRoutes);
 app.use('/api/channels', requireInternalSecret, channelRoutes);
 app.use('/baileys', requireInternalSecret, baileysRoutes);
+app.use('/whatsapp', requireInternalSecret, whatsappRoutes);
 
 // Error handler
 app.use(errorHandler);
