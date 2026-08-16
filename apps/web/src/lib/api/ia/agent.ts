@@ -17,6 +17,8 @@ import { getAgentModel } from './autopilot';
 import { getOperatorStyleBlock } from './operator-style';
 
 const MAX_ITERATIONS = 6;
+/** Reenvios quando o modelo encerra o turno sem escrever nada (acontece de vez em quando). */
+const MAX_EMPTY_RETRIES = 2;
 const MAX_TOKENS = 800;
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -596,6 +598,7 @@ async function runAnthropicAgent(ctx: AgentContext, model: string): Promise<stri
   ];
   content.push(...(await fetchImageBlocks(ctx.images)));
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content }];
+  let emptyRetries = 0;
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -624,7 +627,20 @@ async function runAnthropicAgent(ctx: AgentContext, model: string): Promise<stri
         .map((b) => b.text)
         .join('\n')
         .trim();
-      return text || null;
+      if (!text) {
+        // O modelo às vezes encerra o turno sem escrever nada (stop_reason end_turn, content vazio).
+        // Desistir aqui jogava a sugestão no fallback determinístico (resposta genérica da base),
+        // então reenviamos o mesmo contexto — na prática a segunda tentativa responde.
+        console.warn(
+          '[IA agent] resposta sem texto — stop_reason:',
+          res.stop_reason,
+          '| blocos:',
+          res.content.map((b) => b.type).join(',') || '(vazio)'
+        );
+        if (++emptyRetries <= MAX_EMPTY_RETRIES) continue;
+        return null;
+      }
+      return text;
     }
     console.warn('[IA agent] limite de iterações atingido');
     return null;
@@ -650,6 +666,7 @@ async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string 
     { role: 'user', parts: userParts },
   ];
   const url = `${GEMINI_BASE}/${model}:generateContent?key=${key}`;
+  let emptyRetries = 0;
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -695,7 +712,12 @@ async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string 
         .map((p) => p.text as string)
         .join('\n')
         .trim();
-      return text || null;
+      if (!text) {
+        console.warn('[IA agent gemini] resposta sem texto; reenviando');
+        if (++emptyRetries <= MAX_EMPTY_RETRIES) continue;
+        return null;
+      }
+      return text;
     }
     console.warn('[IA agent gemini] limite de iterações atingido');
     return null;
