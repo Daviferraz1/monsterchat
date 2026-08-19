@@ -17,9 +17,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {/* Rail de ícones à esquerda (somente desktop, estilo WhatsApp Web) */}
       <MobileNavRail />
 
-      {/* Desktop: coluna do meio com lista de conversas quando está na área Inbox */}
+      {/* Desktop: coluna do meio com a lista de conversas.
+          Largura proporcional como no WhatsApp Web (~30%), com piso e teto: em tela
+          pequena não espreme a prévia da mensagem, em tela grande não rouba espaço
+          do chat. Antes era fixa em 320px, o que virava 17% num monitor de 1920. */}
       {isInboxSection && (
-        <div className="hidden md:flex flex-col w-80 min-w-[320px] flex-shrink-0 border-r border-white/10 h-full overflow-hidden">
+        <div className="hidden md:flex flex-col w-[30%] min-w-[340px] max-w-[560px] flex-shrink-0 border-r border-white/10 h-full overflow-hidden">
           <MobileInboxContent />
         </div>
       )}
