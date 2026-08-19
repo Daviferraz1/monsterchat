@@ -30,9 +30,19 @@ interface MessageBubbleProps {
   contactAvatarUrl?: string | null;
   /** Nome do contato — iniciais no voice note quando não há foto (WhatsApp). */
   contactName?: string | null;
+  /** Quem da equipe escreveu. Só aparece aqui dentro — o aluno nunca vê. */
+  authorName?: string | null;
+  /** Primeira de uma sequência do mesmo atendente. */
+  showAuthor?: boolean;
 }
 
-export function MessageBubble({ message, contactAvatarUrl, contactName }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  contactAvatarUrl,
+  contactName,
+  authorName,
+  showAuthor,
+}: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const isFromIA = message.sender_type === 'system' || message.sender_type === 'bot';
   const isInternalOnly =
@@ -66,6 +76,16 @@ export function MessageBubble({ message, contactAvatarUrl, contactName }: Messag
           message.content_type === 'reaction' && 'px-3 py-1.5'
         )}
       >
+        {/* Assinatura interna: quem da equipe respondeu. Fica só na tela do
+            atendimento — não vai no texto enviado, o aluno não recebe nada disso. */}
+        {isOutbound && showAuthor && authorName && (
+          <span
+            className="block text-[11px] font-semibold opacity-80 mb-0.5"
+            title="Só a equipe vê este nome"
+          >
+            {authorName}
+          </span>
+        )}
         {message.content_type === 'reaction' && (
           <span className="text-2xl leading-none" title="Reação">
             {message.body?.trim() || '❤️'}

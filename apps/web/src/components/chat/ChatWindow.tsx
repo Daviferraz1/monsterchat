@@ -8,6 +8,7 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 import { ChatHeader } from './ChatHeader';
 import { useParams } from 'next/navigation';
+import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 import { RefreshCw, Bot, CheckCheck, RotateCcw } from 'lucide-react';
 
 export function ChatWindow() {
@@ -16,6 +17,7 @@ export function ChatWindow() {
   const supabase = useSupabase();
   const { enabled: autopilotEnabled, suggestionEnabled } = useAutopilot();
   const { messages, refresh } = useRealtimeMessages(conversationId);
+  const { nameOfUser } = useTeamDirectory();
   const [refreshing, setRefreshing] = useState(false);
   const [contactAvatarUrl, setContactAvatarUrl] = useState<string | null>(null);
   const [contactName, setContactName] = useState<string | null>(null);
@@ -198,8 +200,18 @@ export function ChatWindow() {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 overscroll-behavior-contain"
       >
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} contactAvatarUrl={contactAvatarUrl} contactName={contactName} />
+        {messages.map((message, i) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            contactAvatarUrl={contactAvatarUrl}
+            contactName={contactName}
+            authorName={nameOfUser(message.agent_user_id)}
+            /* Só na primeira de uma sequência do mesmo atendente — repetir o nome
+               em cada balão de uma resposta quebrada em quatro vira ruído. */
+            showAuthor={message.agent_user_id != null &&
+              message.agent_user_id !== messages[i - 1]?.agent_user_id}
+          />
         ))}
       </div>
       <MessageInput
