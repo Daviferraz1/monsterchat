@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { Settings, Megaphone, Bot, Mail, ChevronRight } from 'lucide-react';
+import { Settings, Megaphone, Bot, Mail, ChevronRight, Users } from 'lucide-react';
 
 const CONFIG_ITEMS = [
+  { href: '/settings/equipe', icon: Users, title: 'Equipe e departamentos', description: 'Quem atende, o que cada um vê e para onde transferir conversas' },
   { href: '/settings/channels', icon: Settings, title: 'Canais', description: 'WhatsApp, Instagram e canais conectados' },
   { href: '/settings/campanhas', icon: Megaphone, title: 'Campanhas', description: 'Campanhas e anúncios' },
   { href: '/settings/ia', icon: Bot, title: 'IA Atendimento', description: 'Piloto automático, sugestões e base de conhecimento' },

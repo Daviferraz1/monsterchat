@@ -6,8 +6,9 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
-import { MessageSquare, Settings, Users, ShoppingBag, CreditCard, Megaphone, Bot, BookOpen, Mail } from 'lucide-react';
+import { MessageSquare, Settings, Users, ShoppingBag, CreditCard, Megaphone, Bot, BookOpen, Mail, UsersRound, KanbanSquare } from 'lucide-react';
 import { UserProfile } from './UserProfile';
+import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -23,9 +24,12 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
     channel_id?: string;
     channel_type?: 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
     replied?: 'all' | 'replied' | 'not_replied';
+    department_id?: string;
+    assignment?: 'all' | 'mine' | 'unassigned';
     search?: string;
   }>({});
   const { conversations, loading } = useConversations(filters);
+  const { me } = useTeamDirectory();
 
   const navLinkClass = (active: boolean) =>
     `flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors min-h-[44px] min-w-[44px] ${
@@ -48,6 +52,9 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
           <Link href="/inbox" className={navLinkClass(!!pathname?.startsWith('/inbox'))} onClick={onClose}>
             <MessageSquare className="w-4 h-4 shrink-0" /> Inbox
           </Link>
+          <Link href="/quadro" className={navLinkClass(!!pathname?.startsWith('/quadro'))} onClick={onClose}>
+            <KanbanSquare className="w-4 h-4 shrink-0" /> Quadro
+          </Link>
           <Link href="/contacts" className={navLinkClass(!!pathname?.startsWith('/contacts'))} onClick={onClose}>
             <Users className="w-4 h-4 shrink-0" /> Contatos
           </Link>
@@ -60,6 +67,11 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
           <p className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Configurações
           </p>
+          {me?.isManager && (
+            <Link href="/settings/equipe" className={navLinkClass(!!pathname?.startsWith('/settings/equipe'))} onClick={onClose}>
+              <UsersRound className="w-4 h-4 shrink-0" /> Equipe
+            </Link>
+          )}
           <Link href="/settings/channels" className={navLinkClass(pathname === '/settings/channels')} onClick={onClose}>
             <Settings className="w-4 h-4 shrink-0" /> Canais
           </Link>

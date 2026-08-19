@@ -5,7 +5,9 @@ import { useEffect, useState, useRef } from 'react';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
-import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw, ArrowRightLeft } from 'lucide-react';
+import { TransferDialog } from './TransferDialog';
+import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 import type { DigitalGuruMetadata } from '@/types';
 
 function formatDateTime(iso?: string | null): string {
@@ -41,7 +43,10 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const [accessChecking, setAccessChecking] = useState(false);
   const [liberando, setLiberando] = useState(false);
   const [liberarMsg, setLiberarMsg] = useState<string | null>(null);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const headerRef = useRef<HTMLDivElement>(null);
+  const { nameOfUser, department } = useTeamDirectory();
 
   useEffect(() => {
     const loadConversation = async () => {
@@ -64,7 +69,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
     };
 
     loadConversation();
-  }, [conversationId, supabase]);
+  }, [conversationId, supabase, reloadKey]);
 
   useEffect(() => {
     if (!showContactInfo) return;
@@ -148,6 +153,8 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const initials = displayName && displayName !== 'Contato sem nome'
     ? displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
+  const ownerName = nameOfUser(conversation?.assigned_to);
+  const currentDepartment = department(conversation?.department_id);
 
   const verificarAcesso = async () => {
     setAccessChecking(true);
@@ -219,6 +226,10 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
           <p className="text-sm text-muted-foreground truncate">
             {contact?.phone || contact?.external_id || '—'}
           </p>
+          <p className="text-[11px] text-muted-foreground truncate">
+            {ownerName ?? 'Sem dono'}
+            {currentDepartment ? ` · ${currentDepartment.name}` : ' · sem departamento'}
+          </p>
           {(dg || hasApprovedSale) && (
             <span
               className={`inline-flex items-center mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${orderStatusBadge(effectiveSituation).className}`}
@@ -229,6 +240,27 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
           )}
         </div>
       </button>
+
+      <button
+        type="button"
+        onClick={() => setShowTransfer(true)}
+        className="h-16 border-b flex items-center gap-1.5 px-3 shrink-0 text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+        title="Transferir para outro operador ou departamento"
+      >
+        <ArrowRightLeft className="w-4 h-4" />
+        <span className="hidden sm:inline text-sm">Transferir</span>
+      </button>
+
+      {showTransfer && (
+        <TransferDialog
+          conversationId={conversationId}
+          currentAssignedTo={conversation?.assigned_to ?? null}
+          currentDepartmentId={conversation?.department_id ?? null}
+          currentPriority={conversation?.priority ?? null}
+          onClose={() => setShowTransfer(false)}
+          onTransferred={() => setReloadKey((k) => k + 1)}
+        />
+      )}
 
       {showContactInfo && contact && (
         <div

@@ -10,7 +10,8 @@ import { isFinalized } from '@/lib/conversationStatus';
 import { useSupabase } from '@/hooks/useSupabase';
 import type { Conversation } from '@/types';
 import type { DigitalGuruMetadata, LeadCampaign } from '@/types';
-import { Megaphone, CheckCheck, RotateCcw } from 'lucide-react';
+import { Megaphone, CheckCheck, RotateCcw, UserRound } from 'lucide-react';
+import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -63,6 +64,10 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
   const isLeadFromAd = !!(campaign?.utm_source || campaign?.utm_medium || campaign?.utm_campaign);
   const finalized = isFinalized(conversation);
   const isClosed = conversation.status === 'closed';
+  const { nameOfUser, department, me } = useTeamDirectory();
+  const ownerName = nameOfUser(conversation.assigned_to);
+  const ownerIsMe = !!conversation.assigned_to && conversation.assigned_to === me?.userId;
+  const dept = department(conversation.department_id);
 
   // Arrastar para o lado (mobile) → revela ação de finalizar/reabrir
   const [offset, setOffset] = useState(0);
@@ -217,6 +222,32 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
                 >
                   <Megaphone className="w-3 h-3 shrink-0" />
                   Lead de anúncio
+                </span>
+              )}
+              {dept && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit"
+                  style={{
+                    background: `${dept.color}22`,
+                    color: dept.color,
+                    borderColor: `${dept.color}55`,
+                  }}
+                  title={`Departamento: ${dept.name}`}
+                >
+                  {dept.name}
+                </span>
+              )}
+              {conversation.assigned_to && (
+                <span
+                  className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit ${
+                    ownerIsMe
+                      ? 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+                      : 'bg-white/5 text-gray-400 border-white/10'
+                  }`}
+                  title={ownerIsMe ? 'Atribuída a você' : `Atribuída a ${ownerName ?? 'outro operador'}`}
+                >
+                  <UserRound className="w-3 h-3 shrink-0" />
+                  {ownerIsMe ? 'Você' : (ownerName ?? 'Atribuída').split(' ')[0]}
                 </span>
               )}
               {situationBadge && (

@@ -10,6 +10,7 @@ import {
 import { sendInstagramText } from '@/lib/api/services/instagram';
 import { createMessage } from '@/lib/api/services/message';
 import { apiEnv } from '@/lib/api/env';
+import { getTeamContext } from '@/lib/api/team';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,6 +29,11 @@ export async function POST(request: NextRequest) {
       caption,
       filename,
     } = body;
+
+    // Quem enviou vem da SESSÃO, nunca do corpo da requisição: sender_id era um campo
+    // livre do cliente e por isso nunca deu para confiar em estatística por operador.
+    const agent = await getTeamContext();
+    const agentUserId = agent?.userId ?? null;
 
     const hasText = typeof text === 'string' && text.trim().length > 0;
     const hasMedia =
@@ -215,7 +221,8 @@ export async function POST(request: NextRequest) {
           conversationId: conversation_id,
           direction: 'outbound',
           senderType: 'agent',
-          senderId: sender_id,
+          senderId: agentUserId ?? sender_id,
+          agentUserId,
           contentType: hasMedia && contentType ? contentType : 'text',
           body: displayText || (hasMedia ? undefined : text),
           mediaUrl: hasMedia ? media_url : undefined,
@@ -372,7 +379,8 @@ export async function POST(request: NextRequest) {
       conversationId: conversation_id,
       direction: 'outbound',
       senderType: 'agent',
-      senderId: sender_id,
+      senderId: agentUserId ?? sender_id,
+      agentUserId,
       contentType: hasMedia && contentType ? contentType : 'text',
       body: displayText || (hasMedia ? undefined : text),
       mediaUrl: hasMedia ? media_url : undefined,
@@ -380,14 +388,30 @@ export async function POST(request: NextRequest) {
       status,
     });
 
+    const now = new Date().toISOString();
+    const conversationPatch: Record<string, unknown> = {
+      last_message_at: now,
+      last_message_preview: preview,
+      last_agent_reply_at: now,
+      updated_at: now,
+    };
+    if (!conversation.first_response_at) {
+      conversationPatch.first_response_at = now;
+    }
+    // Responder NÃO atribui a conversa a ninguém.
+    //
+    // Atribuição é ato deliberado entre membros da equipe (diálogo de transferência)
+    // — virava tarefa no quadro só porque alguém mandou uma mensagem, e o quadro
+    // enchia sozinho de coisa que ninguém combinou.
+    //
+    // Quem está atendendo continua visível: vem de `agent_user_id` na mensagem, que
+    // é o autor real da resposta, e aparece no chat e no painel. Atribuir a conversa
+    // também mexeria na visibilidade dos outros (departamento definido no chute
+    // esconde a conversa de quem não é do setor), o que é pior que não atribuir.
+
     await supabaseAdmin
       .from('conversations')
-      .update({
-        last_message_at: new Date().toISOString(),
-        last_message_preview: preview,
-        last_agent_reply_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .update(conversationPatch)
       .eq('id', conversation_id);
 
     return NextResponse.json(message);

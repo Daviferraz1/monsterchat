@@ -5,6 +5,8 @@ export interface MessageData {
   direction: 'inbound' | 'outbound';
   senderType: 'contact' | 'agent' | 'system' | 'bot';
   senderId?: string;
+  /** Operador logado que enviou (outbound/agent). Base das estatísticas por atendente. */
+  agentUserId?: string | null;
   contentType: string;
   body?: string;
   mediaUrl?: string;
@@ -26,6 +28,7 @@ export async function createMessage(data: MessageData) {
       direction: data.direction,
       sender_type: data.senderType,
       sender_id: data.senderId,
+      agent_user_id: data.agentUserId ?? null,
       content_type: data.contentType,
       body: data.body,
       media_url: data.mediaUrl,

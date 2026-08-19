@@ -25,6 +25,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/ponto/controlid',
   '/api/lead-tracking',
   '/api/ia/cron/', // qualquer cron (protegido por CRON_SECRET no próprio handler)
+  '/api/tasks/cron/', // gerador de tarefas recorrentes (idem)
 ];
 
 function isPublicApi(pathname: string): boolean {

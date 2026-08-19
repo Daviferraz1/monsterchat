@@ -1,26 +1,39 @@
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function createClient() {
-  const cookieStore = await cookies();
+/**
+ * Cliente Supabase para código de servidor (API routes) que precisa saber QUEM está
+ * logado — o supabaseAdmin (service_role) não tem sessão, então não serve para isso.
+ *
+ * Atenção à versão: @supabase/ssr 0.0.10 só entende a interface get/set/remove.
+ * A forma getAll/setAll (versões mais novas) é aceita sem erro e simplesmente não
+ * devolve cookie nenhum — o resultado é sessão sempre nula e 401 silencioso.
+ * É a mesma interface usada em src/middleware.ts; mantenha as duas iguais.
+ */
+export function createClient() {
+  const cookieStore = cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll();
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-        setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
+        set(name: string, value: string, options: CookieOptions) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookieStore.set({ name, value, ...options });
           } catch {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
+            // Server Component não pode escrever cookie. O middleware já renova a
+            // sessão a cada request, então ignorar aqui é seguro.
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: '', ...options });
+          } catch {
+            // idem
           }
         },
       },

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSupabase } from './useSupabase';
+import { useTeamDirectory } from './useTeamDirectory';
 import { needsReply } from '@/lib/conversationStatus';
 import type { Conversation } from '@/types';
 
 export type ChannelTypeFilter = 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
 export type RepliedFilter = 'all' | 'replied' | 'not_replied';
+/** Fila: todas as visíveis, só as minhas, ou as que ainda não têm dono. */
+export type AssignmentFilter = 'all' | 'mine' | 'unassigned';
 
 const VALID_STATUSES = ['open', 'pending', 'closed', 'snoozed'] as const;
 
@@ -14,9 +17,12 @@ export function useConversations(filters?: {
   channel_id?: string;
   channel_type?: ChannelTypeFilter;
   replied?: RepliedFilter;
+  department_id?: string;
+  assignment?: AssignmentFilter;
   search?: string;
 }) {
   const supabase = useSupabase();
+  const { me } = useTeamDirectory();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [notRepliedCount, setNotRepliedCount] = useState(0);
@@ -28,6 +34,9 @@ export function useConversations(filters?: {
     VALID_STATUSES.includes(statusFilter as (typeof VALID_STATUSES)[number]);
 
   const repliedFilter = filters?.replied ?? 'all';
+  const departmentFilter = filters?.department_id ?? '';
+  const assignmentFilter = filters?.assignment ?? 'all';
+  const myUserId = me?.userId ?? '';
   const searchQuery = (filters?.search ?? '').trim().toLowerCase();
 
   useEffect(() => {
@@ -47,6 +56,15 @@ export function useConversations(filters?: {
       }
       if (filters?.channel_id) {
         query = query.eq('channel_id', filters.channel_id);
+      }
+      if (departmentFilter) {
+        query = query.eq('department_id', departmentFilter);
+      }
+      if (assignmentFilter === 'unassigned') {
+        query = query.is('assigned_to', null);
+      } else if (assignmentFilter === 'mine') {
+        // Sem usuário resolvido ainda, não filtra (evita lista vazia no primeiro render).
+        if (myUserId) query = query.eq('assigned_to', myUserId);
       }
 
       const { data, error } = await query;
@@ -71,9 +89,16 @@ export function useConversations(filters?: {
       // para o badge ficar estável independente do chip selecionado.
       setNotRepliedCount(list.filter((c) => needsReply(c as Conversation)).length);
 
-      // Filtro de status (cliente): Abertas (open) / Finalizadas (closed)
+      // Filtro de status (cliente): Abertas / Finalizadas (closed).
+      // "Abertas" = tudo que NÃO foi finalizado. Desde o Quadro, uma conversa em
+      // andamento fica como 'pending' e uma aguardando como 'snoozed'; elas seguem
+      // abertas para o atendimento, só mudaram de raia — não podem sumir do inbox.
       if (applyStatus && statusFilter) {
-        list = list.filter((c) => (c as Conversation).status === statusFilter);
+        list = list.filter((c) =>
+          statusFilter === 'open'
+            ? (c as Conversation).status !== 'closed'
+            : (c as Conversation).status === statusFilter
+        );
       }
       // "Não respondido" = última mensagem foi do contato e não foi respondida (e não finalizada).
       // "Respondido" = o complemento (já respondida ou finalizada).
@@ -115,7 +140,18 @@ export function useConversations(filters?: {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       supabase.removeChannel(channel);
     };
-  }, [supabase, statusFilter, applyStatus, repliedFilter, filters?.assigned_to, filters?.channel_id, filters?.channel_type]);
+  }, [
+    supabase,
+    statusFilter,
+    applyStatus,
+    repliedFilter,
+    departmentFilter,
+    assignmentFilter,
+    myUserId,
+    filters?.assigned_to,
+    filters?.channel_id,
+    filters?.channel_type,
+  ]);
 
   const filteredConversations = useMemo(() => {
     if (!searchQuery) return conversations;

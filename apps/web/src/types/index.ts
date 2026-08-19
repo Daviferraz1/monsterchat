@@ -29,6 +29,13 @@ export interface Conversation {
   contact_id: string;
   status: ConversationStatus;
   assigned_to?: string;
+  /** Departamento responsável (sectors.id). null = ainda não triada. */
+  department_id?: string | null;
+  assigned_at?: string | null;
+  assigned_by?: string | null;
+  /** Primeira resposta humana — base do tempo de primeira resposta. */
+  first_response_at?: string | null;
+  /** 'low' | 'normal' | 'high' | 'urgent' — ver lib/priority.ts */
   priority: string;
   subject?: string;
   tags: string[];
@@ -36,7 +43,7 @@ export interface Conversation {
   last_message_at?: string;
   last_message_preview?: string;
   last_agent_reply_at?: string;
-  closed_at?: string;
+  closed_at?: string | null;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -103,6 +110,8 @@ export interface Message {
   direction: MessageDirection;
   sender_type: SenderType;
   sender_id?: string;
+  /** Operador que enviou (outbound/agent). */
+  agent_user_id?: string | null;
   content_type: MessageContentType;
   body?: string;
   media_url?: string;
@@ -115,4 +124,87 @@ export interface Message {
   reply_to_id?: string;
   metadata: Record<string, any>;
   created_at: string;
+}
+
+/** Recado interno da equipe preso a uma conversa (thread do card no Quadro). */
+export interface InternalNote {
+  id: string;
+  conversation_id: string;
+  /** null = nota gerada pelo sistema/IA. */
+  author_id?: string | null;
+  body: string;
+  media_url?: string | null;
+  /** Anexo privado (bucket `internas`) — abrir sempre por /api/internal-files. */
+  media_path?: string | null;
+  media_mime_type?: string | null;
+  media_filename?: string | null;
+  media_size?: number | null;
+  created_at: string;
+}
+
+/** Tipo de tarefa — configurável em tela (não é enum no código). */
+export interface TaskType {
+  id: string;
+  name: string;
+  description?: string | null;
+  default_department_id?: string | null;
+  /** Limite padrão para resolver, em minutos. */
+  default_sla_minutes?: number | null;
+  color: string;
+  sort_order: number;
+  active: boolean;
+}
+
+/**
+ * Tarefa interna da equipe. Compartilha status e prioridade com a conversa
+ * porque as duas aparecem no mesmo quadro, nas mesmas raias.
+ */
+export interface Task {
+  id: string;
+  title: string;
+  description?: string | null;
+  task_type_id?: string | null;
+  department_id?: string | null;
+  created_by?: string | null;
+  assigned_to?: string | null;
+  assigned_at?: string | null;
+  assigned_by?: string | null;
+  /** Aluno que originou a demanda (opcional). */
+  contact_id?: string | null;
+  /** Conversa de origem (opcional). */
+  conversation_id?: string | null;
+  status: ConversationStatus;
+  priority: string;
+  due_at?: string | null;
+  /** Limite acordado na criação, em minutos (ver migração 044). */
+  sla_minutes?: number | null;
+  first_seen_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  completed_by?: string | null;
+  recurrence_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
+
+export interface TaskRecurrence {
+  id: string;
+  title: string;
+  description?: string | null;
+  task_type_id?: string | null;
+  department_id?: string | null;
+  assigned_to?: string | null;
+  priority: string;
+  frequency: RecurrenceFrequency;
+  interval_count: number;
+  day_of_week?: number | null;
+  day_of_month?: number | null;
+  /** Dias de antecedência com que a tarefa aparece no quadro. */
+  lead_days: number;
+  next_due_at: string;
+  last_created_at?: string | null;
+  active: boolean;
+  created_by?: string | null;
 }

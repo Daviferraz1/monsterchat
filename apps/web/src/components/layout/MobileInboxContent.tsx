@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
-import type { ChannelTypeFilter, RepliedFilter } from '@/hooks/useConversations';
+import type { AssignmentFilter, ChannelTypeFilter, RepliedFilter } from '@/hooks/useConversations';
 
 export function MobileInboxContent() {
   const [filters, setFilters] = useState<{
@@ -13,6 +13,8 @@ export function MobileInboxContent() {
     channel_id?: string;
     channel_type?: ChannelTypeFilter;
     replied?: RepliedFilter;
+    department_id?: string;
+    assignment?: AssignmentFilter;
     search?: string;
   }>({});
   const { conversations, loading, notRepliedCount } = useConversations(filters);
