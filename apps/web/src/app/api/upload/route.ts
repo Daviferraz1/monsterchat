@@ -6,6 +6,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const BUCKET = 'media';
+/** Bucket privado dos anexos da conversa interna (migração 042). */
+const INTERNAL_BUCKET = 'internas';
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 
 export async function POST(request: NextRequest) {
@@ -19,7 +21,12 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
-    const conversationId = formData.get('conversation_id') as string | null;
+    // O id serve só para agrupar os arquivos por dono (conversa ou tarefa).
+    const conversationId =
+      (formData.get('conversation_id') as string | null) || (formData.get('task_id') as string | null);
+    // scope=internal → anexo da thread interna da equipe. Vai para um bucket
+    // PRIVADO e sai só por URL assinada, via /api/internal-files.
+    const isInternal = formData.get('scope') === 'internal';
 
     if (!file || !conversationId) {
       return NextResponse.json(
@@ -38,9 +45,10 @@ export async function POST(request: NextRequest) {
     const ext = file.name.split('.').pop() || 'bin';
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
     const path = `${conversationId}/${Date.now()}-${safeName}`;
+    const bucket = isInternal ? INTERNAL_BUCKET : BUCKET;
 
     const { error } = await supabaseAdmin.storage
-      .from(BUCKET)
+      .from(bucket)
       .upload(path, await file.arrayBuffer(), {
         contentType: file.type,
         upsert: true,
@@ -52,6 +60,11 @@ export async function POST(request: NextRequest) {
         { error: error.message || 'Falha no upload.' },
         { status: 500 }
       );
+    }
+
+    if (isInternal) {
+      // Sem URL pública: o arquivo é privado. A nota guarda só o caminho.
+      return NextResponse.json({ path, bucket });
     }
 
     const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
