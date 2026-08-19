@@ -6,6 +6,7 @@ const SUGGESTION_AI_KEY = 'suggestion_ai_enabled';
 const LEARN_KB_USE_AI_KEY = 'learn_kb_use_ai';
 const LEARN_STYLE_KEY = 'learn_operator_style';
 const AGENT_MODEL_KEY = 'agent_model';
+const LEARN_KB_MODE_KEY = 'learn_kb_mode';
 
 /** Modelo padrão do agente de sugestão (Claude Sonnet). */
 export const DEFAULT_AGENT_MODEL = 'claude-sonnet-4-6';
@@ -167,6 +168,41 @@ export async function setLearnOperatorStyleEnabled(enabled: boolean): Promise<vo
     .from('ia_settings')
     .upsert(
       { key: LEARN_STYLE_KEY, value: { enabled }, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+}
+
+/**
+ * O que fazer com a correção do atendente.
+ *
+ * 'queue' — vira proposta e espera aprovação (padrão).
+ * 'auto'  — entra direto na base. Era o comportamento anterior, e foi ele que
+ *           encheu a base de 17 mil entradas cruas; só ligue depois de a
+ *           curadoria estar em dia.
+ * 'off'   — não aprende nada.
+ */
+export type LearnKbMode = 'queue' | 'auto' | 'off';
+
+export async function getLearnKbMode(): Promise<LearnKbMode> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('ia_settings')
+      .select('value')
+      .eq('key', LEARN_KB_MODE_KEY)
+      .single();
+    if (error || !data?.value) return 'queue';
+    const v = (data.value as { mode?: string }).mode;
+    return v === 'auto' || v === 'off' ? v : 'queue';
+  } catch {
+    return 'queue';
+  }
+}
+
+export async function setLearnKbMode(mode: LearnKbMode): Promise<void> {
+  await supabaseAdmin
+    .from('ia_settings')
+    .upsert(
+      { key: LEARN_KB_MODE_KEY, value: { mode }, updated_at: new Date().toISOString() },
       { onConflict: 'key' }
     );
 }

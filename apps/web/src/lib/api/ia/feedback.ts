@@ -59,6 +59,10 @@ export async function recordSuggestionFeedback(params: FeedbackParams): Promise<
     learnFromFeedback({
       questionContext,
       actualResponse,
+      // O revisor precisa ver o que a IA sugeriu ao lado do que o atendente
+      // enviou — é a diferença entre os dois que carrega a correção.
+      suggestedResponse: params.suggestedResponse,
+      conversationId: params.conversationId,
       brand: params.brand ?? 'both',
     }),
     learnOperatorStyle({

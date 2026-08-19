@@ -23,6 +23,8 @@ export default function IAPage() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<IAStats | null>(null);
   const [backfilling, setBackfilling] = useState(false);
+  // Contador da fila de curadoria — sem ele a fila é uma tela que ninguém lembra de abrir.
+  const [pendentesCuradoria, setPendentesCuradoria] = useState(0);
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
 
   const load = async () => {
@@ -56,6 +58,13 @@ export default function IAPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetch('/api/ia/kb-review')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setPendentesCuradoria(j?.pending ?? 0))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     load();
@@ -446,13 +455,31 @@ export default function IAPage() {
               {backfillMsg && <p className="text-xs text-gray-600 mt-2">{backfillMsg}</p>}
             </div>
 
-            <Link
-              href="/settings/ia/knowledge"
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-colors font-medium"
-            >
-              <BookOpen className="w-5 h-5" />
-              Ver base de conhecimento
-            </Link>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/settings/ia/knowledge"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-colors font-medium"
+              >
+                <BookOpen className="w-5 h-5" />
+                Ver base de conhecimento
+              </Link>
+              <Link
+                href="/settings/ia/curadoria"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors font-medium"
+              >
+                <Sparkles className="w-5 h-5" />
+                Revisar correções
+                {pendentesCuradoria > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-bold rounded-full bg-white text-[#7c3aed]">
+                    {pendentesCuradoria > 99 ? '99+' : pendentesCuradoria}
+                  </span>
+                )}
+              </Link>
+            </div>
+            <p className="text-xs text-gray-600 mt-2">
+              Quando o atendente reescreve a sugestão, a correção vira uma proposta para você
+              aprovar. Só o aprovado entra na base.
+            </p>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">

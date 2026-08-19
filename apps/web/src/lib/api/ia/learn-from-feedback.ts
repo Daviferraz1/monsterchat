@@ -1,12 +1,32 @@
+/**
+ * Aprender com a correção do atendente.
+ *
+ * Quando o atendente escreve algo diferente da sugestão, a diferença carrega a
+ * resposta certa. Este arquivo transforma isso em conhecimento.
+ *
+ * O QUE MUDOU E POR QUÊ (ver migração 046):
+ *
+ * Antes, com `learn_kb_use_ai = false`, a correção era gravada CRUA — o contexto
+ * inteiro da conversa como pergunta-tipo, a resposta do atendente como
+ * resposta-ouro, tudo em category='outro'. Rodou por meses e produziu 17 mil
+ * entradas onde a maioria apareceu uma única vez: um arquivo de conversas, não
+ * uma base de conhecimento. A busca semântica em cima disso devolve "uma conversa
+ * parecida" com o contexto de outro aluno junto, e o modelo serve o fragmento
+ * como fato. Foi assim que "você pode estender para 2 anos" virou "o Tecnólogo
+ * dura 2 anos" na frente do aluno.
+ *
+ * Agora: a correção é sempre normalizada e, por padrão, vira PROPOSTA numa fila
+ * de curadoria. Entrar direto na base é o que estragou a base.
+ */
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../supabase';
 import { apiEnv } from '../env';
-import { isLearnFromFeedbackUseAi } from './autopilot';
+import { getLearnKbMode } from './autopilot';
 import { embedText, isEmbeddingsEnabled } from './embeddings';
 import { searchKnowledge } from './knowledge-search';
 
-/** Gera e grava o embedding da pergunta-tipo para que a nova entrada seja localizável na busca semântica. */
-async function storeEmbedding(id: string | undefined, text: string): Promise<void> {
+/** Gera e grava o embedding da pergunta-tipo para que a entrada seja localizável na busca semântica. */
+export async function storeEmbedding(id: string | undefined, text: string): Promise<void> {
   if (!id || !isEmbeddingsEnabled()) return;
   try {
     const emb = await embedText(text, 'RETRIEVAL_DOCUMENT');
@@ -18,46 +38,71 @@ async function storeEmbedding(id: string | undefined, text: string): Promise<voi
   }
 }
 
-/** Acima desta similaridade de cosseno a pergunta já está na base: reforçamos em vez de duplicar. */
+/** Acima desta similaridade de cosseno a pergunta já está na base: é caso de reforçar, não de criar. */
 const DUPLICATE_SIMILARITY = 0.9;
 
+export interface DuplicateHit {
+  id: string;
+  similarity: number;
+  frequency: number;
+}
+
 /**
- * Se a base já tem uma entrada praticamente igual, atualiza a resposta dela com a que o
- * atendente acabou de enviar (o padrão mais recente vale) e soma +1 na frequência.
- * Evita encher a base de quase-duplicatas, que degradam a busca ao longo do tempo.
- * Devolve o id reforçado, ou null quando é caso de criar entrada nova.
+ * Procura entrada praticamente igual já existente.
+ *
+ * Só confia no resultado quando a busca foi semântica: sem embeddings a busca cai
+ * no ts_rank, cuja escala não é comparável com similaridade de cosseno — comparar
+ * as duas com o mesmo limiar daria falso positivo.
  */
-async function reinforceExistingEntry(
+export async function findDuplicate(
   questionPattern: string,
-  goldResponse: string,
   brand: string
-): Promise<string | null> {
+): Promise<DuplicateHit | null> {
   try {
     const { rows, semantic } = await searchKnowledge(questionPattern, brand);
-    // Sem embeddings a busca cai no ts_rank, cuja escala não é comparável — aí não arriscamos.
     if (!semantic) return null;
     const top = rows[0];
     if (!top || top.similarity < DUPLICATE_SIMILARITY) return null;
-    const { error } = await supabaseAdmin
-      .from('knowledge_base')
-      .update({
-        gold_response: goldResponse.slice(0, 8000),
-        frequency: (top.frequency ?? 1) + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', top.id);
-    if (error) {
-      console.warn('[IA learnFromFeedback] reforçar', error.message);
-      return null;
-    }
-    return top.id;
+    return { id: top.id, similarity: top.similarity, frequency: top.frequency ?? 1 };
   } catch (err) {
-    console.warn('[IA learnFromFeedback] reforçar', err);
+    console.warn('[IA learnFromFeedback] duplicata', err);
     return null;
   }
 }
 
-const CATEGORIES = ['financeiro', 'acesso', 'matricula', 'academico', 'lead', 'tecnico', 'duvida', 'reclamacao', 'documento', 'outro'] as const;
+/** Atualiza a entrada existente com a resposta mais recente e soma +1 na frequência. */
+export async function reinforceEntry(
+  id: string,
+  goldResponse: string,
+  frequency: number
+): Promise<string | null> {
+  const { error } = await supabaseAdmin
+    .from('knowledge_base')
+    .update({
+      gold_response: goldResponse.slice(0, 8000),
+      frequency: frequency + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+  if (error) {
+    console.warn('[IA learnFromFeedback] reforçar', error.message);
+    return null;
+  }
+  return id;
+}
+
+export const CATEGORIES = [
+  'financeiro',
+  'acesso',
+  'matricula',
+  'academico',
+  'lead',
+  'tecnico',
+  'duvida',
+  'reclamacao',
+  'documento',
+  'outro',
+] as const;
 const BRANDS = ['monster', 'fagenius', 'both'] as const;
 
 export interface LearnFromFeedbackParams {
@@ -65,10 +110,12 @@ export interface LearnFromFeedbackParams {
   questionContext: string;
   /** Resposta que o atendente realmente enviou. */
   actualResponse: string;
+  /** O que a IA havia sugerido — o revisor precisa ver os dois lados. */
+  suggestedResponse?: string;
+  conversationId?: string;
   brand?: 'monster' | 'fagenius' | 'both';
 }
 
-/** Resposta estruturada da IA para criar entrada na base de conhecimento. */
 interface NormalizedEntry {
   question_pattern: string;
   gold_response: string;
@@ -77,117 +124,131 @@ interface NormalizedEntry {
 
 const MIN_RESPONSE_LENGTH = 15;
 
-/**
- * Quando o atendente não usa a sugestão, salva na base de conhecimento.
- * Se a opção "Usar IA" estiver ativa (settings/ia), usa Claude para normalizar pergunta e resposta.
- * Se estiver desativada, salva direto (pergunta e resposta como estão).
- */
-export async function learnFromFeedback(params: LearnFromFeedbackParams): Promise<{ id?: string; skipped?: string }> {
-  const { questionContext, actualResponse, brand = 'both' } = params;
+const NORMALIZER_SYSTEM = `Você prepara entradas para a base de conhecimento de um atendimento de cursos.
+
+A partir da dúvida do aluno e da resposta que o atendente enviou, produza UMA entrada normalizada em JSON com exatamente estes campos:
+- question_pattern: a pergunta em uma frase curta e GENÉRICA, do jeito que outro aluno faria (ex.: "Qual o valor do curso?", "Como acesso o material?"). Sem saudação, sem nome, sem o contexto específico deste aluno.
+- gold_response: a resposta reutilizável, baseada no que o atendente escreveu. Corrija erros de digitação e deixe clara. Mantenha tom humano, português brasileiro.
+- category: uma destas exatamente: ${CATEGORIES.join(', ')}.
+
+REGRAS IMPORTANTES:
+- Remova QUALQUER dado pessoal: nome, CPF, e-mail, telefone, número de pedido, senha.
+- Se a resposta do atendente só faz sentido para aquele aluno específico (ex.: "seu pagamento de 12/03 caiu", "seu acesso já foi liberado"), devolva {"skip": true} — isso não é conhecimento reutilizável, é atendimento pontual.
+- Se a resposta contém condição ou alternativa, PRESERVE a condição na resposta ("o curso pode ser feito em 12 meses no formato acelerado ou estendido"). Frase condicional que vira afirmação absoluta é a principal fonte de erro da IA.
+
+Responda APENAS com JSON válido, sem markdown.`;
+
+/** Destila a correção do atendente numa entrada reutilizável. Null quando não há o que aprender. */
+async function normalize(
+  questionContext: string,
+  actualResponse: string
+): Promise<NormalizedEntry | null> {
+  if (!apiEnv.ANTHROPIC_API_KEY) return null;
+  const anthropic = new Anthropic({ apiKey: apiEnv.ANTHROPIC_API_KEY });
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 600,
+    system: NORMALIZER_SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: `Dúvida do aluno:\n${questionContext.slice(0, 2000)}\n\nResposta enviada pelo atendente:\n${actualResponse.slice(0, 3000)}`,
+      },
+    ],
+  });
+
+  const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  let entry: NormalizedEntry & { skip?: boolean };
+  try {
+    entry = JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+  if (entry.skip) return null;
+  if (!entry.question_pattern?.trim() || !entry.gold_response?.trim()) return null;
+
+  return {
+    question_pattern: entry.question_pattern.trim().slice(0, 1000),
+    gold_response: entry.gold_response.trim().slice(0, 8000),
+    category: CATEGORIES.includes(entry.category as (typeof CATEGORIES)[number])
+      ? entry.category
+      : 'outro',
+  };
+}
+
+export async function learnFromFeedback(
+  params: LearnFromFeedbackParams
+): Promise<{ id?: string; queued?: string; skipped?: string }> {
+  const { questionContext, actualResponse, suggestedResponse, conversationId, brand = 'both' } = params;
   const trimmed = actualResponse.trim();
   if (trimmed.length < MIN_RESPONSE_LENGTH) {
     return { skipped: 'resposta muito curta' };
   }
 
-  const useAi = await isLearnFromFeedbackUseAi();
+  const mode = await getLearnKbMode();
+  if (mode === 'off') return { skipped: 'aprendizado desligado' };
+
   const brandVal = BRANDS.includes(brand) ? brand : 'both';
 
-  if (!useAi) {
-    const questionPattern = questionContext.trim().slice(0, 1000) || 'Pergunta do aluno';
-    const reinforced = await reinforceExistingEntry(questionPattern, trimmed, brandVal);
-    if (reinforced) return { id: reinforced };
-    const { data, error } = await supabaseAdmin
-      .from('knowledge_base')
-      .insert({
-        brand: brandVal,
-        category: 'outro',
-        question_pattern: questionPattern,
-        gold_response: trimmed.slice(0, 8000),
-        frequency: 1,
-        is_active: true,
-      })
-      .select('id')
-      .single();
-    if (error) {
-      console.warn('[IA learnFromFeedback] insert (sem IA)', error.message);
-      return { skipped: error.message };
-    }
-    await storeEmbedding(data?.id, questionPattern);
-    return { id: data?.id };
-  }
-
-  if (!apiEnv.ANTHROPIC_API_KEY) {
-    return { skipped: 'sem API key' };
-  }
-
   try {
-    const anthropic = new Anthropic({ apiKey: apiEnv.ANTHROPIC_API_KEY });
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
-      system: `Você é um assistente que prepara entradas para uma base de conhecimento de atendimento.
+    // Normalizar deixou de ser opcional. O caminho "salvar cru" existia atrás de
+    // uma opção e foi ele que transformou a base num arquivo de conversas.
+    const entry = await normalize(questionContext, trimmed);
+    if (!entry) return { skipped: 'nada reutilizável nesta correção' };
 
-Sua tarefa: a partir da pergunta/dúvida do aluno e da resposta que o atendente enviou, produzir UMA entrada normalizada em JSON com exatamente estes campos:
-- question_pattern: string com a pergunta resumida/normalizada em uma frase curta e genérica (ex.: "Qual o valor do curso?", "Como acesso o material?"). Sem saudações nem contexto do aluno.
-- gold_response: string com a resposta de ouro, baseada no que o atendente escreveu. Pode corrigir pequenos erros e deixar o texto claro e reutilizável. Mantenha tom humano e em português brasileiro.
-- category: uma das categorias exatas: ${CATEGORIES.join(', ')}.
+    const dup = await findDuplicate(entry.question_pattern, brandVal);
 
-Responda APENAS com um JSON válido, sem markdown e sem texto antes ou depois. Exemplo:
-{"question_pattern":"Qual o valor do curso?","gold_response":"Oi! O valor à vista é R$ 497. Você pode pagar com boleto, Pix ou cartão. No cartão pode parcelar.","category":"lead"}`,
-      messages: [
-        {
-          role: 'user',
-          content: `Pergunta/dúvida do aluno:\n${questionContext.slice(0, 2000)}\n\nResposta enviada pelo atendente:\n${trimmed.slice(0, 3000)}`,
-        },
-      ],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { skipped: 'IA não retornou JSON' };
+    if (mode === 'auto') {
+      if (dup) {
+        const id = await reinforceEntry(dup.id, entry.gold_response, dup.frequency);
+        return id ? { id } : { skipped: 'falha ao reforçar' };
+      }
+      const { data, error } = await supabaseAdmin
+        .from('knowledge_base')
+        .insert({
+          brand: brandVal,
+          category: entry.category,
+          question_pattern: entry.question_pattern,
+          gold_response: entry.gold_response,
+          frequency: 1,
+          is_active: true,
+          source: 'auto',
+        })
+        .select('id')
+        .single();
+      if (error) {
+        console.warn('[IA learnFromFeedback] insert', error.message);
+        return { skipped: error.message };
+      }
+      await storeEmbedding(data?.id, entry.question_pattern);
+      return { id: data?.id };
     }
 
-    let entry: NormalizedEntry;
-    try {
-      entry = JSON.parse(jsonMatch[0]) as NormalizedEntry;
-    } catch {
-      return { skipped: 'JSON inválido' };
-    }
-
-    if (!entry.question_pattern?.trim() || !entry.gold_response?.trim()) {
-      return { skipped: 'campos vazios' };
-    }
-    const category = CATEGORIES.includes(entry.category as (typeof CATEGORIES)[number])
-      ? entry.category
-      : 'outro';
-
-    const reinforced = await reinforceExistingEntry(
-      entry.question_pattern.trim(),
-      entry.gold_response.trim(),
-      brandVal
-    );
-    if (reinforced) return { id: reinforced };
-
+    // mode === 'queue': vira proposta e espera aprovação
     const { data, error } = await supabaseAdmin
-      .from('knowledge_base')
+      .from('kb_review_queue')
       .insert({
+        conversation_id: conversationId ?? null,
         brand: brandVal,
-        category,
-        question_pattern: entry.question_pattern.trim().slice(0, 1000),
-        gold_response: entry.gold_response.trim().slice(0, 8000),
-        frequency: 1,
-        is_active: true,
+        question_context: questionContext.slice(0, 4000),
+        suggested_response: suggestedResponse?.slice(0, 8000) ?? null,
+        actual_response: trimmed.slice(0, 8000),
+        proposed_question_pattern: entry.question_pattern,
+        proposed_gold_response: entry.gold_response,
+        proposed_category: entry.category,
+        duplicate_of: dup?.id ?? null,
+        duplicate_similarity: dup?.similarity ?? null,
       })
       .select('id')
       .single();
-
     if (error) {
-      console.warn('[IA learnFromFeedback] insert', error.message);
+      console.warn('[IA learnFromFeedback] fila', error.message);
       return { skipped: error.message };
     }
-    await storeEmbedding(data?.id, entry.question_pattern.trim());
-    return { id: data?.id };
+    return { queued: data?.id };
   } catch (err) {
     console.error('[IA learnFromFeedback]', err);
     return { skipped: err instanceof Error ? err.message : 'erro' };
