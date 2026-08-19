@@ -6,6 +6,8 @@ import type { Conversation } from '@/types';
 
 export type ChannelTypeFilter = 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
 export type RepliedFilter = 'all' | 'replied' | 'not_replied';
+/** Só as que o atendente marcou para voltar depois. */
+export type UnreadFilter = 'all' | 'marked';
 /** Fila: todas as visíveis, só as minhas, ou as que ainda não têm dono. */
 export type AssignmentFilter = 'all' | 'mine' | 'unassigned';
 
@@ -17,6 +19,7 @@ export function useConversations(filters?: {
   channel_id?: string;
   channel_type?: ChannelTypeFilter;
   replied?: RepliedFilter;
+  unread?: UnreadFilter;
   department_id?: string;
   assignment?: AssignmentFilter;
   search?: string;
@@ -34,6 +37,7 @@ export function useConversations(filters?: {
     VALID_STATUSES.includes(statusFilter as (typeof VALID_STATUSES)[number]);
 
   const repliedFilter = filters?.replied ?? 'all';
+  const unreadFilter = filters?.unread ?? 'all';
   const departmentFilter = filters?.department_id ?? '';
   const assignmentFilter = filters?.assignment ?? 'all';
   const myUserId = me?.userId ?? '';
@@ -107,6 +111,9 @@ export function useConversations(filters?: {
       } else if (repliedFilter === 'replied') {
         list = list.filter((c) => !needsReply(c as Conversation));
       }
+      if (unreadFilter === 'marked') {
+        list = list.filter((c) => (c as Conversation).manually_unread);
+      }
       setConversations(list);
       setLoading(false);
     };
@@ -145,6 +152,7 @@ export function useConversations(filters?: {
     statusFilter,
     applyStatus,
     repliedFilter,
+    unreadFilter,
     departmentFilter,
     assignmentFilter,
     myUserId,

@@ -10,7 +10,7 @@ import { isFinalized } from '@/lib/conversationStatus';
 import { useSupabase } from '@/hooks/useSupabase';
 import type { Conversation } from '@/types';
 import type { DigitalGuruMetadata, LeadCampaign } from '@/types';
-import { Megaphone, CheckCheck, RotateCcw, UserRound } from 'lucide-react';
+import { Megaphone, CheckCheck, RotateCcw, UserRound, MailOpen, Mail } from 'lucide-react';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 
 const AVATAR_COLORS = [
@@ -22,7 +22,8 @@ const AVATAR_COLORS = [
   'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
 ];
 
-const ACTION_W = 88; // largura da ação revelada ao arrastar
+const ACTION_W = 88; // largura de cada ação revelada ao arrastar
+const ACTIONS_W = ACTION_W * 2; // "Não lida" + "Finalizar"
 
 function getInitials(name: string): string {
   if (!name || name === 'Contato sem nome') return '?';
@@ -51,7 +52,10 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
     contact?.phone ||
     (instagramUsername ? `@${contact.metadata.username}` : null) ||
     'Contato sem nome';
-  const hasUnread = conversation.unread_count > 0;
+  const manuallyUnread = !!conversation.manually_unread;
+  // Marca manual conta como não lida na lista, mesmo sem mensagem nova — é o
+  // ponto da função: a conversa continua pedindo atenção depois de lida.
+  const hasUnread = conversation.unread_count > 0 || manuallyUnread;
   const isActive = pathname === `/inbox/${conversation.id}`;
   const colorIndex = (displayName?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length;
   const [avatarError, setAvatarError] = useState(false);
@@ -91,12 +95,12 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
     const dy = e.touches[0].clientY - startY.current;
     if (!swiped.current && Math.abs(dy) > Math.abs(dx)) return; // gesto vertical → deixa rolar
     if (Math.abs(dx) > 6) swiped.current = true;
-    const next = Math.min(0, Math.max(-ACTION_W, baseOffset.current + dx));
+    const next = Math.min(0, Math.max(-ACTIONS_W, baseOffset.current + dx));
     setOffset(next);
   };
   const onTouchEnd = () => {
     dragging.current = false;
-    setOffset((o) => (o <= -ACTION_W / 2 ? -ACTION_W : 0));
+    setOffset((o) => (o <= -ACTIONS_W / 2 ? -ACTIONS_W : 0));
   };
   const onClickCapture = (e: React.MouseEvent) => {
     // Se estava arrastando ou a ação está aberta, o toque fecha em vez de navegar
@@ -106,6 +110,20 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
       setOffset(0);
       swiped.current = false;
     }
+  };
+
+  const toggleUnread = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    const { error } = await supabase
+      .from('conversations')
+      .update({ manually_unread: !manuallyUnread, updated_at: new Date().toISOString() })
+      .eq('id', conversation.id);
+    if (error) console.error('Falha ao marcar como não lida:', error);
+    setBusy(false);
+    setOffset(0);
   };
 
   const toggleFinalize = async (e: React.MouseEvent) => {
@@ -129,21 +147,35 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
 
   return (
     <div className="relative overflow-hidden">
-      {/* Ação revelada ao arrastar para a esquerda (mobile) */}
-      <button
-        type="button"
-        onClick={toggleFinalize}
-        disabled={busy}
-        aria-label={isClosed ? 'Reabrir conversa' : 'Finalizar conversa'}
-        className={`absolute inset-y-0 right-0 flex flex-col items-center justify-center gap-0.5 text-white text-[11px] font-medium ${
-          isClosed ? 'bg-amber-600' : 'bg-green-600'
-        }`}
-        style={{ width: ACTION_W }}
-        tabIndex={offset === 0 ? -1 : 0}
-      >
-        {isClosed ? <RotateCcw className="w-5 h-5" /> : <CheckCheck className="w-5 h-5" />}
-        {isClosed ? 'Reabrir' : 'Finalizar'}
-      </button>
+      {/* Ações reveladas ao arrastar para a esquerda (mobile) */}
+      <div className="absolute inset-y-0 right-0 flex" style={{ width: ACTIONS_W }}>
+        <button
+          type="button"
+          onClick={toggleUnread}
+          disabled={busy}
+          aria-label={manuallyUnread ? 'Desmarcar como não lida' : 'Marcar como não lida'}
+          className="flex flex-col items-center justify-center gap-0.5 text-white text-[11px] font-medium bg-[#6d28d9]"
+          style={{ width: ACTION_W }}
+          tabIndex={offset === 0 ? -1 : 0}
+        >
+          {manuallyUnread ? <MailOpen className="w-5 h-5" /> : <Mail className="w-5 h-5" />}
+          {manuallyUnread ? 'Lida' : 'Não lida'}
+        </button>
+        <button
+          type="button"
+          onClick={toggleFinalize}
+          disabled={busy}
+          aria-label={isClosed ? 'Reabrir conversa' : 'Finalizar conversa'}
+          className={`flex flex-col items-center justify-center gap-0.5 text-white text-[11px] font-medium ${
+            isClosed ? 'bg-amber-600' : 'bg-green-600'
+          }`}
+          style={{ width: ACTION_W }}
+          tabIndex={offset === 0 ? -1 : 0}
+        >
+          {isClosed ? <RotateCcw className="w-5 h-5" /> : <CheckCheck className="w-5 h-5" />}
+          {isClosed ? 'Reabrir' : 'Finalizar'}
+        </button>
+      </div>
 
       {/* Linha da conversa (desliza por cima da ação) */}
       <div
@@ -161,10 +193,22 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
         <Link
           href={`/inbox/${conversation.id}`}
           onClick={onSelect}
-          className="flex items-start gap-3 p-3 min-h-[72px] transition-all border-b border-white/[0.03] text-left hover:bg-white/[0.04] active:bg-white/[0.06]"
+          className="group flex items-start gap-3 p-3 min-h-[72px] transition-all border-b border-white/[0.03] text-left hover:bg-white/[0.04] active:bg-white/[0.06]"
           style={{
-            background: isActive ? 'rgba(139,92,246,0.1)' : 'transparent',
-            borderLeft: isActive ? '3px solid #8b5cf6' : '3px solid transparent',
+            // Três estados, do mais forte ao mais fraco: a conversa aberta, a que
+            // pede atenção (mensagem nova ou marcada por você) e a já resolvida.
+            // O roxo da não lida é bem mais fraco que o da ativa de propósito —
+            // se empatassem, você perderia de vista onde está.
+            background: isActive
+              ? 'rgba(139,92,246,0.18)'
+              : hasUnread
+                ? 'rgba(139,92,246,0.08)'
+                : 'transparent',
+            borderLeft: isActive
+              ? '3px solid #8b5cf6'
+              : hasUnread
+                ? '3px solid rgba(139,92,246,0.5)'
+                : '3px solid transparent',
           }}
         >
           <div className="relative flex-shrink-0 mt-0.5">
@@ -194,7 +238,26 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-white truncate">{displayName}</p>
+              <p
+                className={`text-sm truncate ${
+                  hasUnread ? 'font-semibold text-white' : 'font-medium text-gray-300'
+                }`}
+              >
+                {displayName}
+              </p>
+              {/* Atalho de desktop; no mobile a mesma ação vem do arrastar. */}
+              <button
+                type="button"
+                onClick={toggleUnread}
+                disabled={busy}
+                title={manuallyUnread ? 'Desmarcar como não lida' : 'Marcar como não lida'}
+                aria-label={manuallyUnread ? 'Desmarcar como não lida' : 'Marcar como não lida'}
+                className={`hidden md:flex flex-shrink-0 items-center justify-center w-6 h-6 rounded-md transition-opacity hover:bg-white/10 ${
+                  manuallyUnread ? 'opacity-100 text-[#a78bfa]' : 'opacity-0 group-hover:opacity-100 text-gray-400'
+                }`}
+              >
+                {manuallyUnread ? <MailOpen className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />}
+              </button>
               {conversation.last_message_at && (
                 <span className="text-[10px] text-gray-500 flex-shrink-0">
                   {formatLastMessageTime(conversation.last_message_at)}
@@ -259,14 +322,24 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
                 </span>
               )}
             </div>
-            {hasUnread && (
-              <span
-                className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full text-white flex-shrink-0"
-                style={{ background: '#8b5cf6' }}
-              >
-                {conversation.unread_count}
-              </span>
-            )}
+            {hasUnread &&
+              (conversation.unread_count > 0 ? (
+                <span
+                  className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full text-white flex-shrink-0"
+                  style={{ background: '#8b5cf6' }}
+                >
+                  {conversation.unread_count}
+                </span>
+              ) : (
+                /* Marca do atendente sem mensagem nova: ponto, não número —
+                   escrever "0" ou inventar "1" mentiria sobre o que chegou. */
+                <span
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ background: '#8b5cf6' }}
+                  title="Você marcou esta conversa como não lida"
+                  aria-label="Marcada como não lida"
+                />
+              ))}
           </div>
         </Link>
       </div>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import type { AssignmentFilter, ChannelTypeFilter, RepliedFilter } from '@/hooks/useConversations';
+import type { AssignmentFilter, ChannelTypeFilter, RepliedFilter, UnreadFilter } from '@/hooks/useConversations';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 
 interface InboxFiltersProps {
@@ -12,6 +12,7 @@ interface InboxFiltersProps {
     channel_id?: string;
     channel_type?: ChannelTypeFilter;
     replied?: RepliedFilter;
+    unread?: UnreadFilter;
     department_id?: string;
     assignment?: AssignmentFilter;
     search?: string;
@@ -44,8 +45,10 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
 
   // Status e "respondido" são a mesma pergunta para quem atende, então viram um
   // seletor só — era o que mais confundia com dois grupos de chips separados.
-  const statusValue =
-    replied === 'replied'
+  const marcadas = filters.unread === 'marked';
+  const statusValue = marcadas
+    ? 'marked'
+    : replied === 'replied'
       ? 'replied'
       : replied === 'not_replied'
         ? 'not_replied'
@@ -57,11 +60,12 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
 
   const applyStatus = (key: string) => {
     const map: Record<string, InboxFiltersProps['filters']> = {
-      all: { status: undefined, replied: 'all' },
-      open: { status: 'open', replied: 'all' },
-      not_replied: { status: undefined, replied: 'not_replied' },
-      replied: { status: undefined, replied: 'replied' },
-      finalized: { status: 'closed', replied: 'all' },
+      all: { status: undefined, replied: 'all', unread: 'all' },
+      open: { status: 'open', replied: 'all', unread: 'all' },
+      not_replied: { status: undefined, replied: 'not_replied', unread: 'all' },
+      replied: { status: undefined, replied: 'replied', unread: 'all' },
+      marked: { status: undefined, replied: 'all', unread: 'marked' },
+      finalized: { status: 'closed', replied: 'all', unread: 'all' },
     };
     onFiltersChange({ ...filters, ...(map[key] ?? map.all) });
   };
@@ -80,6 +84,7 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
       assignment: 'all',
       status: undefined,
       replied: 'all',
+      unread: 'all',
     });
 
   const chip = (selected: boolean) =>
@@ -178,6 +183,9 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
               </option>
               <option value="replied" className="bg-[#1a1a2e]">
                 Respondido
+              </option>
+              <option value="marked" className="bg-[#1a1a2e]">
+                Marcadas como não lidas
               </option>
               <option value="finalized" className="bg-[#1a1a2e]">
                 Finalizadas

@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react';
 import { useSupabase } from './useSupabase';
 
 /**
- * Retorna a contagem real total de mensagens não lidas (soma de unread_count em todas as conversas).
- * Usado no badge do rail (desktop e mobile). Atualiza em tempo real quando a tabela conversations muda.
+ * Contagem do badge do rail: mensagens não lidas + conversas que o atendente
+ * marcou para voltar depois.
+ *
+ * A marca manual conta como 1, e só quando a conversa não tem mensagem nova —
+ * senão a mesma conversa apareceria duas vezes no número. Sem somar a marca, o
+ * badge zera e a conversa marcada some do radar, que é o oposto da função.
  */
 export function useTotalUnreadCount(): number {
   const supabase = useSupabase();
@@ -13,10 +17,17 @@ export function useTotalUnreadCount(): number {
     if (!supabase) return;
 
     const fetchTotal = async () => {
-      const { data, error } = await supabase.rpc('get_total_unread_count');
+      const [{ data, error }, { count: marcadas }] = await Promise.all([
+        supabase.rpc('get_total_unread_count'),
+        supabase
+          .from('conversations')
+          .select('id', { count: 'exact', head: true })
+          .eq('manually_unread', true)
+          .eq('unread_count', 0),
+      ]);
       if (error) return;
       const n = typeof data === 'number' ? data : parseInt(String(data), 10);
-      if (!Number.isNaN(n) && n >= 0) setTotal(n);
+      if (!Number.isNaN(n) && n >= 0) setTotal(n + (marcadas ?? 0));
     };
 
     fetchTotal();

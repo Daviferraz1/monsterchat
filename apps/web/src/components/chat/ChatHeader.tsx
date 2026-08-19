@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
-import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw, ArrowRightLeft } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw, ArrowRightLeft, MailOpen } from 'lucide-react';
 import { TransferDialog } from './TransferDialog';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 import type { DigitalGuruMetadata } from '@/types';
@@ -44,6 +45,32 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const [liberando, setLiberando] = useState(false);
   const [liberarMsg, setLiberarMsg] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
+  const router = useRouter();
+  const [marcando, setMarcando] = useState(false);
+
+  /**
+   * Marca a conversa como não lida e sai dela.
+   *
+   * Sair é parte da ação, não um extra: o efeito que limpa a marca dispara ao
+   * ABRIR a conversa, então ficar parado aqui deixaria a marca viva e ela
+   * sumiria no próximo retorno sem o atendente entender por quê. Marcar e sair
+   * também é o gesto real — "não vou resolver agora, volto depois".
+   */
+  const marcarNaoLida = async () => {
+    if (marcando) return;
+    setMarcando(true);
+    const { error } = await supabase
+      .from('conversations')
+      .update({ manually_unread: true, updated_at: new Date().toISOString() })
+      .eq('id', conversationId);
+    if (error) {
+      console.error('Falha ao marcar como não lida:', error);
+      setMarcando(false);
+      return;
+    }
+    router.push('/inbox');
+  };
+
   const [reloadKey, setReloadKey] = useState(0);
   const headerRef = useRef<HTMLDivElement>(null);
   const { nameOfUser, department } = useTeamDirectory();
@@ -239,6 +266,17 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
             </span>
           )}
         </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={marcarNaoLida}
+        disabled={marcando}
+        className="h-16 border-b flex items-center gap-1.5 px-3 shrink-0 text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors disabled:opacity-50"
+        title="Marcar como não lida e voltar para a lista"
+      >
+        <MailOpen className="w-4 h-4" />
+        <span className="hidden lg:inline text-sm">Não lida</span>
       </button>
 
       <button

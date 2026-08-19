@@ -40,6 +40,8 @@ export interface Conversation {
   subject?: string;
   tags: string[];
   unread_count: number;
+  /** Marcada pelo atendente para voltar depois (ver migração 047). */
+  manually_unread?: boolean;
   last_message_at?: string;
   last_message_preview?: string;
   last_agent_reply_at?: string;

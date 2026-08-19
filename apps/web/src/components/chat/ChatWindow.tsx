@@ -124,12 +124,17 @@ export function ChatWindow() {
     setRefreshing(false);
   };
 
-  // Marcar conversa como lida ao abrir
+  // Marcar conversa como lida ao abrir.
+  //
+  // Limpa também a marca manual: abrir a conversa É o "voltar depois" que a
+  // marca pedia. O efeito só dispara na troca de conversa, então marcar como
+  // não lida estando dentro dela sobrevive — some quando o atendente sair e
+  // voltar, que é o comportamento esperado.
   useEffect(() => {
     if (!conversationId) return;
     supabase
       .from('conversations')
-      .update({ unread_count: 0, updated_at: new Date().toISOString() })
+      .update({ unread_count: 0, manually_unread: false, updated_at: new Date().toISOString() })
       .eq('id', conversationId)
       .then(({ error }) => {
         if (error) console.error('Error marking conversation as read:', error);
