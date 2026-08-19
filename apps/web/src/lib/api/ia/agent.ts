@@ -533,8 +533,10 @@ function buildSystemPrompt(ctx: AgentContext): string {
   const nome = ctx.contactName?.trim() ? ctx.contactName.trim().split(/\s+/)[0] : '';
   return `Você é o copiloto de atendimento do MONSTER CONCURSOS (cursos para concursos) e da FAGENIUS (faculdade, Gestão de Segurança Pública). Sua tarefa: redigir UMA mensagem pronta para o ATENDENTE enviar ao aluno/lead no WhatsApp.
 ${ctx.memoryBlock ? `\nMEMÓRIA DA CONVERSA (contexto do que já rolou — pode estar resumido; complementa as mensagens abaixo):\n${ctx.memoryBlock}\n` : ''}${ctx.contactDataBlock ? `\nDADOS DO CONTATO (já no cadastro — use no suporte; não peça de novo o que já temos):\n${ctx.contactDataBlock}\n` : ''}
-AUTONOMIA — responda de verdade:
-- Responda à pergunta que o aluno REALMENTE fez, usando o seu próprio conhecimento quando for dúvida de conteúdo/acadêmica (uma questão, gabarito, matéria, regra de gramática como crase, interpretação, cálculo, etc.). NÃO se limite à base de conhecimento — ela é só apoio.
+AUTONOMIA — responda de verdade, mas saiba a fronteira:
+- CONHECIMENTO PRÓPRIO liberado para CONTEÚDO ACADÊMICO: resolver questão, explicar matéria, gabarito, regra de gramática (crase, concordância), interpretação, cálculo. Aqui responda direto, com segurança, sem depender da base.
+- CONHECIMENTO PRÓPRIO PROIBIDO para FATO NOSSO: nome, duração, preço, formato, o que inclui, pré-requisito, link de curso, prazo, política. Isso NUNCA sai da sua cabeça — só de buscar_produto ou das outras ferramentas, mesmo que você ache que sabe.
+- Curso que NÃO aparecer no catálogo de buscar_produto: não descreva, não invente nome, não estime duração nem preço. Diga que vai confirmar com a equipe.
 - Se o aluno enviar uma imagem (print de questão, tela, comprovante), analise a imagem e responda com base no que vê.
 - Suposto erro de gabarito/material: analise a questão e dê sua avaliação FUNDAMENTADA (explique o porquê, citando a regra). Se não tiver elementos para ter certeza, diga que vai encaminhar para a equipe pedagógica revisar — não confirme nem negue no chute.
 
@@ -542,7 +544,7 @@ CONVERSA:
 - Leia TODA a conversa fornecida (linhas ALUNO e ATENDENTE). Responda apenas a(s) pergunta(s) do aluno que ainda estão EM ABERTO — em especial a última. NÃO repita o que o ATENDENTE já respondeu.
 - ${ctx.nowHint || 'Use a saudação conforme o horário do dia (bom dia/boa tarde/boa noite).'} Só cumprimente se a conversa estiver começando; se já estiver em andamento (o atendente já cumprimentou), vá direto ao ponto, sem repetir a saudação.
 
-FERRAMENTAS (use só quando precisar de um dado que você não tem; para dúvida de conteúdo, responda direto):
+FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, preço, prazo ou acesso exige):
 - buscar_produto: preço, link, o que inclui (interesse em curso).
 - consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou.
 - consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
@@ -571,6 +573,12 @@ LINKS: lead interessado/avaliando um curso → PÁGINA DE VENDAS; LINK DE CHECKO
 
 ACESSO ("comprei e não recebi" / "não consigo acessar"): 1) confirme o pagamento (consultar_pagamento; se preciso, consultar_guru_online); 2) rode verificar_acesso_plataforma com o e-mail da compra; 3) se o acesso JÁ está liberado → oriente entrar e, se esqueceu a senha, redefinir a senha; 4) se está PAGO e DENTRO do prazo mas sem acesso (ou sem cadastro) → diga que vai liberar e que o atendente vai ativar (sem prometer prazo); NÃO afirme que já liberou — quem libera é o atendente. 5) se o acesso JÁ VENCEU (prazo acabou) → NÃO é liberação: oriente renovação/nova compra com gentileza; nunca prometa reativar acesso expirado.
 
+RESPONDA SÓ O QUE FOI PERGUNTADO — regra dura:
+- Pergunta fechada ("é A ou B?", "quanto custa?", "tem esse curso?") recebe resposta fechada. Uma ou duas frases. Ponto.
+- NÃO acrescente informação que o aluno não pediu: duração, reconhecimento do MEC, TCC, validade do diploma, formas de pagamento, próximos passos, alternativas. Se ele quiser, ele pergunta.
+- É exatamente no que você acrescenta sem ser perguntado que você erra. Um dado a mais e errado destrói a confiança que a resposta certa construiu.
+- Nada de listas com setas nem de bullet quando duas frases resolvem.
+
 OUTRAS REGRAS:
 - Reembolso/cancelamento: oriente a enviar e-mail para atendimento@monsterconcursos.com.br (nome, CPF, e-mail da compra e motivo); prazo de 7 dias (CDC art. 49); resposta em até 48h úteis. Não prometa reembolso.
 - Mensagens curtas e diretas (WhatsApp), no máximo 3 parágrafos.
@@ -590,7 +598,11 @@ function buildUserText(ctx: AgentContext): string {
 }
 
 /** Loop agêntico com Claude (Anthropic). */
-async function runAnthropicAgent(ctx: AgentContext, model: string): Promise<string | null> {
+async function runAnthropicAgent(
+  ctx: AgentContext,
+  model: string,
+  trace: AgentTrace
+): Promise<string | null> {
   if (!apiEnv.ANTHROPIC_API_KEY) return null;
   const anthropic = new Anthropic({ apiKey: apiEnv.ANTHROPIC_API_KEY });
   const system = buildSystemPrompt(ctx);
@@ -604,6 +616,7 @@ async function runAnthropicAgent(ctx: AgentContext, model: string): Promise<stri
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
+      trace.iterations = i + 1;
       const res = await anthropic.messages.create({ model, max_tokens: MAX_TOKENS, system, tools, messages });
 
       if (res.stop_reason === 'tool_use') {
@@ -612,6 +625,7 @@ async function runAnthropicAgent(ctx: AgentContext, model: string): Promise<stri
         const results: Anthropic.ToolResultBlockParam[] = [];
         for (const tu of toolUses) {
           let out: string;
+          trace.tools.push(tu.name);
           try {
             out = await execTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, ctx);
           } catch (err) {
@@ -653,7 +667,11 @@ async function runAnthropicAgent(ctx: AgentContext, model: string): Promise<stri
 }
 
 /** Loop agêntico com Gemini (REST generateContent + function calling + visão). */
-async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string | null> {
+async function runGeminiAgent(
+  ctx: AgentContext,
+  model: string,
+  trace: AgentTrace
+): Promise<string | null> {
   const key = apiEnv.GEMINI_API_KEY;
   if (!key) {
     console.warn('[IA agent gemini] GEMINI_API_KEY ausente');
@@ -672,6 +690,7 @@ async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string 
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
+      trace.iterations = i + 1;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -698,6 +717,7 @@ async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string 
           const name = String(p.functionCall.name ?? '');
           const args = (p.functionCall.args ?? {}) as Record<string, unknown>;
           let out: string;
+          trace.tools.push(name);
           try {
             out = await execTool(name, args, ctx);
           } catch (err) {
@@ -767,12 +787,53 @@ function sanitizeSuggestion(raw: string | null): string | null {
   return text;
 }
 
+/**
+ * O que a IA consultou para produzir esta sugestão.
+ *
+ * Sem isso não havia como responder "ela olhou o catálogo ou respondeu de
+ * cabeça?" — só os erros das ferramentas eram registrados. Numa queixa de
+ * alucinação era palpite contra palpite. Array vazio = respondeu sem consultar
+ * nada, que é exatamente o caso a investigar.
+ */
+export interface AgentTrace {
+  tools: string[];
+  iterations: number;
+}
+
+/** Grava o rastro na hora da geração, não quando o atendente responde: em 97%
+ *  dos casos ele ignora a sugestão e nunca clica em nada — e são justamente
+ *  essas que precisamos poder abrir depois. Falha aqui nunca derruba a sugestão. */
+async function storeTrace(
+  ctx: AgentContext,
+  model: string,
+  trace: AgentTrace,
+  suggestion: string | null,
+  discardedReason: string | null
+): Promise<void> {
+  try {
+    await supabaseAdmin.from('ia_suggestion_traces').insert({
+      conversation_id: ctx.conversationId ?? null,
+      model,
+      tools_used: trace.tools,
+      iterations: trace.iterations,
+      suggestion: suggestion?.slice(0, 4000) ?? null,
+      discarded_reason: discardedReason,
+    });
+  } catch (err) {
+    console.warn('[IA agent] rastro', err);
+  }
+}
+
 export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
   if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
   const [model, styleBlock] = await Promise.all([getAgentModel(), getOperatorStyleBlock()]);
   const fullCtx: AgentContext = { ...ctx, styleBlock: ctx.styleBlock ?? styleBlock ?? undefined };
+  const trace: AgentTrace = { tools: [], iterations: 0 };
   const raw = model.startsWith('gemini')
-    ? await runGeminiAgent(fullCtx, model)
-    : await runAnthropicAgent(fullCtx, model);
-  return sanitizeSuggestion(raw);
+    ? await runGeminiAgent(fullCtx, model, trace)
+    : await runAnthropicAgent(fullCtx, model, trace);
+  const limpa = sanitizeSuggestion(raw);
+  const descartada = raw && !limpa ? 'saneador: meta-texto ou [SEM_SUGESTAO]' : null;
+  await storeTrace(fullCtx, model, trace, limpa ?? raw, descartada);
+  return limpa;
 }
