@@ -20,8 +20,10 @@ const MODEL = 'claude-haiku-4-5-20251001';
 const MIN_RESPONSE_LENGTH = 15;
 /** Acima disso a mensagem enviada é praticamente a sugestão (só corrigiu digitação/pontuação). */
 const NEAR_IDENTICAL = 0.9;
-/** Teto de lições ativas: passando disso só reforçamos as que já existem. */
+/** Teto de lições ativas. Cheio, aposentamos a mais fraca para caber a nova. */
 const MAX_ACTIVE_LESSONS = 50;
+/** Lição que nunca se repetiu e envelheceu tanto tempo deixa de ocupar vaga. */
+const STALE_DAYS = 60;
 /** Quantas lições entram no prompt do agente. */
 const LESSONS_IN_PROMPT = 12;
 /** Exemplos guardados por lição (para o admin auditar o que a IA aprendeu). */
@@ -121,6 +123,13 @@ REGISTRE (action "nova" ou "reforcar") quando a diferença for de FORMA ou PROCE
 - o que sempre acompanha a resposta (mandar o link junto, pedir o e-mail da compra antes de tudo);
 - o que a equipe NÃO faz (não promete prazo, não pede desculpas em excesso, não oferece desconto).
 
+JÁ É REGRA BASE DO AGENTE — não crie lição só para repetir isto (action "ignorar"):
+- ser breve, ir direto ao ponto, não escrever introdução;
+- não acrescentar o que o aluno não perguntou (duração, MEC, TCC, formas de pagamento, próximos passos);
+- não usar lista com setas quando duas frases resolvem.
+Se a única diferença for essa, ignore. As vagas de lição são poucas e valem para o
+que é ESPECÍFICO daquela situação, não para o que já vale sempre.
+
 IGNORE (action "ignorar") quando:
 - a diferença é só o CONTEÚDO/dado daquele aluno (valor, nome do curso, status do pagamento, link específico) — isso já é guardado em outro lugar;
 - o atendente mandou algo administrativo ou fora do assunto ("só um momento", "vou verificar", transferência, mensagem para outra pessoa);
@@ -154,6 +163,61 @@ export interface LearnOperatorStyleParams {
  * Compara a sugestão com o que o atendente enviou e registra/reforça a lição de estilo.
  * Best-effort: qualquer falha é logada e engolida (não pode atrapalhar o envio da mensagem).
  */
+/**
+ * Abre vaga aposentando a lição mais fraca. Devolve false quando não há o que
+ * aposentar — aí o teto está cheio de lição comprovada e a nova espera.
+ *
+ * Antes, cheio o teto, a lição nova era simplesmente jogada fora com um aviso
+ * no console que ninguém lê. Na prática o aprendizado de estilo tinha parado:
+ * 50 de 50 vagas ocupadas, 20 delas por lições que nunca se repetiram. Entre uma
+ * lição de 1 reforço parada há dois meses e uma que a equipe acabou de
+ * demonstrar, a evidência mais recente vale mais.
+ *
+ * Só aposenta o que tem 1 reforço: lição com 2 ou mais já se provou, e não vai
+ * dar lugar para uma recém-chegada de peso igual.
+ */
+async function abrirVaga(): Promise<boolean> {
+  const limite = new Date(Date.now() - STALE_DAYS * 86400000).toISOString();
+
+  // 1ª escolha: as que nunca se repetiram E envelheceram.
+  const { data: velhas } = await supabaseAdmin
+    .from('ia_style_lessons')
+    .select('id')
+    .eq('is_active', true)
+    .lte('hits', 1)
+    .lt('updated_at', limite)
+    .order('updated_at', { ascending: true })
+    .limit(5);
+
+  const alvo = velhas?.length
+    ? velhas.map((l) => l.id)
+    : await (async () => {
+        // 2ª escolha: a mais fraca e mais antiga, mesmo sem ter envelhecido.
+        const { data } = await supabaseAdmin
+          .from('ia_style_lessons')
+          .select('id')
+          .eq('is_active', true)
+          .lte('hits', 1)
+          .order('updated_at', { ascending: true })
+          .limit(1);
+        return (data ?? []).map((l) => l.id);
+      })();
+
+  if (!alvo.length) return false;
+
+  const { error } = await supabaseAdmin
+    .from('ia_style_lessons')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .in('id', alvo);
+  if (error) {
+    console.warn('[IA operator-style] aposentar', error.message);
+    return false;
+  }
+  console.log('[IA operator-style] aposentadas', alvo.length, 'lição(ões) sem reforço para abrir vaga');
+  invalidateStyleCache();
+  return true;
+}
+
 export async function learnOperatorStyle(
   params: LearnOperatorStyleParams
 ): Promise<{ id?: string; action?: StyleDecision['action']; skipped?: string }> {
@@ -226,9 +290,9 @@ export async function learnOperatorStyle(
       .from('ia_style_lessons')
       .select('id', { count: 'exact', head: true })
       .eq('is_active', true);
-    if ((count ?? 0) >= MAX_ACTIVE_LESSONS) {
-      console.warn('[IA operator-style] limite de lições ativas atingido; nova lição descartada');
-      return { skipped: 'limite de lições ativas atingido' };
+    if ((count ?? 0) >= MAX_ACTIVE_LESSONS && !(await abrirVaga())) {
+      console.warn('[IA operator-style] teto atingido e nenhuma lição fraca para aposentar; nova lição descartada');
+      return { skipped: 'teto de lições atingido (todas já comprovadas)' };
     }
 
     const { data, error } = await supabaseAdmin
