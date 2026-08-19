@@ -577,7 +577,9 @@ OUTRAS REGRAS:
 
 FORMATAÇÃO (WhatsApp, NÃO Markdown): negrito com *um asterisco* (ex.: *Polícia Penal RS*) — NUNCA use ** (dois asteriscos); itálico com _underscore_; nada de títulos (#) ou tabelas.
 
-SAÍDA: responda APENAS com o texto da mensagem para o aluno — sem prefixos, aspas, explicações ou marcadores.`;
+NADA EM ABERTO: se o aluno já foi atendido e não sobrou pergunta pendente (ele só agradeceu, confirmou, se despediu ou mandou emoji), NÃO invente assunto novo e NÃO escreva recomendações para o atendente. Responda SOMENTE com: [SEM_SUGESTAO]
+
+SAÍDA: responda APENAS com o texto da mensagem para o aluno — sem prefixos, aspas, explicações ou marcadores. Você escreve PARA O ALUNO, nunca sobre ele: nada de "o aluno já recebeu", "você pode aproveitar para" ou lista de opções para o atendente.`;
 }
 
 /** Texto do turno do usuário (a conversa, ou o pedido de análise quando só há imagem). */
@@ -731,9 +733,46 @@ async function runGeminiAgent(ctx: AgentContext, model: string): Promise<string 
  * Gera a sugestão com o modelo escolhido no admin (Claude por padrão; Gemini se selecionado).
  * Devolve null em caso de falha, para o chamador cair no caminho determinístico.
  */
+/** Marcador que o modelo devolve quando não há pergunta em aberto para responder. */
+const NO_SUGGESTION_MARKER = /\[SEM[_\s-]?SUGEST[AÃ]O\]/i;
+
+/**
+ * Frases em que o modelo fala COM O ATENDENTE em vez de escrever para o aluno.
+ *
+ * Rede de segurança para o caso de ele ignorar o marcador: sem isso, o raciocínio
+ * dele ("Não há perguntas em aberto. Se desejar, você pode...") aparece na caixa
+ * de sugestão e vai parar no chat do aluno se o atendente clicar em usar.
+ * Os padrões são propositalmente estreitos — frases que nunca apareceriam numa
+ * mensagem escrita para o aluno.
+ */
+const META_PATTERNS: RegExp[] = [
+  /n[ãa]o h[áa][^.]{0,40}(pergunta|d[úu]vida|quest[ãa]o)[^.]{0,20}(em aberto|pendente)/i,
+  /o aluno j[áa] (recebeu|foi atendido|agradeceu)/i,
+  /o atendente (pode|poderia|deve)/i,
+  /^\s*(sugest[ãa]o de resposta|an[áa]lise|racioc[íi]nio)\s*:/i,
+];
+
+function sanitizeSuggestion(raw: string | null): string | null {
+  const text = raw?.trim();
+  if (!text) return null;
+  if (NO_SUGGESTION_MARKER.test(text)) return null;
+  const meta = META_PATTERNS.find((re) => re.test(text));
+  if (meta) {
+    console.warn('[IA agent] Sugestão descartada: o modelo respondeu ao atendente, não ao aluno.', {
+      padrao: String(meta),
+      trecho: text.slice(0, 120),
+    });
+    return null;
+  }
+  return text;
+}
+
 export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
   if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
   const [model, styleBlock] = await Promise.all([getAgentModel(), getOperatorStyleBlock()]);
   const fullCtx: AgentContext = { ...ctx, styleBlock: ctx.styleBlock ?? styleBlock ?? undefined };
-  return model.startsWith('gemini') ? runGeminiAgent(fullCtx, model) : runAnthropicAgent(fullCtx, model);
+  const raw = model.startsWith('gemini')
+    ? await runGeminiAgent(fullCtx, model)
+    : await runAnthropicAgent(fullCtx, model);
+  return sanitizeSuggestion(raw);
 }
