@@ -36,7 +36,7 @@ export async function GET() {
   try {
     const { data: channels, error: chError } = await supabaseAdmin
       .from('channels')
-      .select('id, name, type, external_id, business_account_id, is_active, access_token, created_at')
+      .select('id, name, type, external_id, business_account_id, is_active, access_token, token_expires_at, created_at')
       .eq('type', 'instagram')
       .order('created_at', { ascending: false });
 
@@ -54,6 +54,7 @@ export async function GET() {
       business_account_id: string | null;
       is_active: boolean;
       access_token: string | null;
+      token_expires_at: string | null;
       created_at: string;
     }>;
 
@@ -95,6 +96,21 @@ export async function GET() {
           name: 'token válido no Instagram Login',
           ok,
           detail: ok ? `Conta: @${me.data.username} (${me.data.user_id})` : me.data?.error?.message ?? `HTTP ${me.status}`,
+        });
+
+        // Token IGA expira (60 dias). Sem isso o canal cai sem aviso e o sintoma
+        // é igual ao de token errado.
+        const validade = ch.token_expires_at ? new Date(ch.token_expires_at as string) : null;
+        const dias = validade ? (validade.getTime() - Date.now()) / 86400000 : null;
+        checks.push({
+          name: 'validade do token',
+          ok: dias === null ? true : dias > 7,
+          detail:
+            dias === null
+              ? 'Validade desconhecida — o cron semanal (/api/instagram/cron/refresh-token) grava na primeira renovação. Token do Instagram Login dura 60 dias.'
+              : dias > 0
+                ? `Vence em ${Math.round(dias)} dia(s), em ${validade!.toISOString().slice(0, 10)}.`
+                : `VENCIDO desde ${validade!.toISOString().slice(0, 10)}. Gere um token novo no painel da Meta e cole em Configurações → Canais.`,
         });
         if (ok && bizId && String(me.data.user_id) !== bizId) {
           checks.push({
