@@ -1,11 +1,11 @@
 // Handler principal do webhook do Instagram (Messaging API)
 // https://developers.facebook.com/docs/messenger-platform/instagram/features/webhook
 
-import { upsertContact } from '../services/contact';
+import { upsertContact, getContactByChannel } from '../services/contact';
 import { findOrCreateConversation, updateConversation } from '../services/conversation';
 import { createMessage, getMessageByExternalId } from '../services/message';
 import { getInstagramChannelByRecipientId, getInstagramChannelMaybeInactiveByRecipientId } from '../services/channel';
-import { storeMetaUrlMediaInSupabase } from '../services/whatsapp-media';
+import { storeMetaUrlMediaInSupabase, storeContactAvatarInSupabase } from '../services/whatsapp-media';
 import { getInstagramUserProfile } from '../services/instagram';
 import { extractEmailFromText } from '../utils';
 
@@ -126,12 +126,14 @@ async function processInstagramMessage(
 
   const profile = await getInstagramUserProfile(senderId, accessToken, pageId ?? undefined);
   // Nome: perfil da API > @username do payload > fallback único (evita "Contato sem nome" quando a API de perfil falha, ex. 803)
-  const contactName =
-    profile?.name ||
-    (messaging.sender.username ? `@${messaging.sender.username}` : null) ||
-    profile?.username ||
-    `Instagram ${senderId.slice(-6)}`;
-  const contactProfilePic = profile?.profile_pic;
+  const realName = profile?.name || (messaging.sender.username ? `@${messaging.sender.username}` : null) || profile?.username;
+  const contactName = realName || `Instagram ${senderId.slice(-6)}`;
+
+  // A URL de perfil da Meta expira; espelhar no Supabase para o avatar não sumir depois.
+  const existingContact = await getContactByChannel('instagram', senderId);
+  const contactProfilePic = profile?.profile_pic
+    ? await storeContactAvatarInSupabase(profile.profile_pic, 'instagram', senderId, existingContact)
+    : undefined;
 
   // A API do Instagram não expõe email do usuário; extrair da mensagem se o texto parecer um email
   const extractedEmail = extractEmailFromText(normalized.body);
@@ -140,6 +142,7 @@ async function processInstagramMessage(
     channelType: 'instagram',
     externalId: senderId,
     name: contactName,
+    nameIsFallback: !realName,
     profilePicUrl: contactProfilePic,
     email: extractedEmail,
     metadata: messaging.sender.username || profile?.username ? { username: messaging.sender.username || profile?.username } : undefined,

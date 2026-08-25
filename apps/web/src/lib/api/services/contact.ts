@@ -12,6 +12,30 @@ export interface ContactData {
   metadata?: Record<string, any>;
   /** Origem da campanha (Facebook Ads, Instagram etc.) — mesclado em metadata.campaign */
   campaign?: LeadCampaign | null;
+  /**
+   * O `name` é só um placeholder (ex.: "Instagram 443563", usado quando a API de perfil não
+   * responde). Nesse caso um nome real já salvo é preservado — sem isso, uma única falha
+   * temporária da Meta apagaria o nome do contato.
+   */
+  nameIsFallback?: boolean;
+}
+
+/** Escolhe o nome a gravar sem nunca rebaixar um nome real para um placeholder. */
+function pickName(data: ContactData, currentName?: string | null): string | null | undefined {
+  if (!data.name) return currentName;
+  if (data.nameIsFallback && currentName && currentName.trim()) return currentName;
+  return data.name;
+}
+
+/** Busca o contato de um canal pelo ID externo (o mesmo par usado no upsert). */
+export async function getContactByChannel(channelType: string, externalId: string) {
+  const { data } = await supabaseAdmin
+    .from('contacts')
+    .select('id, name, profile_pic_url, updated_at')
+    .eq('channel_type', channelType)
+    .eq('external_id', externalId)
+    .maybeSingle();
+  return data as { id: string; name: string | null; profile_pic_url: string | null; updated_at: string | null } | null;
 }
 
 export async function upsertContact(data: ContactData) {
@@ -33,7 +57,7 @@ export async function upsertContact(data: ContactData) {
       mergedMeta.campaign = { ...data.campaign, attributed_at: data.campaign.attributed_at || new Date().toISOString() };
     }
     const updatePayload: Record<string, unknown> = {
-      name: data.name || existing.name,
+      name: pickName(data, existing.name),
       phone: data.phone ?? existing.phone,
       profile_pic_url: data.profilePicUrl || existing.profile_pic_url,
       metadata: mergedMeta,
@@ -80,7 +104,7 @@ export async function upsertContact(data: ContactData) {
           mergedMeta.campaign = { ...data.campaign, attributed_at: data.campaign.attributed_at || new Date().toISOString() };
         }
         const updatePayload: Record<string, unknown> = {
-          name: data.name || current.name,
+          name: pickName(data, current.name),
           phone: data.phone ?? current.phone,
           profile_pic_url: data.profilePicUrl || current.profile_pic_url,
           metadata: mergedMeta,

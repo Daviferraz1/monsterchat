@@ -16,6 +16,66 @@ async function ensureBucketExists(): Promise<void> {
   }
 }
 
+/** Quanto tempo a foto de perfil espelhada vale antes de ser baixada de novo. */
+const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Espelha a foto de perfil do contato no Supabase.
+ *
+ * A URL que a Meta devolve em `profile_pic` é assinada e expira em poucos dias — guardada crua
+ * no banco, o avatar simplesmente some da inbox depois de um tempo. O caminho aqui é estável por
+ * contato, então o refresh sobrescreve o arquivo em vez de acumular lixo no bucket.
+ *
+ * Só baixa de novo quando a cópia passou do TTL, para não puxar a imagem a cada mensagem recebida.
+ * Se o Supabase não estiver configurado ou o upload falhar, devolve a URL da Meta (o avatar
+ * continua aparecendo, só que temporariamente).
+ */
+export async function storeContactAvatarInSupabase(
+  metaUrl: string,
+  channelType: string,
+  externalId: string,
+  current?: { profile_pic_url?: string | null; updated_at?: string | null } | null
+): Promise<string> {
+  if (isSupabasePlaceholder()) return metaUrl;
+
+  const safeId = externalId.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `avatars/${channelType}/${safeId}.jpg`;
+
+  const mirrored = current?.profile_pic_url;
+  if (mirrored && mirrored.includes(path)) {
+    const age = current?.updated_at ? Date.now() - new Date(current.updated_at).getTime() : Infinity;
+    if (age < AVATAR_TTL_MS) return mirrored;
+  }
+
+  try {
+    await ensureBucketExists();
+
+    // A URL de foto de perfil da Meta já vem assinada: não mandar Authorization aqui.
+    const res = await axios.get<ArrayBuffer>(metaUrl, {
+      responseType: 'arraybuffer',
+      maxContentLength: 5 * 1024 * 1024,
+      timeout: 20000,
+    });
+
+    const { error } = await supabaseAdmin.storage.from(BUCKET).upload(path, res.data, {
+      contentType: String(res.headers['content-type'] || 'image/jpeg'),
+      upsert: true,
+    });
+    if (error) {
+      console.warn('[Avatar] Upload falhou, usando a URL da Meta:', error.message, { path });
+      return metaUrl;
+    }
+
+    const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+    console.log('[Avatar] Foto de perfil espelhada:', path);
+    // O caminho é fixo, então o cache-buster garante que o navegador pegue a foto nova no refresh.
+    return `${data.publicUrl}?v=${Date.now()}`;
+  } catch (err) {
+    console.warn('[Avatar] Não foi possível espelhar a foto:', err instanceof Error ? err.message : err);
+    return metaUrl;
+  }
+}
+
 /**
  * Baixa informações da mídia do WhatsApp usando Graph API
  */
