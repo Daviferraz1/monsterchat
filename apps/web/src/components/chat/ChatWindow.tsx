@@ -78,26 +78,68 @@ export function ChatWindow() {
     requestAnimationFrame(scrollToBottom);
   }, [conversationId, messages.length]);
 
+  /**
+   * Reações chegam como mensagens próprias (content_type 'reaction'), mas no WhatsApp elas
+   * aparecem grudadas na mensagem reagida — soltas viram um emoji órfão no fim da conversa.
+   * Aqui cada reação é ligada ao seu alvo pelo external_id e sai da lista principal.
+   *
+   * O ID da mensagem reagida fica em lugares diferentes por canal:
+   * WhatsApp em `metadata.reaction.message_id`, Instagram em `metadata.mid`.
+   */
+  const { visibleMessages, reactionsByMessageId } = useMemo(() => {
+    const idByExternalId = new Map<string, string>();
+    for (const m of messages) {
+      if (m.external_id) idByExternalId.set(m.external_id, m.id);
+    }
+
+    const reactionsByMessageId = new Map<string, string[]>();
+    const attached = new Set<string>();
+
+    // messages vem em ordem crescente, então uma remoção posterior sobrepõe a reação anterior.
+    for (const m of messages) {
+      if (m.content_type !== 'reaction') continue;
+      const meta = m.metadata as { reaction?: { message_id?: string }; mid?: string } | null;
+      const targetExternalId = meta?.reaction?.message_id ?? meta?.mid;
+      const targetId = targetExternalId ? idByExternalId.get(targetExternalId) : undefined;
+      // Alvo fora desta conversa (ou antigo demais): mantém o balão solto em vez de sumir com ele.
+      if (!targetId) continue;
+
+      attached.add(m.id);
+      const emoji = m.body?.trim();
+      // Emoji vazio = o contato removeu a reação.
+      if (!emoji) {
+        reactionsByMessageId.delete(targetId);
+        continue;
+      }
+      reactionsByMessageId.set(targetId, [...(reactionsByMessageId.get(targetId) ?? []), emoji]);
+    }
+
+    return {
+      visibleMessages: messages.filter((m) => !attached.has(m.id)),
+      reactionsByMessageId,
+    };
+  }, [messages]);
+
   const lastInboundBody = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      const m = visibleMessages[i];
       if (m.direction === 'inbound' && m.body?.trim()) return m.body;
     }
     return null;
-  }, [messages]);
+  }, [visibleMessages]);
 
   const lastOutboundSender = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      const m = visibleMessages[i];
       if (m.direction === 'outbound') return m.sender_type ?? null;
     }
     return null;
-  }, [messages]);
+  }, [visibleMessages]);
 
   /** Última mensagem é do operador/bot → não sugerir resposta (evita gastar IA). */
   const lastMessageFromOperator = useMemo(
-    () => messages.length > 0 && messages[messages.length - 1].direction === 'outbound',
-    [messages]
+    () => visibleMessages.length > 0 && visibleMessages[visibleMessages.length - 1].direction === 'outbound',
+    [visibleMessages]
   );
 
   const operatorTookOver = lastOutboundSender === 'agent';
@@ -205,17 +247,18 @@ export function ChatWindow() {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 overscroll-behavior-contain"
       >
-        {messages.map((message, i) => (
+        {visibleMessages.map((message, i) => (
           <MessageBubble
             key={message.id}
             message={message}
             contactAvatarUrl={contactAvatarUrl}
             contactName={contactName}
             authorName={nameOfUser(message.agent_user_id)}
+            reactions={reactionsByMessageId.get(message.id)}
             /* Só na primeira de uma sequência do mesmo atendente — repetir o nome
                em cada balão de uma resposta quebrada em quatro vira ruído. */
             showAuthor={message.agent_user_id != null &&
-              message.agent_user_id !== messages[i - 1]?.agent_user_id}
+              message.agent_user_id !== visibleMessages[i - 1]?.agent_user_id}
           />
         ))}
       </div>

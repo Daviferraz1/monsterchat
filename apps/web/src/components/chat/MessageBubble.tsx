@@ -34,6 +34,8 @@ interface MessageBubbleProps {
   authorName?: string | null;
   /** Primeira de uma sequência do mesmo atendente. */
   showAuthor?: boolean;
+  /** Emojis com que reagiram a esta mensagem — exibidos colados no balão, como no WhatsApp. */
+  reactions?: string[];
 }
 
 export function MessageBubble({
@@ -42,6 +44,7 @@ export function MessageBubble({
   contactName,
   authorName,
   showAuthor,
+  reactions,
 }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const isFromIA = message.sender_type === 'system' || message.sender_type === 'bot';
@@ -68,7 +71,8 @@ export function MessageBubble({
     >
       <div
         className={cn(
-          'max-w-[70%] rounded-lg px-4 py-2',
+          'relative max-w-[70%] rounded-lg px-4 py-2',
+          reactions && reactions.length > 0 && 'mb-3',
           isOutbound
             ? 'bg-primary text-primary-foreground'
             : 'bg-muted text-foreground',
@@ -111,6 +115,12 @@ export function MessageBubble({
             avatarName={isOutbound ? undefined : contactName}
           />
         )}
+        {/* Legenda da mídia. O WhatsApp manda a legenda em `caption`, que o webhook grava em
+            `body` — mas o balão só mostrava `body` quando NÃO havia mídia, então toda foto
+            com texto chegava muda. */}
+        {message.media_url && message.body?.trim() && message.content_type !== 'text' && (
+          <p className="whitespace-pre-wrap mt-1.5">{renderWhatsApp(message.body.trim())}</p>
+        )}
         {!message.media_url && message.content_type !== 'text' && message.content_type !== 'reaction' && (
           <p className="text-sm opacity-80">{message.body?.trim() || `[${message.content_type}]`}</p>
         )}
@@ -119,6 +129,20 @@ export function MessageBubble({
           {isOutbound && isFromIA && <span className="text-[10px] opacity-90">🤖 IA</span>}
           {formatDate(message.created_at)}
         </span>
+        )}
+        {/* Reações do contato, coladas na borda de baixo do balão (como no WhatsApp). */}
+        {reactions && reactions.length > 0 && (
+          <span
+            className={cn(
+              'absolute -bottom-3 flex items-center gap-0.5 rounded-full border bg-background px-1.5 py-0.5 text-sm leading-none shadow-sm',
+              isOutbound ? 'right-2' : 'left-2'
+            )}
+            title={`Reagiu com ${reactions.join(' ')}`}
+          >
+            {reactions.map((emoji, i) => (
+              <span key={i}>{emoji}</span>
+            ))}
+          </span>
         )}
       </div>
     </div>
