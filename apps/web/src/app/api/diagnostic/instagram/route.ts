@@ -54,8 +54,8 @@ export async function GET() {
       business_account_id: string | null;
       is_active: boolean;
       access_token: string | null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } & Record<string, any>>;
+      created_at: string;
+    }>;
 
     const diagnostics = [];
 
