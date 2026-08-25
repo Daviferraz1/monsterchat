@@ -8,6 +8,7 @@ import { getInstagramChannelByRecipientId, getInstagramChannelMaybeInactiveByRec
 import { storeMetaUrlMediaInSupabase, storeContactAvatarInSupabase } from '../services/whatsapp-media';
 import { getInstagramUserProfile } from '../services/instagram';
 import { extractEmailFromText } from '../utils';
+import { supabaseAdmin } from '../supabase';
 
 interface InstagramWebhookEntry {
   id: string;
@@ -80,12 +81,16 @@ export async function handleInstagramWebhook(body: unknown) {
 
       console.log('[Instagram Webhook] Channel found:', { channelId: channel.id, channelName: channel.name });
 
-      if (messaging.message && !messaging.message.is_echo) {
+      if (messaging.message) {
         try {
-          await processInstagramMessage(messaging, channel.id, channel.access_token, channel.external_id);
-          console.log('[Instagram Webhook] Message processed:', messaging.message.mid);
+          if (messaging.message.is_echo) {
+            await processInstagramEcho(messaging, channel.id, channel.access_token);
+          } else {
+            await processInstagramMessage(messaging, channel.id, channel.access_token, channel.external_id);
+          }
+          console.log('[Instagram Webhook] Message processed:', messaging.message.mid, { isEcho });
         } catch (error) {
-          console.error('[Instagram Webhook] Error processing message:', error, { mid: messaging.message.mid });
+          console.error('[Instagram Webhook] Error processing message:', error, { mid: messaging.message.mid, isEcho });
         }
       }
 
@@ -197,6 +202,123 @@ async function processInstagramMessage(
     lastMessagePreview: normalized.body || `[${normalized.contentType}]`,
     unreadCount: (conversation.unread_count || 0) + 1,
   });
+}
+
+/**
+ * Mensagem enviada pela empresa (echo) — inclusive as respondidas direto pelo app do
+ * Instagram no celular. Sem isso, quem respondia pelo celular não deixava rastro na inbox:
+ * o histórico ficava com buraco e a IA seguia achando que ninguém tinha respondido.
+ *
+ * A Meta dispara echo também para o que o próprio MonsterChat envia, então deduplicar é
+ * obrigatório — sem isso toda mensagem enviada apareceria duas vezes na conversa.
+ */
+async function processInstagramEcho(
+  messaging: InstagramMessaging,
+  channelId: string,
+  accessToken: string
+) {
+  const message = messaging.message!;
+  // No echo os papéis se invertem: quem envia é a empresa, o cliente é o destinatário.
+  const customerId = messaging.recipient?.id;
+  if (!customerId) {
+    console.warn('[Instagram Echo] Sem recipient.id — não dá para saber de qual conversa é.');
+    return;
+  }
+
+  // 1ª barreira: mesmo mid já gravado. Pega o caso normal, já que o envio guarda o
+  // message_id devolvido pela API e a Meta reusa esse id no echo.
+  if (await getMessageByExternalId(message.mid)) {
+    console.debug('[Instagram Echo] Já gravada (mesmo mid):', message.mid);
+    return;
+  }
+
+  const contact = await getContactByChannel('instagram', customerId);
+  if (!contact) {
+    // O Instagram só deixa a empresa escrever para quem escreveu antes, então o contato
+    // deveria existir. Se não existe, não há conversa para pendurar a mensagem.
+    console.warn('[Instagram Echo] Contato desconhecido, echo ignorado.', { customerId });
+    return;
+  }
+
+  const conversation = await findOrCreateConversation({ channelId, contactId: contact.id });
+  const normalized = normalizeInstagramMessage(message, channelId, messaging.sender, messaging.timestamp);
+
+  // 2ª barreira: se a Meta usar um mid diferente do message_id do envio, o de-dup acima não
+  // pega e a mensagem duplicaria. Aqui olhamos se já existe saída igual nos últimos 2 minutos.
+  if (await hasRecentOutboundDuplicate(conversation.id, normalized.body, normalized.contentType)) {
+    console.debug('[Instagram Echo] Já gravada (saída idêntica recente), ignorando duplicata.');
+    return;
+  }
+
+  let mediaUrl: string | undefined;
+  let mediaMimeType: string | undefined;
+  if (message.attachments && message.attachments.length > 0) {
+    const attachment = message.attachments[0];
+    try {
+      const result = await storeMetaUrlMediaInSupabase(
+        attachment.payload.url,
+        accessToken,
+        conversation.id,
+        {
+          contentType: normalized.contentType,
+          mimeType:
+            attachment.type === 'image' ? 'image/jpeg'
+            : attachment.type === 'video' ? 'video/mp4'
+            : attachment.type === 'audio' ? 'audio/mpeg'
+            : undefined,
+        }
+      );
+      mediaUrl = result.url;
+      mediaMimeType = result.mimeType;
+    } catch (error) {
+      console.error('[Instagram Echo] Erro ao salvar anexo:', error);
+    }
+  }
+
+  await createMessage({
+    conversationId: conversation.id,
+    direction: 'outbound',
+    // Foi uma pessoa que respondeu, só que fora do MonsterChat: fica sem agent_user_id.
+    senderType: 'agent',
+    contentType: normalized.contentType,
+    body: normalized.body,
+    mediaUrl,
+    mediaMimeType,
+    externalId: message.mid,
+    status: 'sent',
+    metadata: { ...(normalized.rawPayload as object), via: 'instagram_app' },
+  });
+
+  await updateConversation(conversation.id, {
+    lastMessageAt: normalized.timestamp,
+    lastMessagePreview: normalized.body || `[${normalized.contentType}]`,
+    lastAgentReplyAt: new Date().toISOString(),
+  });
+
+  console.log('[Instagram Echo] Resposta enviada fora do MonsterChat registrada.', {
+    conversationId: conversation.id,
+    mid: message.mid,
+  });
+}
+
+/** Saída idêntica gravada há menos de 2 minutos — provável echo do que nós mesmos enviamos. */
+async function hasRecentOutboundDuplicate(
+  conversationId: string,
+  body: string | undefined,
+  contentType: string
+): Promise<boolean> {
+  const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  let query = supabaseAdmin
+    .from('messages')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'outbound')
+    .eq('content_type', contentType)
+    .gte('created_at', since)
+    .limit(1);
+  query = body ? query.eq('body', body) : query.is('body', null);
+  const { data } = await query;
+  return Array.isArray(data) && data.length > 0;
 }
 
 function normalizeInstagramMessage(

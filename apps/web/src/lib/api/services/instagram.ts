@@ -155,11 +155,51 @@ export interface InstagramSendMessageResponse {
   message_id: string;
 }
 
+/** Tipos de anexo aceitos no direct do Instagram. `file` é só PDF. */
+export type InstagramMediaType = 'image' | 'audio' | 'video' | 'file';
+
+/**
+ * Limites da Meta por tipo de anexo, usados nas mensagens de erro.
+ * https://developers.facebook.com/docs/messenger-platform/instagram/features/send-message
+ */
+export const INSTAGRAM_MEDIA_LIMITS: Record<InstagramMediaType, string> = {
+  image: 'png ou jpeg, até 8 MB',
+  audio: 'aac, m4a, wav ou mp4, até 25 MB',
+  video: 'mp4, ogg, avi, mov ou webm, até 25 MB',
+  file: 'apenas pdf, até 25 MB',
+};
+
+export interface InstagramSendMediaParams extends Omit<InstagramSendTextParams, 'text'> {
+  mediaType: InstagramMediaType;
+  /** URL pública do arquivo. A Meta baixa a partir dela, então precisa estar acessível sem login. */
+  mediaUrl: string;
+}
+
+/**
+ * Envia um anexo (foto, áudio, vídeo ou PDF) pelo direct do Instagram.
+ *
+ * O direct do Instagram **não aceita legenda junto do anexo** — diferente do WhatsApp, onde
+ * `caption` vai no mesmo payload. Quem chama precisa mandar o texto como mensagem separada.
+ */
+export async function sendInstagramMedia(params: InstagramSendMediaParams) {
+  return sendInstagramPayload(params, {
+    attachment: { type: params.mediaType, payload: { url: params.mediaUrl } },
+  });
+}
+
 export async function sendInstagramText(params: InstagramSendTextParams) {
+  return sendInstagramPayload(params, { text: params.text });
+}
+
+/** Caminho comum de envio: escolhe endpoint pelo tipo de token e resolve o Page Access Token. */
+async function sendInstagramPayload(
+  params: Omit<InstagramSendTextParams, 'text'>,
+  message: Record<string, unknown>
+) {
   const token = sanitizeTokenForHeader(params.accessToken);
   const payload: Record<string, unknown> = {
     recipient: { id: params.recipientId },
-    message: { text: params.text },
+    message,
   };
 
   const post = async (url: string, bearer: string) => {

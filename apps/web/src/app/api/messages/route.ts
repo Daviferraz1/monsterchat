@@ -7,7 +7,7 @@ import {
   sendWhatsAppAudio,
   sendWhatsAppDocument,
 } from '@/lib/api/services/whatsapp';
-import { sendInstagramText } from '@/lib/api/services/instagram';
+import { sendInstagramText, sendInstagramMedia, INSTAGRAM_MEDIA_LIMITS, type InstagramMediaType } from '@/lib/api/services/instagram';
 import { createMessage } from '@/lib/api/services/message';
 import { apiEnv } from '@/lib/api/env';
 import { getTeamContext } from '@/lib/api/team';
@@ -167,20 +167,40 @@ export async function POST(request: NextRequest) {
           status = 'sent';
         }
       } else if (channel.type === 'instagram') {
-        if (hasMedia) {
-          return NextResponse.json(
-            { error: 'Envio de mídia pelo Instagram ainda não suportado. Use texto.' },
-            { status: 400 }
-          );
-        }
-        const response = await sendInstagramText({
+        const igBase = {
           pageId: channel.external_id,
           accessToken: channel.access_token,
           recipientId: contact.external_id,
-          text: text || '',
-        });
-        externalId = response.message_id;
-        status = 'sent';
+        };
+
+        if (hasMedia && contentType) {
+          // 'document' aqui é o nome interno; na Meta o tipo se chama 'file' (só PDF).
+          const mediaType = (contentType === 'document' ? 'file' : contentType) as InstagramMediaType;
+          if (!(mediaType in INSTAGRAM_MEDIA_LIMITS)) {
+            return NextResponse.json(
+              { error: `O Instagram não aceita envio de "${contentType}".`, hint: 'Tipos aceitos: foto, áudio, vídeo e PDF.' },
+              { status: 400 }
+            );
+          }
+
+          const response = await sendInstagramMedia({ ...igBase, mediaType, mediaUrl: media_url });
+          externalId = response.message_id;
+          status = 'sent';
+
+          // O direct do Instagram não aceita legenda junto do anexo: vai como mensagem separada.
+          // Se só a legenda falhar, o anexo já foi — não derruba o envio, apenas registra.
+          if (displayText?.trim()) {
+            try {
+              await sendInstagramText({ ...igBase, text: displayText });
+            } catch (captionErr) {
+              console.error('[Instagram send] Anexo enviado, mas a legenda falhou:', captionErr);
+            }
+          }
+        } else {
+          const response = await sendInstagramText({ ...igBase, text: text || '' });
+          externalId = response.message_id;
+          status = 'sent';
+        }
       } else {
         return NextResponse.json(
           { error: 'Unsupported channel type' },
@@ -202,6 +222,22 @@ export async function POST(request: NextRequest) {
           {
             error: 'Token do canal com caractere inválido no cabeçalho.',
             hint: 'O token pode ter sido colado com quebra de linha ou espaço extra. Em Configurações → Canais, edite o canal, copie o token de novo (uma linha só, sem quebras) e salve. O app também tenta corrigir isso automaticamente.',
+          },
+          { status: 400 }
+        );
+      }
+
+      // Instagram + anexo: a Meta recusa formato fora da lista dela com erro genérico. O áudio
+      // gravado no chat sai em ogg, que o WhatsApp aceita e o Instagram não — sem esta dica o
+      // atendente só via "erro ao enviar" sem saber o motivo.
+      if (channel?.type === 'instagram' && hasMedia && contentType) {
+        const igType = (contentType === 'document' ? 'file' : contentType) as InstagramMediaType;
+        const aceitos = INSTAGRAM_MEDIA_LIMITS[igType];
+        console.error('[Instagram send] Falha ao enviar anexo:', { statusCode, errorMessage, contentType, mediaUrl: media_url });
+        return NextResponse.json(
+          {
+            error: 'Não foi possível enviar esse anexo pelo Instagram.',
+            hint: `O Instagram aceita ${aceitos} para ${contentType === 'document' ? 'documento' : contentType}. Formato fora dessa lista é recusado mesmo funcionando no WhatsApp — áudio gravado aqui sai em ogg, que o Instagram não aceita. Resposta da Meta: ${errorMessage || `HTTP ${statusCode ?? '?'}`}`,
           },
           { status: 400 }
         );
