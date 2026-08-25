@@ -66,12 +66,22 @@ export async function GET(request: NextRequest) {
 
     // Já sabemos a validade e ainda falta muito: não gasta chamada.
     const expiraEm = ch.token_expires_at ? new Date(ch.token_expires_at as string) : null;
-    if (expiraEm) {
-      const diasRestantes = (expiraEm.getTime() - Date.now()) / 86400000;
-      if (diasRestantes > RENOVAR_SE_FALTAR_MENOS_DE_DIAS) {
-        resultados.push({ canal: ch.name, acao: 'ainda válido', diasRestantes: Math.round(diasRestantes) });
-        continue;
-      }
+    const diasRestantes = expiraEm ? (expiraEm.getTime() - Date.now()) / 86400000 : null;
+
+    // Em 25/08/2026 duas execuções seguidas renovaram, mesmo com 60 dias de validade gravados
+    // entre elas — sinal de leitura desatualizada. Registrar o que foi lido evita ter que
+    // adivinhar de novo: se aparecer `lido: null` com o banco preenchido, é isso mesmo.
+    console.log('[Instagram token] Avaliando canal', {
+      canal: ch.name,
+      lido: ch.token_expires_at ?? null,
+      diasRestantes: diasRestantes === null ? null : Number(diasRestantes.toFixed(2)),
+      limiar: RENOVAR_SE_FALTAR_MENOS_DE_DIAS,
+      vaiRenovar: diasRestantes === null || diasRestantes <= RENOVAR_SE_FALTAR_MENOS_DE_DIAS,
+    });
+
+    if (diasRestantes !== null && diasRestantes > RENOVAR_SE_FALTAR_MENOS_DE_DIAS) {
+      resultados.push({ canal: ch.name, acao: 'ainda válido', diasRestantes: Math.round(diasRestantes) });
+      continue;
     }
 
     try {
