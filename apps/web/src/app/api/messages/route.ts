@@ -207,6 +207,22 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Instagram: token do tipo errado para o endpoint (causa clássica de "recebe mas não envia").
+      // O webhook não usa token, então o recebimento continua normal enquanto todo envio falha com 190.
+      if (channel?.type === 'instagram' && /Cannot parse access token|must be called with a Page Access Token/i.test(errorMessage)) {
+        const isParse = /Cannot parse access token/i.test(errorMessage);
+        return NextResponse.json(
+          {
+            error: 'Token do canal não serve para o endpoint de envio do Instagram.',
+            hint: isParse
+              ? 'O token é do Facebook (EAA...) e foi enviado para graph.instagram.com, que só aceita token do Instagram Login (IGA...). Preencha o "External ID" do canal com o ID da Página do Facebook vinculada ao Instagram — o app passa a enviar por graph.facebook.com/{page-id}/messages. Alternativa: gerar um token pelo Instagram Login e colar no canal.'
+              : 'O token é de Usuário do Sistema e a Meta exige o Page Access Token da Página. O app tenta derivar o token da Página automaticamente; se falhou, dê a esse usuário do sistema acesso à Página e a permissão pages_show_list, ou cole direto o Page Access Token no canal.',
+            debugUrl: '/api/diagnostic/instagram',
+          },
+          { status: 401 }
+        );
+      }
+
       // 401 ou mensagem que mencione token inválido/expirado → uma única mensagem (evita "expirado" quando o token é permanente mas há outro problema)
       const isTokenRelated =
         statusCode === 401 ||

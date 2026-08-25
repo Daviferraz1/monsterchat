@@ -50,6 +50,21 @@ Se **External ID** estiver com o ID da conta do Instagram em vez do ID da Págin
 
 ## 3. Token
 
+> **Causa mais comum de "recebe mas não envia".** O recebimento não usa token nenhum (o webhook só
+> chega), então um token do tipo errado quebra **só** o envio — e trocar o token pelo mesmo tipo
+> errado não resolve. Existem dois caminhos e eles **não se misturam**:
+>
+> | Caminho | Endpoint de envio | Token aceito |
+> |---|---|---|
+> | Facebook Login for Business | `POST graph.facebook.com/{page-id}/messages` | **Page Access Token** (`EAA...`) da Página vinculada ao Instagram |
+> | Instagram Login | `POST graph.instagram.com/me/messages` | Token do **Instagram Login** (`IGA...`) |
+>
+> Erros que denunciam a mistura:
+> - `(#190) Invalid OAuth access token - Cannot parse access token` → token `EAA...` mandado para `graph.instagram.com`.
+> - `(#190) This method must be called with a Page Access Token` → token de **Usuário do Sistema** (também `EAA...`) mandado para `/{page-id}/messages`. O app agora troca esse token pelo Page Access Token automaticamente (precisa de `pages_show_list`).
+>
+> O app escolhe o caminho pelo prefixo do token. Com token `EAA...`, o **External ID** (Page ID) é obrigatório.
+
 - Deve ser **Page Access Token** da **Página do Facebook** (não User Token genérico).
 - Permissões necessárias (no app da Meta): `instagram_manage_messages`, `instagram_basic`, e as que a Meta pedir para mensagens (ex.: `pages_manage_metadata`, `pages_show_list`).
 - Em **Configurações → Canais**, use **Atualizar token** e cole o token novo se tiver dúvida.

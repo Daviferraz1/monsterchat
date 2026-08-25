@@ -82,7 +82,7 @@ export async function handleInstagramWebhook(body: unknown) {
 
       if (messaging.message && !messaging.message.is_echo) {
         try {
-          await processInstagramMessage(messaging, channel.id, channel.access_token);
+          await processInstagramMessage(messaging, channel.id, channel.access_token, channel.external_id);
           console.log('[Instagram Webhook] Message processed:', messaging.message.mid);
         } catch (error) {
           console.error('[Instagram Webhook] Error processing message:', error, { mid: messaging.message.mid });
@@ -109,7 +109,9 @@ export async function handleInstagramWebhook(body: unknown) {
 async function processInstagramMessage(
   messaging: InstagramMessaging,
   channelId: string,
-  accessToken: string
+  accessToken: string,
+  /** Page ID: com token do Facebook, o perfil do usuário só resolve com Page Access Token. */
+  pageId?: string | null
 ) {
   const message = messaging.message!;
   const senderId = messaging.sender.id;
@@ -122,7 +124,7 @@ async function processInstagramMessage(
 
   const normalized = normalizeInstagramMessage(message, channelId, messaging.sender, messaging.timestamp);
 
-  const profile = await getInstagramUserProfile(senderId, accessToken);
+  const profile = await getInstagramUserProfile(senderId, accessToken, pageId ?? undefined);
   // Nome: perfil da API > @username do payload > fallback único (evita "Contato sem nome" quando a API de perfil falha, ex. 803)
   const contactName =
     profile?.name ||
