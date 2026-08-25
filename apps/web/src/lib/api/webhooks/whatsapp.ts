@@ -415,8 +415,10 @@ function normalizeWhatsAppMessage(
     contentType = 'reaction';
     body = message.reaction.emoji;
   } else {
-    contentType = 'unsupported';
-    body = JSON.stringify(message);
+    // 'unsupported' não passa no CHECK da tabela: o insert era rejeitado e a mensagem sumia
+    // sem rastro. Vira texto com o aviso; o payload cru continua no metadata.
+    contentType = 'text';
+    body = `📎 Mensagem em formato não suportado${message.type ? ` (${message.type})` : ''}. Abra a conversa no WhatsApp para ver.`;
   }
 
   return {

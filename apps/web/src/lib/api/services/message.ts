@@ -20,6 +20,29 @@ export interface MessageData {
   metadata?: Record<string, any>;
 }
 
+/**
+ * content_type aceitos pelo CHECK da tabela (migração 004).
+ * Manter em sincronia: um valor fora daqui faz o insert estourar e a mensagem some.
+ */
+const CONTENT_TYPES_PERMITIDOS = new Set([
+  'text', 'image', 'video', 'audio', 'document', 'sticker', 'location',
+  'contact_card', 'story_mention', 'story_reply', 'template', 'interactive', 'reaction',
+]);
+
+/**
+ * Garante um content_type válido.
+ *
+ * Os webhooks geravam 'unsupported' (e 'ephemeral', no anexo temporário do Instagram) para
+ * o que não sabiam classificar. Nenhum dos dois passa no CHECK, então o insert era rejeitado
+ * e a mensagem sumia sem deixar rastro — a conversa ficava com um buraco e ninguém via erro.
+ * Melhor gravar como texto com o aviso do que perder a mensagem.
+ */
+function normalizeContentType(contentType: string): string {
+  if (CONTENT_TYPES_PERMITIDOS.has(contentType)) return contentType;
+  console.warn(`[Message] content_type "${contentType}" não é aceito pelo banco; gravando como texto.`);
+  return 'text';
+}
+
 export async function createMessage(data: MessageData) {
   const { data: message, error } = await supabaseAdmin
     .from('messages')
@@ -29,7 +52,7 @@ export async function createMessage(data: MessageData) {
       sender_type: data.senderType,
       sender_id: data.senderId,
       agent_user_id: data.agentUserId ?? null,
-      content_type: data.contentType,
+      content_type: normalizeContentType(data.contentType),
       body: data.body,
       media_url: data.mediaUrl,
       media_mime_type: data.mediaMimeType,

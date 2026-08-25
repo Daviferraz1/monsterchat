@@ -321,6 +321,21 @@ async function hasRecentOutboundDuplicate(
   return Array.isArray(data) && data.length > 0;
 }
 
+/**
+ * O que o atendente lê no lugar de um anexo que a Meta não entrega pela API.
+ *
+ * Foto tirada pela câmera dentro da conversa vai como "visualização única" por padrão, e a
+ * documentação da Meta é explícita: mídia temporária não é entregue no webhook (vem como
+ * `ephemeral`, sem URL). Sem este aviso o atendente não fica sabendo que o cliente mandou algo.
+ * https://developers.facebook.com/docs/messenger-platform/instagram/features/webhook/
+ */
+function descreverAnexoNaoSuportado(type?: string): string {
+  if (type === 'ephemeral') {
+    return '📸 Foto ou vídeo de visualização única. O Instagram não entrega esse conteúdo pela API — abra a conversa no app para ver.';
+  }
+  return `📎 Anexo que o Instagram não entrega pela API${type ? ` (${type})` : ''}. Abra a conversa no app para ver.`;
+}
+
 function normalizeInstagramMessage(
   message: InstagramMessage,
   channelId: string,
@@ -349,11 +364,15 @@ function normalizeInstagramMessage(
         contentType = 'document';
         break;
       default:
-        contentType = attachment.type || 'unsupported';
+        // 'ephemeral' (foto/vídeo de visualização única), 'share', 'ig_reel' e afins não
+        // existem no CHECK da tabela: o insert era rejeitado e a mensagem sumia. Vira texto
+        // avisando o atendente — o payload cru fica no metadata.
+        contentType = 'text';
+        body = descreverAnexoNaoSuportado(attachment.type);
     }
   } else {
-    contentType = 'unsupported';
-    body = JSON.stringify(message);
+    contentType = 'text';
+    body = descreverAnexoNaoSuportado();
   }
 
   const ts = timestampMs != null ? Number(timestampMs) : Date.now();
