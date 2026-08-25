@@ -13,6 +13,8 @@
  *    barra maior de verde nos dois casos, e num deles está errado.
  */
 
+import { diasNoMesEmBrasilia, partesEmBrasilia } from './timezone';
+
 export type MetricKey =
   | 'conversations_handled'
   | 'answers_sent'
@@ -172,15 +174,18 @@ export function goalProgress(
 
 /** Quanto do período já passou — serve para comparar meta com ritmo esperado. */
 export function periodElapsed(period: GoalPeriod, now = new Date()): number {
+  // Progresso da meta é medido no relógio de Brasília: getHours()/getDate() devolvem UTC
+  // no servidor, o que adiantava o dia em 3 horas e inflava o "esperado até agora".
+  const { hora, minuto, dia, diaDaSemana } = partesEmBrasilia(now);
+  const fracaoDoDia = (hora * 60 + minuto) / (24 * 60);
+
   if (period === 'daily') {
-    return (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+    return fracaoDoDia;
   }
   if (period === 'weekly') {
-    const dow = (now.getDay() + 6) % 7; // segunda = 0
-    return (dow + (now.getHours() * 60 + now.getMinutes()) / (24 * 60)) / 7;
+    return (diaDaSemana + fracaoDoDia) / 7; // diaDaSemana: segunda = 0
   }
-  const dias = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return (now.getDate() - 1 + (now.getHours() * 60 + now.getMinutes()) / (24 * 60)) / dias;
+  return (dia - 1 + fracaoDoDia) / diasNoMesEmBrasilia(now);
 }
 
 // --- contratos da API ------------------------------------------------------

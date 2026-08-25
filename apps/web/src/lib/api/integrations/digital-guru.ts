@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/api/supabase';
 import type { DigitalGuruMetadata, DigitalGuruProduct } from '@/types';
+import { diaEmBrasilia } from '@/lib/timezone';
 
 export function normalizePhone(phone: string | null | undefined): string {
   if (!phone || typeof phone !== 'string') return '';
@@ -631,7 +632,7 @@ export function parseGuruSubscriptionWebhook(body: Record<string, unknown>): Gur
   // Atraso: fatura não paga e data de cobrança já passou
   const paidStatuses = ['paid', 'approved'];
   const isPaid = invoiceStatus && paidStatuses.includes(invoiceStatus.toLowerCase());
-  const today = new Date().toISOString().slice(0, 10);
+  const today = diaEmBrasilia();
   if (!isPaid && chargeAt && chargeAt <= today) {
     const charge = new Date(chargeAt);
     const todayDate = new Date(today);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiEnv } from '@/lib/api/env';
+import { diaEmBrasilia } from '@/lib/timezone';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -15,7 +16,7 @@ export const runtime = 'nodejs';
  * DOC GURU: https://docs.digitalmanager.guru/developers/transactions
  */
 function toDateOnly(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return diaEmBrasilia(d);
 }
 
 function normalizeEmailForMatch(email: string | null | undefined): string {

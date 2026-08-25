@@ -5,6 +5,7 @@
  * Doc: https://docs.digitalmanager.guru/developers/transactions
  */
 import { apiEnv } from '../env';
+import { diaEmBrasilia } from '@/lib/timezone';
 
 function normEmail(e?: string | null): string {
   return (e || '').trim().toLowerCase();
@@ -18,7 +19,7 @@ function canon(p?: string | null): string {
   return d;
 }
 function toDateOnly(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return diaEmBrasilia(d);
 }
 
 function extractArray(data: unknown): Array<Record<string, unknown>> {

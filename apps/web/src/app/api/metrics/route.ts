@@ -11,6 +11,7 @@ import {
   type TaskAgentStats,
 } from '@/lib/metrics';
 import type { Task } from '@/types';
+import { diaEmBrasilia } from '@/lib/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -230,7 +231,8 @@ function agregarTarefas(tasks: Task[], from: Date, to: Date): TaskMetrics {
   };
 
   const dia = (iso: string) => {
-    const d = new Date(iso).toISOString().slice(0, 10);
+    // Dia de Brasília: em UTC, tudo depois das 21h caía no dia seguinte.
+    const d = diaEmBrasilia(iso);
     let v = porDia.get(d);
     if (!v) porDia.set(d, (v = { concluidas: 0, criadas: 0 }));
     return v;
