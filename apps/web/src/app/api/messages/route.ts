@@ -227,6 +227,29 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Instagram (#200): o app está com Acesso Padrão em instagram_manage_messages, e nesse
+      // nível a Meta só entrega para quem tem função no app. Por isso o teste para a própria
+      // conta funciona e o envio para um lead real falha — não é token nem formato.
+      // Precisa vir ANTES do tratamento de anexo, senão o erro é atribuído ao formato do arquivo.
+      const metaCodeRaw = error?.response?.data?.error?.code;
+      if (
+        channel?.type === 'instagram' &&
+        (metaCodeRaw === 200 || /advanced access|acesso avançado|does not have a role|não tem função/i.test(errorMessage))
+      ) {
+        console.error('[Instagram send] Acesso Padrão bloqueando envio para não-testador:', { errorMessage });
+        return NextResponse.json(
+          {
+            error: 'O app da Meta ainda não tem permissão para falar com clientes.',
+            hint:
+              'A permissão instagram_manage_messages está com Acesso Padrão, e nesse nível o Instagram só entrega mensagem para quem tem função no app (administrador, desenvolvedor ou testador). Por isso responder para a sua própria conta funciona e para um cliente real não. ' +
+              'Para liberar: no painel da Meta (developers.facebook.com) → seu app → Análise do app → Permissões e recursos → instagram_manage_messages → "Solicitar acesso avançado". Exige Verificação da Empresa concluída. ' +
+              'Enquanto a análise não sai, dá para atender apenas contas adicionadas em Funções do app → Testadores.',
+            debugUrl: '/api/diagnostic/instagram',
+          },
+          { status: 403 }
+        );
+      }
+
       // Instagram + anexo: a Meta recusa formato fora da lista dela com erro genérico. O áudio
       // gravado no chat sai em ogg, que o WhatsApp aceita e o Instagram não — sem esta dica o
       // atendente só via "erro ao enviar" sem saber o motivo.

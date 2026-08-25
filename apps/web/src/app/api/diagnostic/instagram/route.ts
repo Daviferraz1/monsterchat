@@ -214,6 +214,7 @@ export async function GET() {
       channels: diagnostics,
       notas: [
         'canSend=true significa que token, IDs e permissões estão certos. Ainda valem as regras da Meta: só dá para responder quem te escreveu nas últimas 24h, e em app no modo Desenvolvimento o destinatário precisa ser testador.',
+        'ATENÇÃO: este diagnóstico não enxerga o nível de acesso do app (Padrão x Avançado) — não existe endpoint para consultar isso com o token do canal. Com Acesso Padrão em instagram_manage_messages, o envio funciona para quem tem função no app e falha para cliente real com "(#200) ... acesso avançado". Se o envio funciona para a sua conta e falha para clientes, é isso: peça Acesso Avançado em Análise do app → Permissões e recursos.',
         'Nunca misture os dois caminhos: token IGA... só funciona em graph.instagram.com; token EAA... só em graph.facebook.com/{page-id}/messages.',
       ],
     });
