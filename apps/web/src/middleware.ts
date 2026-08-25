@@ -26,6 +26,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/lead-tracking',
   '/api/ia/cron/', // qualquer cron (protegido por CRON_SECRET no próprio handler)
   '/api/tasks/cron/', // gerador de tarefas recorrentes (idem)
+  '/api/instagram/cron/', // renovação do token do Instagram Login (idem)
 ];
 
 function isPublicApi(pathname: string): boolean {
@@ -44,6 +45,17 @@ export async function middleware(request: NextRequest) {
 
   if (isPublicApi(pathname)) {
     return NextResponse.next();
+  }
+
+  // Cron novo que ninguém lembrou de liberar acima: o Cron da Vercel não manda cookie de
+  // sessão, então ele leva 401 em toda execução — calado, até alguém abrir o log da Vercel.
+  // A lista continua sendo explícita de propósito (liberar por padrão deixaria um cron sem
+  // CRON_SECRET aberto na internet), mas o motivo agora aparece.
+  if (/^\/api\/.+\/cron(\/|$)/.test(pathname)) {
+    console.error(
+      `[middleware] ${pathname} parece um cron e NÃO está em PUBLIC_API_PREFIXES — vai levar 401 sempre. ` +
+      'Adicione o prefixo lá e garanta a checagem de CRON_SECRET no handler.'
+    );
   }
 
   const response = NextResponse.next();
