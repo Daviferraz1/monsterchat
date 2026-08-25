@@ -216,6 +216,33 @@ export async function POST(request: NextRequest) {
         : '';
       const errMsg = typeof error?.message === 'string' ? error.message : '';
 
+      /**
+       * Registra a tentativa como mensagem `failed` antes de devolver o erro.
+       *
+       * Vários branches abaixo devolviam a resposta e saíam sem gravar nada. O efeito é que
+       * uma falha não deixa rastro: não dá para saber depois para quem era, se tinha anexo,
+       * nem o que a Meta respondeu — foi exatamente o que aconteceu ao investigar um (#200).
+       */
+      const registrarFalha = async (motivo: string) => {
+        try {
+          await createMessage({
+            conversationId: conversation_id,
+            direction: 'outbound',
+            senderType: 'agent',
+            senderId: agentUserId ?? sender_id,
+            agentUserId,
+            contentType: hasMedia && contentType ? contentType : 'text',
+            body: displayText || (hasMedia ? undefined : text),
+            mediaUrl: hasMedia ? media_url : undefined,
+            status: 'failed',
+            errorMessage: `${motivo}${errorMessage ? `: ${errorMessage}` : ''}`.slice(0, 500),
+            metadata: { statusCode, metaError: error?.response?.data?.error ?? null },
+          });
+        } catch (err) {
+          console.error('[Send message] Não consegui registrar a falha:', err);
+        }
+      };
+
       // Invalid character in header (token colado com quebra de linha ou caractere inválido)
       if (/Invalid character in header content|Authorization/i.test(errMsg)) {
         return NextResponse.json(
@@ -237,6 +264,7 @@ export async function POST(request: NextRequest) {
         (metaCodeRaw === 200 || /advanced access|acesso avançado|does not have a role|não tem função/i.test(errorMessage))
       ) {
         console.error('[Instagram send] Acesso Padrão bloqueando envio para não-testador:', { errorMessage });
+        await registrarFalha('Instagram (#200) acesso avançado');
         return NextResponse.json(
           {
             error: 'O app da Meta ainda não tem permissão para falar com clientes.',
@@ -257,6 +285,7 @@ export async function POST(request: NextRequest) {
         const igType = (contentType === 'document' ? 'file' : contentType) as InstagramMediaType;
         const aceitos = INSTAGRAM_MEDIA_LIMITS[igType];
         console.error('[Instagram send] Falha ao enviar anexo:', { statusCode, errorMessage, contentType, mediaUrl: media_url });
+        await registrarFalha('Instagram anexo recusado');
         return NextResponse.json(
           {
             error: 'Não foi possível enviar esse anexo pelo Instagram.',
@@ -270,6 +299,7 @@ export async function POST(request: NextRequest) {
       // O webhook não usa token, então o recebimento continua normal enquanto todo envio falha com 190.
       if (channel?.type === 'instagram' && /Cannot parse access token|must be called with a Page Access Token/i.test(errorMessage)) {
         const isParse = /Cannot parse access token/i.test(errorMessage);
+        await registrarFalha('Instagram token no endpoint errado');
         return NextResponse.json(
           {
             error: 'Token do canal não serve para o endpoint de envio do Instagram.',
