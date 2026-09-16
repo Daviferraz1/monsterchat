@@ -11,6 +11,7 @@ interface Regra {
   media_id: string | null;
   mensagem_direct: string;
   resposta_publica: string | null;
+  respostas_publicas: string[] | null;
   ativo: boolean;
   enviados: number;
   falhas: number;
@@ -33,16 +34,31 @@ interface Form {
   palavras: string;
   media_id: string | null;
   mensagem_direct: string;
-  resposta_publica: string;
+  respostas_publicas: string[];
 }
+
+/** Variações prontas: uma é sorteada a cada comentário, sem repetir a anterior. */
+const SUGESTOES = [
+  'Te mandei no direct! 📩',
+  'Enviado! Confere sua DM 😉',
+  'Acabei de te chamar no direct 🚀',
+  'Link no seu direct! 📲',
+  'Olha a DM, mandei tudo lá ✅',
+  'Prontinho, chegou no seu direct 🔥',
+];
 
 const VAZIO: Form = {
   nome: '',
   palavras: '',
   media_id: null,
   mensagem_direct: '',
-  resposta_publica: 'Te mandei no direct! 📩',
+  respostas_publicas: SUGESTOES.slice(0, 4),
 };
+
+function variacoesDa(r: Regra): string[] {
+  if (r.respostas_publicas?.length) return r.respostas_publicas;
+  return r.resposta_publica ? [r.resposta_publica] : [];
+}
 
 function capa(p?: Post) {
   if (!p) return undefined;
@@ -89,7 +105,7 @@ export default function AutomacaoInstagramPage() {
         palavras: form.palavras,
         media_id: form.media_id,
         mensagem_direct: form.mensagem_direct,
-        resposta_publica: form.resposta_publica,
+        respostas_publicas: form.respostas_publicas.map((t) => t.trim()).filter(Boolean),
       };
       const r = await fetch(form.id ? `/api/instagram/comment-rules/${form.id}` : '/api/instagram/comment-rules', {
         method: form.id ? 'PATCH' : 'POST',
@@ -205,6 +221,9 @@ export default function AutomacaoInstagramPage() {
                       {r.mensagem_direct}
                     </p>
                     <p className="text-xs text-gray-500 tabular-nums">
+                      {variacoesDa(r).length > 0
+                        ? `${variacoesDa(r).length} ${variacoesDa(r).length === 1 ? 'resposta pública' : 'respostas públicas sorteadas'} · `
+                        : 'Sem resposta pública · '}
                       Últimos 30 dias: <b className="text-gray-800">{r.enviados}</b> enviados
                       {r.falhas > 0 && <> · {r.falhas} não enviados</>}
                     </p>
@@ -221,7 +240,7 @@ export default function AutomacaoInstagramPage() {
                           palavras: r.palavras.join(', '),
                           media_id: r.media_id,
                           mensagem_direct: r.mensagem_direct,
-                          resposta_publica: r.resposta_publica ?? '',
+                          respostas_publicas: variacoesDa(r),
                         })
                       }
                       className="text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 hover:bg-gray-50 inline-flex items-center gap-1"
@@ -323,15 +342,61 @@ export default function AutomacaoInstagramPage() {
               </span>
             </label>
 
-            <label className="block text-sm">
-              <span className="font-medium text-gray-800">Resposta pública no comentário (opcional)</span>
-              <input
-                id="regra-publica"
-                value={form.resposta_publica}
-                onChange={(e) => setForm({ ...form, resposta_publica: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-              />
-            </label>
+            <fieldset className="text-sm">
+              <legend className="font-medium text-gray-800">Respostas públicas no comentário (opcional)</legend>
+              <p className="text-xs text-gray-500 mb-2">
+                A cada comentário uma delas é sorteada, sem repetir a anterior. Deixe vazio para não responder em público.
+              </p>
+              <div className="space-y-2">
+                {form.respostas_publicas.map((texto, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      id={`regra-publica-${i}`}
+                      aria-label={`Variação ${i + 1}`}
+                      value={texto}
+                      maxLength={300}
+                      onChange={(e) => {
+                        const lista = [...form.respostas_publicas];
+                        lista[i] = e.target.value;
+                        setForm({ ...form, respostas_publicas: lista });
+                      }}
+                      className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-2"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remover variação ${i + 1}`}
+                      onClick={() =>
+                        setForm({ ...form, respostas_publicas: form.respostas_publicas.filter((_, j) => j !== i) })
+                      }
+                      className="shrink-0 rounded-lg border border-gray-200 px-2.5 hover:bg-gray-50 text-gray-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <button
+                  type="button"
+                  disabled={form.respostas_publicas.length >= 20}
+                  onClick={() => setForm({ ...form, respostas_publicas: [...form.respostas_publicas, ''] })}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <Plus className="w-3 h-3" /> Adicionar variação
+                </button>
+                {SUGESTOES.filter((t) => !form.respostas_publicas.includes(t)).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    disabled={form.respostas_publicas.length >= 20}
+                    onClick={() => setForm({ ...form, respostas_publicas: [...form.respostas_publicas, t] })}
+                    className="rounded-full bg-[#7c3aed]/10 text-[#6d28d9] px-2.5 py-1 text-xs hover:bg-[#7c3aed]/20 disabled:opacity-50"
+                  >
+                    + {t}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
 
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setForm(null)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm">
