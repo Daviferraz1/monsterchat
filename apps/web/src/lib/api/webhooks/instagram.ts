@@ -9,11 +9,14 @@ import { storeMetaUrlMediaInSupabase, storeContactAvatarInSupabase } from '../se
 import { getInstagramUserProfile } from '../services/instagram';
 import { extractEmailFromText } from '../utils';
 import { supabaseAdmin } from '../supabase';
+import { processInstagramComment, type InstagramCommentEvent } from '../services/instagram-comments';
 
 interface InstagramWebhookEntry {
   id: string;
   time?: number;
   messaging?: InstagramMessaging[];
+  /** Eventos de campo (ex.: `comments`), que chegam fora de `messaging`. */
+  changes?: { field: string; value: unknown }[];
 }
 
 interface InstagramMessaging {
@@ -69,6 +72,21 @@ export async function handleInstagramWebhook(body: unknown) {
   }
 
   for (const entry of webhookBody.entry) {
+    // Comentários em posts: automação de palavra-chave → link no direct.
+    for (const change of entry.changes || []) {
+      if (change.field !== 'comments') continue;
+      try {
+        const canal = await getInstagramChannelByRecipientId(entry.id);
+        if (!canal) {
+          console.warn('[Instagram Webhook] Comentário para conta sem canal ativo:', entry.id);
+          continue;
+        }
+        await processInstagramComment(change.value as InstagramCommentEvent, canal, entry.id);
+      } catch (error) {
+        console.error('[Instagram Webhook] Error processing comment:', error);
+      }
+    }
+
     const messagingList = entry.messaging || [];
     for (const messaging of messagingList) {
       // Em mensagens normais (usuário → negócio): recipient.id = conta Instagram. Em echo (negócio → usuário): sender.id = conta Instagram.
