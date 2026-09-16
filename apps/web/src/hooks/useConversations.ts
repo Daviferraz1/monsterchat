@@ -82,6 +82,8 @@ export function useConversations(filters?: {
       /** Filtros que valem tanto para a lista quanto para a contagem do badge. */
       const applyCommonFilters = <T extends { eq: any; in: any; is: any }>(q: T): T => {
         let query = q as any;
+        // Só mensagem automática, sem resposta do lead: fica na página Automações.
+        query = query.eq('automacao_pendente', false);
         if (channelTypeFilter === 'whatsapp') {
           // A aba "WhatsApp" cobre os dois jeitos de conectar: API oficial e Baileys.
           query = query.in('channel.type', ['whatsapp', 'whatsapp_baileys']);

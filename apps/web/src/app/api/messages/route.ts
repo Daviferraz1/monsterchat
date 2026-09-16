@@ -509,6 +509,8 @@ export async function POST(request: NextRequest) {
       last_message_preview: preview,
       last_agent_reply_at: now,
       updated_at: now,
+      // Quem abre pela página Automações e responde traz a conversa para o inbox.
+      automacao_pendente: false,
     };
     if (!conversation.first_response_at) {
       conversationPatch.first_response_at = now;
