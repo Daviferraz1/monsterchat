@@ -32,10 +32,20 @@ export function lerRegra(body: Record<string, unknown>, parcial = false) {
     if (msg.length > 1000) return { erro: 'A mensagem do direct passa de 1.000 caracteres.' };
     out.mensagem_direct = msg;
   }
-  if ('resposta_publica' in body) {
+  if ('respostas_publicas' in body) {
+    const lista = (Array.isArray(body.respostas_publicas) ? body.respostas_publicas : [])
+      .map((t) => String(t ?? '').trim())
+      .filter(Boolean);
+    if (lista.length > 20) return { erro: 'Use no máximo 20 variações de resposta pública.' };
+    if (lista.some((t) => t.length > 300)) return { erro: 'Cada resposta pública pode ter até 300 caracteres.' };
+    out.respostas_publicas = Array.from(new Set(lista));
+    // Coluna antiga acompanha a primeira variação (compatibilidade).
+    out.resposta_publica = lista[0] ?? null;
+  } else if ('resposta_publica' in body) {
     const pub = String(body.resposta_publica ?? '').trim();
     if (pub.length > 300) return { erro: 'A resposta pública passa de 300 caracteres.' };
     out.resposta_publica = pub || null;
+    out.respostas_publicas = pub ? [pub] : [];
   }
   if ('media_id' in body) out.media_id = body.media_id ? String(body.media_id) : null;
   if ('ativo' in body) out.ativo = Boolean(body.ativo);

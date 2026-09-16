@@ -36,6 +36,22 @@ export interface RegraComentario {
   media_id: string | null;
   mensagem_direct: string;
   resposta_publica: string | null;
+  respostas_publicas: string[] | null;
+}
+
+/** Variações válidas da regra (a coluna antiga vale como fallback). */
+export function variacoesPublicas(regra: Pick<RegraComentario, 'resposta_publica' | 'respostas_publicas'>): string[] {
+  const lista = (regra.respostas_publicas ?? []).map((t) => t.trim()).filter(Boolean);
+  if (lista.length) return lista;
+  return regra.resposta_publica?.trim() ? [regra.resposta_publica.trim()] : [];
+}
+
+/** Sorteia uma variação diferente da última usada (quando houver mais de uma). */
+export function sortearVariacao(opcoes: string[], ultima?: string | null): string | null {
+  if (opcoes.length === 0) return null;
+  const candidatas = opcoes.length > 1 ? opcoes.filter((o) => o !== ultima) : opcoes;
+  const base = candidatas.length ? candidatas : opcoes;
+  return base[Math.floor(Math.random() * base.length)];
 }
 
 /** minúsculas, sem acento, espaços simples. */
@@ -90,7 +106,7 @@ export async function processInstagramComment(
 
   const { data: regras } = await supabaseAdmin
     .from('instagram_comment_rules')
-    .select('id, nome, palavras, media_id, mensagem_direct, resposta_publica')
+    .select('id, nome, palavras, media_id, mensagem_direct, resposta_publica, respostas_publicas')
     .eq('channel_id', canal.id)
     .eq('ativo', true);
   const achado = escolherRegra((regras ?? []) as RegraComentario[], evento.text, evento.media?.id);
@@ -220,16 +236,30 @@ export async function processInstagramComment(
   }
 
   let publicReplyId: string | null = null;
-  if (regra.resposta_publica?.trim()) {
-    try {
-      const r = await replyToInstagramComment({
-        accessToken: canal.access_token,
-        commentId: evento.id,
-        message: regra.resposta_publica.trim(),
-      });
-      publicReplyId = r.id ?? null;
-    } catch (err) {
-      console.warn('[IG comentário] Resposta pública falhou:', erroMeta(err));
+  let publicReplyText: string | null = null;
+  const opcoes = variacoesPublicas(regra);
+  if (opcoes.length) {
+    const { data: anterior } = await supabaseAdmin
+      .from('instagram_comment_replies')
+      .select('public_reply_text')
+      .eq('rule_id', regra.id)
+      .not('public_reply_text', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    publicReplyText = sortearVariacao(opcoes, anterior?.public_reply_text);
+    if (publicReplyText) {
+      try {
+        const r = await replyToInstagramComment({
+          accessToken: canal.access_token,
+          commentId: evento.id,
+          message: publicReplyText,
+        });
+        publicReplyId = r.id ?? null;
+      } catch (err) {
+        publicReplyText = null;
+        console.warn('[IG comentário] Resposta pública falhou:', erroMeta(err));
+      }
     }
   }
 
@@ -239,6 +269,7 @@ export async function processInstagramComment(
     contact_id: contactId,
     conversation_id: conversationId,
     public_reply_id: publicReplyId,
+    public_reply_text: publicReplyText,
   });
   console.log('[IG comentário] Link enviado no direct', { commentId: evento.id, regra: regra.nome, palavra });
 }
