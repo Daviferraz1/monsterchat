@@ -191,14 +191,83 @@ export async function sendInstagramText(params: InstagramSendTextParams) {
   return sendInstagramPayload(params, { text: params.text });
 }
 
+/**
+ * Resposta privada a um comentário ("private reply"): a mensagem chega no direct de quem
+ * comentou, mesmo sem conversa aberta. A Meta aceita UMA por comentário e só até 7 dias
+ * depois dele. A resposta traz o `recipient_id` (IGSID) para abrir a conversa no inbox.
+ * https://developers.facebook.com/docs/instagram-platform/private-replies
+ */
+export async function sendInstagramPrivateReply(params: {
+  pageId?: string;
+  accessToken: string;
+  commentId: string;
+  text: string;
+}) {
+  return sendInstagramPayload(
+    { pageId: params.pageId, accessToken: params.accessToken, recipientId: '' },
+    { text: params.text },
+    { comment_id: params.commentId }
+  );
+}
+
+/** Resposta pública no próprio comentário (ex.: "Te mandei no direct!"). */
+export async function replyToInstagramComment(params: {
+  accessToken: string;
+  commentId: string;
+  message: string;
+}): Promise<{ id?: string }> {
+  const token = sanitizeTokenForHeader(params.accessToken);
+  const base = isInstagramLoginToken(token)
+    ? `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}`
+    : `${FACEBOOK_GRAPH_BASE}/${GRAPH_API_VERSION}`;
+  const { data } = await axios.post<{ id?: string }>(
+    `${base}/${encodeURIComponent(params.commentId)}/replies`,
+    null,
+    { params: { message: params.message }, headers: { Authorization: `Bearer ${token}` }, timeout: 15000 }
+  );
+  return data;
+}
+
+export interface InstagramMediaResumo {
+  id: string;
+  caption?: string;
+  media_type?: string;
+  media_product_type?: string;
+  permalink?: string;
+  thumbnail_url?: string;
+  media_url?: string;
+  timestamp?: string;
+  comments_count?: number;
+}
+
+/** Posts recentes da conta (para escolher em qual post a regra vale). Só Instagram Login. */
+export async function listInstagramMedia(accessToken: string, limit = 30): Promise<InstagramMediaResumo[]> {
+  const token = sanitizeTokenForHeader(accessToken);
+  if (!isInstagramLoginToken(token)) return [];
+  const { data } = await axios.get<{ data: InstagramMediaResumo[] }>(
+    `${INSTAGRAM_GRAPH_BASE}/${INSTAGRAM_API_VERSION}/me/media`,
+    {
+      params: {
+        fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp,comments_count',
+        limit,
+      },
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 15000,
+    }
+  );
+  return data?.data ?? [];
+}
+
 /** Caminho comum de envio: escolhe endpoint pelo tipo de token e resolve o Page Access Token. */
 async function sendInstagramPayload(
   params: Omit<InstagramSendTextParams, 'text'>,
-  message: Record<string, unknown>
+  message: Record<string, unknown>,
+  /** Destinatário alternativo — `{ comment_id }` na resposta privada a comentário. */
+  recipient?: Record<string, string>
 ) {
   const token = sanitizeTokenForHeader(params.accessToken);
   const payload: Record<string, unknown> = {
-    recipient: { id: params.recipientId },
+    recipient: recipient ?? { id: params.recipientId },
     message,
   };
 
