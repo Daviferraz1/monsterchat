@@ -6,7 +6,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import { useState } from 'react';
-import { MessageSquare, Settings, Users, ShoppingBag, CreditCard, Megaphone, Bot, BookOpen, Mail, UsersRound, KanbanSquare } from 'lucide-react';
+import { MessageSquare, Settings, Users, ShoppingBag, CreditCard, Megaphone, Bot, BookOpen, Mail, UsersRound, KanbanSquare, Zap } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 
@@ -51,6 +51,9 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
         <nav className="flex flex-col gap-1 mt-3">
           <Link href="/inbox" className={navLinkClass(!!pathname?.startsWith('/inbox'))} onClick={onClose}>
             <MessageSquare className="w-4 h-4 shrink-0" /> Inbox
+          </Link>
+          <Link href="/automacoes" className={navLinkClass(!!pathname?.startsWith('/automacoes'))} onClick={onClose}>
+            <Zap className="w-4 h-4 shrink-0" /> Automações
           </Link>
           <Link href="/quadro" className={navLinkClass(!!pathname?.startsWith('/quadro'))} onClick={onClose}>
             <KanbanSquare className="w-4 h-4 shrink-0" /> Quadro

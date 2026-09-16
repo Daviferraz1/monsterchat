@@ -11,7 +11,7 @@ import axios from 'axios';
 import { supabaseAdmin } from '../supabase';
 import { upsertContact } from './contact';
 import { findOrCreateConversation, updateConversation } from './conversation';
-import { createMessage } from './message';
+import { createMessage, getMessageByExternalId } from './message';
 import { replyToInstagramComment, sendInstagramPrivateReply } from './instagram';
 import { marcarLinks, slugAutor } from '../rastreio-links';
 
@@ -128,6 +128,10 @@ export async function processInstagramComment(
   const atualizar = (dados: Record<string, unknown>) =>
     supabaseAdmin.from('instagram_comment_replies').update(dados).eq('id', reserva.id);
 
+  // Eco do Instagram chega segundos depois do envio e é gravado como "agent": o que vier
+  // depois deste instante não conta como conversa com a equipe.
+  const inicio = new Date(Date.now() - 5000).toISOString();
+
   let envio: { recipient_id?: string; message_id?: string };
   try {
     envio = await sendInstagramPrivateReply({
@@ -151,16 +155,18 @@ export async function processInstagramComment(
   try {
     const { data: existente } = await supabaseAdmin
       .from('contacts')
-      .select('id, metadata')
+      .select('id, name, metadata')
       .eq('channel_type', 'instagram')
       .eq('external_id', igsid)
       .maybeSingle();
     const jaTemOrigem = Boolean((existente?.metadata as Record<string, unknown> | null)?.campaign);
+    // "Instagram 123456" é placeholder: com o @ em mãos, ele é trocado; nome real é preservado.
+    const nomeProvisorio = !existente?.name || /^Instagram \d{4,}$/.test(existente.name);
     const contato = await upsertContact({
       channelType: 'instagram',
       externalId: igsid,
       name: autor.username ? `@${autor.username}` : `Instagram ${igsid.slice(-6)}`,
-      nameIsFallback: true,
+      nameIsFallback: !(autor.username && nomeProvisorio),
       metadata: autor.username ? { username: autor.username } : undefined,
       campaign: jaTemOrigem
         ? undefined
@@ -174,21 +180,40 @@ export async function processInstagramComment(
     contactId = contato.id;
     const conversa = await findOrCreateConversation({ channelId: canal.id, contactId: contato.id });
     conversationId = conversa.id;
-    await createMessage({
-      conversationId: conversa.id,
-      direction: 'outbound',
-      senderType: 'bot',
-      contentType: 'text',
-      body: texto,
-      externalId: envio.message_id,
-      status: 'sent',
-      metadata: { via: 'comentario_instagram', comment_id: evento.id, rule_id: regra.id, palavra },
-    });
+    const metaMsg = { via: 'comentario_instagram', comment_id: evento.id, rule_id: regra.id, palavra };
+    const eco = envio.message_id ? await getMessageByExternalId(envio.message_id) : null;
+    if (eco) {
+      // O eco chegou antes: reaproveita o registro em vez de duplicar a mensagem.
+      await supabaseAdmin
+        .from('messages')
+        .update({ sender_type: 'bot', agent_user_id: null, metadata: metaMsg })
+        .eq('id', (eco as { id: string }).id);
+    } else {
+      await createMessage({
+        conversationId: conversa.id,
+        direction: 'outbound',
+        senderType: 'bot',
+        contentType: 'text',
+        body: texto,
+        externalId: envio.message_id,
+        status: 'sent',
+        metadata: metaMsg,
+      });
+    }
     const agora = new Date().toISOString();
     await updateConversation(conversa.id, {
       lastMessageAt: agora,
       lastMessagePreview: `💬 Comentou "${evento.text.slice(0, 40)}" → link enviado`,
     });
+    // Sem mensagem do lead nem da equipe, a conversa fica na página Automações e fora do inbox.
+    const { count: jaConversou } = await supabaseAdmin
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', conversa.id)
+      .or(`direction.eq.inbound,and(sender_type.eq.agent,created_at.lt.${inicio})`);
+    if (!jaConversou) {
+      await supabaseAdmin.from('conversations').update({ automacao_pendente: true }).eq('id', conversa.id);
+    }
   } catch (err) {
     // O direct já foi; falha aqui só afeta o registro no inbox.
     console.error('[IG comentário] Direct enviado, mas falhou ao registrar no inbox:', err);

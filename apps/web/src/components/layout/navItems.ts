@@ -1,4 +1,4 @@
-import { MessageSquare, Users, ShoppingBag, CreditCard, Settings, KanbanSquare, BarChart3, type LucideIcon } from 'lucide-react';
+import { MessageSquare, Users, ShoppingBag, CreditCard, Settings, KanbanSquare, BarChart3, Zap, type LucideIcon } from 'lucide-react';
 
 export type NavItem = { href: string; icon: LucideIcon; label: string };
 
@@ -6,6 +6,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/painel', icon: BarChart3, label: 'Painel' },
   { href: '/quadro', icon: KanbanSquare, label: 'Tarefas' },
   { href: '/inbox', icon: MessageSquare, label: 'Conversas' },
+  { href: '/automacoes', icon: Zap, label: 'Automações' },
   { href: '/contacts', icon: Users, label: 'Contatos' },
   { href: '/sales', icon: ShoppingBag, label: 'Vendas' },
   { href: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },

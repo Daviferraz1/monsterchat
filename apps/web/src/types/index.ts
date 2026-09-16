@@ -68,6 +68,22 @@ export interface Contact {
 }
 
 /** Origem da campanha (Facebook Ads, Instagram etc.) — salvo em contact.metadata.campaign */
+export interface AutomacaoLead {
+  id: string;
+  comment_id: string;
+  username: string | null;
+  comment_text: string | null;
+  palavra: string | null;
+  status: 'sent' | 'failed' | 'expired';
+  error: string | null;
+  media_id: string | null;
+  created_at: string;
+  conversation_id: string | null;
+  regra: { nome: string } | null;
+  contato: { name: string | null; profile_pic_url: string | null } | null;
+  conversa: { automacao_pendente: boolean; status: string; last_message_at: string | null; last_message_preview: string | null } | null;
+}
+
 export interface LeadCampaign {
   utm_source?: string;
   utm_medium?: string;

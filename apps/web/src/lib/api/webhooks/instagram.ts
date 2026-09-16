@@ -250,6 +250,10 @@ async function processInstagramMessage(
     contactId: contactRecord.id,
   });
   console.log('[Instagram Webhook] Conversation ready', { conversationId: conversation.id });
+  if ((conversation as { automacao_pendente?: boolean }).automacao_pendente) {
+    // O lead respondeu a mensagem automática: agora é conversa de verdade, volta para o inbox.
+    await supabaseAdmin.from('conversations').update({ automacao_pendente: false }).eq('id', conversation.id);
+  }
 
   let mediaUrl: string | undefined;
   let mediaMimeType: string | undefined;
