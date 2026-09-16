@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSupabase } from './useSupabase';
+import { startPolling, throttleReload, POLL_UNREAD_MS } from '@/lib/polling';
 
 /**
  * Contagem do badge do rail: mensagens não lidas + conversas que o atendente
@@ -31,21 +32,23 @@ export function useTotalUnreadCount(): number {
     };
 
     fetchTotal();
-    const interval = setInterval(fetchTotal, 5000);
+    const stopPolling = startPolling(fetchTotal, POLL_UNREAD_MS);
+
+    // São duas consultas por recarga, e o evento dispara a cada mensagem.
+    const reload = throttleReload(fetchTotal);
 
     const channel = supabase
       .channel('total_unread')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'conversations' },
-        () => {
-          fetchTotal();
-        }
+        reload
       )
       .subscribe();
 
     return () => {
-      clearInterval(interval);
+      stopPolling();
+      reload.cancel();
       supabase.removeChannel(channel);
     };
   }, [supabase]);

@@ -11,6 +11,7 @@ import { sendInstagramText, sendInstagramMedia, INSTAGRAM_MEDIA_LIMITS, type Ins
 import { createMessage } from '@/lib/api/services/message';
 import { apiEnv } from '@/lib/api/env';
 import { getTeamContext } from '@/lib/api/team';
+import { marcarLinks, origemDoContato, slugAutor } from '@/lib/api/rastreio-links';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -83,7 +84,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const displayText = hasText ? text : (caption ?? '');
+    // Links da Monster/Fagenius saem com UTM (origem = chat, autor, origem do lead)
+    // e são gravados já marcados: o histórico mostra exatamente o que o aluno recebeu.
+    const rastreio = {
+      canal: (channel.type === 'instagram' ? 'instagram' : 'whatsapp') as 'instagram' | 'whatsapp',
+      // Sem cadastro na equipe, identifica pelo início do id do usuário (o relatório traduz).
+      autor: slugAutor(agent?.fullName, agentUserId ? `atendente-${agentUserId.slice(0, 8)}` : 'atendente'),
+      origem: origemDoContato(contact.metadata),
+    };
+    const textoEnviado: string = hasText ? marcarLinks(text, rastreio) : text;
+    const displayText = hasText ? textoEnviado : marcarLinks(caption ?? '', rastreio);
     let externalId: string | undefined;
     let status: 'pending' | 'sent' | 'failed' = 'pending';
 
@@ -114,7 +124,7 @@ export async function POST(request: NextRequest) {
           body.caption = displayText || undefined;
           body.filename = filename || undefined;
         } else {
-          body.text = text || '';
+          body.text = textoEnviado || '';
         }
         const sendRes = await fetch(`${apiUrl}/baileys/send`, {
           method: 'POST',
@@ -161,7 +171,7 @@ export async function POST(request: NextRequest) {
             phoneNumberId: channel.external_id,
             accessToken: channel.access_token,
             to: toForWhatsApp,
-            text: text || '',
+            text: textoEnviado || '',
           });
           externalId = response.messages[0]?.id;
           status = 'sent';
@@ -197,7 +207,7 @@ export async function POST(request: NextRequest) {
             }
           }
         } else {
-          const response = await sendInstagramText({ ...igBase, text: text || '' });
+          const response = await sendInstagramText({ ...igBase, text: textoEnviado || '' });
           externalId = response.message_id;
           status = 'sent';
         }
@@ -232,7 +242,7 @@ export async function POST(request: NextRequest) {
             senderId: agentUserId ?? sender_id,
             agentUserId,
             contentType: hasMedia && contentType ? contentType : 'text',
-            body: displayText || (hasMedia ? undefined : text),
+            body: displayText || (hasMedia ? undefined : textoEnviado),
             mediaUrl: hasMedia ? media_url : undefined,
             status: 'failed',
             errorMessage: `${motivo}${errorMessage ? `: ${errorMessage}` : ''}`.slice(0, 500),
@@ -329,7 +339,7 @@ export async function POST(request: NextRequest) {
           senderId: agentUserId ?? sender_id,
           agentUserId,
           contentType: hasMedia && contentType ? contentType : 'text',
-          body: displayText || (hasMedia ? undefined : text),
+          body: displayText || (hasMedia ? undefined : textoEnviado),
           mediaUrl: hasMedia ? media_url : undefined,
           externalId: undefined,
           status: 'failed',
@@ -338,7 +348,7 @@ export async function POST(request: NextRequest) {
           .from('conversations')
           .update({
             last_message_at: new Date().toISOString(),
-            last_message_preview: text,
+            last_message_preview: textoEnviado,
             last_agent_reply_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
@@ -487,7 +497,7 @@ export async function POST(request: NextRequest) {
       senderId: agentUserId ?? sender_id,
       agentUserId,
       contentType: hasMedia && contentType ? contentType : 'text',
-      body: displayText || (hasMedia ? undefined : text),
+      body: displayText || (hasMedia ? undefined : textoEnviado),
       mediaUrl: hasMedia ? media_url : undefined,
       externalId,
       status,

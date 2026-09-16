@@ -17,7 +17,7 @@ export function MobileInboxContent() {
     assignment?: AssignmentFilter;
     search?: string;
   }>({});
-  const { conversations, loading, notRepliedCount } = useConversations(filters);
+  const { conversations, loading, notRepliedCount, hasMore, loadMore } = useConversations(filters);
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#0d0d1a]" style={{ color: '#e2e8f0' }}>
@@ -36,6 +36,17 @@ export function MobileInboxContent() {
           loading={loading}
           channelTypeFilter={filters.channel_type}
         />
+        {hasMore && !loading && (
+          <div className="p-3 flex justify-center">
+            <button
+              type="button"
+              onClick={loadMore}
+              className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
+            >
+              Carregar mais conversas
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

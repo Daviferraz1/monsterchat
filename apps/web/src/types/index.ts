@@ -124,7 +124,16 @@ export interface Message {
   status: MessageStatus;
   error_message?: string;
   reply_to_id?: string;
-  metadata: Record<string, any>;
+  /**
+   * Payload cru do webhook. O chat NÃO pede este campo (ver `MESSAGE_SELECT` em
+   * lib/queries.ts) — é o grosso do peso do histórico e nenhuma tela o usa
+   * inteiro. Só vem preenchido em quem busca a linha completa.
+   */
+  metadata?: Record<string, any>;
+  /** Alvo da reação no WhatsApp — extraído de `metadata.reaction` no select. */
+  reaction_meta?: { message_id?: string } | null;
+  /** Alvo da reação no Instagram — extraído de `metadata.mid` no select. */
+  reaction_mid?: string | null;
   created_at: string;
 }
 

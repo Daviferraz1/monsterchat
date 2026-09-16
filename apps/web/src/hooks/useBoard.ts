@@ -5,6 +5,8 @@ import { useSupabase } from './useSupabase';
 import { statusPatch } from '@/lib/boardColumns';
 import { isPriority } from '@/lib/priority';
 import { compareBoardItems, fromConversation, fromTask, type BoardItem } from '@/lib/boardItem';
+import { startPolling, throttleReload, POLL_BOARD_MS } from '@/lib/polling';
+import { CONVERSATION_LIST_SELECT } from '@/lib/queries';
 import type { Conversation, ConversationStatus, Task } from '@/types';
 
 /** Teto de cards carregados de cada tipo. Sem isso a raia Concluída cresce sem fim. */
@@ -49,7 +51,7 @@ export function useBoard(filters: BoardFilters) {
       const conversationQuery = () => {
         let q = supabase
           .from('conversations')
-          .select('*, contact:contacts(*), channel:channels(*)')
+          .select(CONVERSATION_LIST_SELECT)
           .or('assigned_to.not.is.null,department_id.not.is.null')
           .order('last_message_at', { ascending: false, nullsFirst: false })
           .limit(MAX_CARDS);
@@ -115,14 +117,18 @@ export function useBoard(filters: BoardFilters) {
 
   useEffect(() => {
     load(true);
-    const interval = setInterval(() => load(false), 5000);
+    const stopPolling = startPolling(() => load(false), POLL_BOARD_MS);
+    // Uma recarga do quadro são quatro consultas (conversas, tarefas e as notas
+    // de cada). Sem o throttle, uma rajada de mensagens multiplicava isso.
+    const reload = throttleReload(() => load(false));
     const channel = supabase
       .channel('board-items')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => load(false))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => load(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, reload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, reload)
       .subscribe();
     return () => {
-      clearInterval(interval);
+      stopPolling();
+      reload.cancel();
       supabase.removeChannel(channel);
     };
   }, [load, supabase]);
