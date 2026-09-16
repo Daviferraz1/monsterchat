@@ -24,6 +24,16 @@ interface InstagramMessaging {
   message_reads?: { watermark: number }[];
   reaction?: { mid: string; action: string; reaction?: string; emoji?: string };
   postback?: { title: string; payload: string };
+  /** Entrada por anúncio ou link ig.me (evento messaging_referral ou junto da mensagem). */
+  referral?: InstagramReferral;
+}
+
+interface InstagramReferral {
+  ref?: string;
+  source?: string;
+  type?: string;
+  ad_id?: string;
+  ads_context_data?: { ad_title?: string; photo_url?: string; video_url?: string };
 }
 
 interface InstagramMessage {
@@ -32,6 +42,7 @@ interface InstagramMessage {
   attachments?: { type: string; payload: { url: string; sticker_id?: number } }[];
   reply_to?: { mid: string };
   is_echo?: boolean;
+  referral?: InstagramReferral;
 }
 
 interface UnifiedInboundMessage {
@@ -94,6 +105,15 @@ export async function handleInstagramWebhook(body: unknown) {
         }
       }
 
+      // Entrada por anúncio/link sem mensagem junto: grava a origem já no contato.
+      if (messaging.referral && !messaging.message) {
+        try {
+          await registrarOrigemInstagram(messaging.sender.id, messaging.referral);
+        } catch (error) {
+          console.error('[Instagram Webhook] Error processing referral:', error);
+        }
+      }
+
       if (messaging.message_reads && messaging.message_reads.length > 0) {
         for (const read of messaging.message_reads) {
           console.debug('[Instagram Webhook] Message read', { watermark: read.watermark });
@@ -109,6 +129,54 @@ export async function handleInstagramWebhook(body: unknown) {
       }
     }
   }
+}
+
+/**
+ * Guarda de onde o lead chegou no direct (anúncio ou link ig.me) — só o primeiro toque:
+ * contato que já tem origem não é sobrescrito. Sem isso, a venda que nasce do anúncio
+ * de mensagem chega na Guru sem origem.
+ */
+async function registrarOrigemInstagram(
+  senderId: string,
+  referral: InstagramReferral,
+  contato?: { id: string; metadata?: unknown } | null
+) {
+  let alvo = contato ?? null;
+  if (!alvo) {
+    const { data } = await supabaseAdmin
+      .from('contacts')
+      .select('id, metadata')
+      .eq('channel_type', 'instagram')
+      .eq('external_id', senderId)
+      .maybeSingle();
+    alvo = data;
+  }
+  const doAnuncio = (referral.source || '').toUpperCase() === 'ADS' || Boolean(referral.ad_id);
+  const campaign = {
+    utm_source: doAnuncio ? 'meta' : 'instagram',
+    utm_medium: doAnuncio ? 'ctd' : (referral.source || 'link').toLowerCase(),
+    utm_campaign: referral.ads_context_data?.ad_title || referral.ref || undefined,
+    utm_content: referral.ad_id || referral.ref || undefined,
+    ad_id: referral.ad_id,
+    ref: referral.ref,
+    attributed_at: new Date().toISOString(),
+  };
+  if (!alvo) {
+    await upsertContact({
+      channelType: 'instagram',
+      externalId: senderId,
+      name: `Instagram ${senderId.slice(-6)}`,
+      nameIsFallback: true,
+      campaign,
+    });
+    return;
+  }
+  const metadata = ((alvo.metadata as Record<string, unknown>) || {});
+  if (metadata.campaign) return;
+  await supabaseAdmin
+    .from('contacts')
+    .update({ metadata: { ...metadata, campaign }, updated_at: new Date().toISOString() })
+    .eq('id', alvo.id);
 }
 
 async function processInstagramMessage(
@@ -152,6 +220,11 @@ async function processInstagramMessage(
     email: extractedEmail,
     metadata: messaging.sender.username || profile?.username ? { username: messaging.sender.username || profile?.username } : undefined,
   });
+
+  const referral = messaging.referral ?? message.referral;
+  if (referral) {
+    await registrarOrigemInstagram(senderId, referral, contactRecord);
+  }
 
   console.log('[Instagram Webhook] Finding or creating conversation', { channelId, contactId: contactRecord.id });
   const conversation = await findOrCreateConversation({

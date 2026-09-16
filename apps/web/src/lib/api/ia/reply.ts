@@ -4,6 +4,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { marcarLinks, origemDoContato } from '../rastreio-links';
 import { supabaseAdmin } from '../supabase';
 import { createMessage } from '../services/message';
 import { updateConversation } from '../services/conversation';
@@ -234,6 +235,10 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
     ? rawReply.replace(ESCALAR_REGEX, '').trim()
     : rawReply.trim();
   const motivoEscalar = escalarMatch?.[1]?.trim() ?? '';
+  // Link enviado pela IA sai com UTM (utm_content=ia), como os dos atendentes.
+  const respostaEnviada = cleanReply
+    ? marcarLinks(cleanReply, { canal: 'whatsapp', autor: 'ia', origem: origemDoContato(ctx.contactMetadata) })
+    : cleanReply;
 
   const { data: channel } = await supabaseAdmin
     .from('channels')
@@ -254,7 +259,7 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
         phoneNumberId,
         accessToken: ctx.accessToken,
         to: ctx.contactPhone,
-        text: cleanReply,
+        text: respostaEnviada,
       });
       console.log('[IA reply] Resposta enviada ao WhatsApp', { conversationId: ctx.conversationId });
     } catch (err) {
@@ -269,7 +274,7 @@ export async function handleIAReply(ctx: ReplyContext): Promise<void> {
       direction: 'outbound',
       senderType: 'system',
       contentType: 'text',
-      body: cleanReply || undefined,
+      body: respostaEnviada || undefined,
       status: 'sent',
     });
   }

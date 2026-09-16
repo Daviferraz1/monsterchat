@@ -218,7 +218,7 @@ async function processWhatsAppMessage(
     // Atribuir origem de campanha (Facebook Ads, Instagram etc.)
     const existingCampaign = (contactRecord.metadata as Record<string, unknown>)?.campaign;
     if (!existingCampaign) {
-      let leadUtm: { utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string; attributed_at: string } | null = null;
+      let leadUtm: { utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string; attributed_at: string; extras?: Record<string, unknown> } | null = null;
 
       // 1) Redirecionamento direto: código (ref) em qualquer lugar da mensagem (ex.: "Olá! 👋 Quero conversar. 2KCR4SYH")
       const refResult = await getLeadTrackingByRefFromMessage(normalized.body, 7);
@@ -229,10 +229,14 @@ async function processWhatsAppMessage(
       }
       // 2) Fluxo com formulário: busca por telefone
       if (!leadUtm) leadUtm = await getRecentLeadTrackingByPhone(from, 7);
+      // 3) Anúncio de clique para o WhatsApp: a Meta manda `referral` só na 1ª mensagem,
+      //    com o id do anúncio. Sem isso a venda que nasce do anúncio fica sem origem.
+      if (!leadUtm && message.referral) leadUtm = utmDeReferralWhatsApp(message.referral);
 
       if (leadUtm) {
         const metadata = (contactRecord.metadata as Record<string, unknown>) || {};
         metadata.campaign = {
+          ...(leadUtm.extras ?? {}),
           utm_source: leadUtm.utm_source,
           utm_medium: leadUtm.utm_medium,
           utm_campaign: leadUtm.utm_campaign,
@@ -376,6 +380,28 @@ async function processWhatsAppMessage(
 /**
  * Normaliza mensagem do WhatsApp para formato unificado
  */
+/**
+ * Origem de quem chegou por anúncio de clique para o WhatsApp (Click to WhatsApp).
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#referral-object
+ */
+function utmDeReferralWhatsApp(referral: {
+  source_url?: string; source_id?: string; source_type?: string;
+  headline?: string; body?: string; ctwa_clid?: string;
+}) {
+  return {
+    utm_source: 'meta',
+    utm_medium: referral.source_type === 'post' ? 'post-whatsapp' : 'ctwa',
+    utm_campaign: (referral.headline || '').slice(0, 80) || undefined,
+    utm_content: referral.source_id,
+    attributed_at: new Date().toISOString(),
+    extras: {
+      ad_id: referral.source_type === 'ad' ? referral.source_id : undefined,
+      ctwa_clid: referral.ctwa_clid,
+      source_url: referral.source_url,
+    },
+  };
+}
+
 function normalizeWhatsAppMessage(
   message: any,
   channelId: string,

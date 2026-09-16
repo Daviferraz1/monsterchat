@@ -2,16 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useTotalUnreadCount } from '@/hooks/useTotalUnreadCount';
 import { NAV_ITEMS, isNavActive, formatUnreadBadge } from './navItems';
 
 /**
  * Barra de navegação inferior — apenas mobile (md:hidden), estilo WhatsApp.
  * Fica escondida quando uma conversa está aberta (a tela do chat ocupa tudo).
  */
-export function MobileBottomNav() {
+export function MobileBottomNav({ totalUnread }: { totalUnread: number }) {
   const pathname = usePathname();
-  const totalUnread = useTotalUnreadCount();
 
   return (
     <nav

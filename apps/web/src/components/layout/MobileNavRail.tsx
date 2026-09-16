@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
-import { useTotalUnreadCount } from '@/hooks/useTotalUnreadCount';
 import { NAV_ITEMS, isNavActive, formatUnreadBadge } from './navItems';
 
 function getInitials(email: string): string {
@@ -14,10 +13,9 @@ function getInitials(email: string): string {
 }
 
 /** Rail de ícones à esquerda — apenas desktop (md+); no mobile usamos a barra inferior. */
-export function MobileNavRail() {
+export function MobileNavRail({ totalUnread }: { totalUnread: number }) {
   const pathname = usePathname();
   const { user } = useUser();
-  const totalUnread = useTotalUnreadCount();
 
   return (
     <nav

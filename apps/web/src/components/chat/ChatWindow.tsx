@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useSupabase } from '@/hooks/useSupabase';
 import { useAutopilot } from '@/hooks/useAutopilot';
@@ -16,7 +16,7 @@ export function ChatWindow() {
   const conversationId = params?.id as string | null;
   const supabase = useSupabase();
   const { enabled: autopilotEnabled, suggestionEnabled } = useAutopilot();
-  const { messages, refresh } = useRealtimeMessages(conversationId);
+  const { messages, refresh, loadOlder, hasOlder, loadingOlder } = useRealtimeMessages(conversationId);
   const { nameOfUser } = useTeamDirectory();
   const [refreshing, setRefreshing] = useState(false);
   const [contactAvatarUrl, setContactAvatarUrl] = useState<string | null>(null);
@@ -67,10 +67,26 @@ export function ChatWindow() {
     setFinalizing(false);
   };
 
-  // Ao abrir a conversa ou receber novas mensagens, rolar até o final
-  useEffect(() => {
+  /** Altura da lista no instante em que se pediu o histórico antigo (ver abaixo). */
+  const heightBeforeOlder = useRef<number | null>(null);
+
+  const handleLoadOlder = () => {
+    heightBeforeOlder.current = scrollContainerRef.current?.scrollHeight ?? null;
+    void loadOlder();
+  };
+
+  // Ao abrir a conversa ou receber novas mensagens, rolar até o final.
+  // Exceção: quando o que entrou foi histórico antigo, no topo — aí a tela fica
+  // onde estava, senão o operador é jogado para o fim justo ao subir a conversa.
+  useLayoutEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
+    const previousHeight = heightBeforeOlder.current;
+    if (previousHeight != null) {
+      heightBeforeOlder.current = null;
+      el.scrollTop += el.scrollHeight - previousHeight;
+      return;
+    }
     const scrollToBottom = () => {
       el.scrollTop = el.scrollHeight;
     };
@@ -83,8 +99,9 @@ export function ChatWindow() {
    * aparecem grudadas na mensagem reagida — soltas viram um emoji órfão no fim da conversa.
    * Aqui cada reação é ligada ao seu alvo pelo external_id e sai da lista principal.
    *
-   * O ID da mensagem reagida fica em lugares diferentes por canal:
-   * WhatsApp em `metadata.reaction.message_id`, Instagram em `metadata.mid`.
+   * O ID da mensagem reagida fica em lugares diferentes por canal: WhatsApp em
+   * `metadata.reaction.message_id`, Instagram em `metadata.mid`. As duas chegam
+   * aqui já separadas do resto do payload — ver `MESSAGE_SELECT`.
    */
   const { visibleMessages, reactionsByMessageId } = useMemo(() => {
     const idByExternalId = new Map<string, string>();
@@ -98,8 +115,7 @@ export function ChatWindow() {
     // messages vem em ordem crescente, então uma remoção posterior sobrepõe a reação anterior.
     for (const m of messages) {
       if (m.content_type !== 'reaction') continue;
-      const meta = m.metadata as { reaction?: { message_id?: string }; mid?: string } | null;
-      const targetExternalId = meta?.reaction?.message_id ?? meta?.mid;
+      const targetExternalId = m.reaction_meta?.message_id ?? m.reaction_mid ?? undefined;
       const targetId = targetExternalId ? idByExternalId.get(targetExternalId) : undefined;
       // Alvo fora desta conversa (ou antigo demais): mantém o balão solto em vez de sumir com ele.
       if (!targetId) continue;
@@ -247,6 +263,18 @@ export function ChatWindow() {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 overscroll-behavior-contain"
       >
+        {hasOlder && (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={handleLoadOlder}
+              disabled={loadingOlder}
+              className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10 disabled:opacity-60"
+            >
+              {loadingOlder ? 'Carregando…' : 'Carregar mensagens anteriores'}
+            </button>
+          </div>
+        )}
         {visibleMessages.map((message, i) => (
           <MessageBubble
             key={message.id}
