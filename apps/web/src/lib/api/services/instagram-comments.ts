@@ -14,6 +14,7 @@ import { findOrCreateConversation, updateConversation } from './conversation';
 import { createMessage, getMessageByExternalId } from './message';
 import { replyToInstagramComment, sendInstagramPrivateReply } from './instagram';
 import { marcarLinks, slugAutor } from '../rastreio-links';
+import { agendarFollowup } from './instagram-followup';
 
 export interface InstagramCommentEvent {
   id: string;
@@ -37,6 +38,8 @@ export interface RegraComentario {
   mensagem_direct: string;
   resposta_publica: string | null;
   respostas_publicas: string[] | null;
+  mensagem_followup: string | null;
+  followup_minutos: number | null;
 }
 
 /** Variações válidas da regra (a coluna antiga vale como fallback). */
@@ -106,7 +109,7 @@ export async function processInstagramComment(
 
   const { data: regras } = await supabaseAdmin
     .from('instagram_comment_rules')
-    .select('id, nome, palavras, media_id, mensagem_direct, resposta_publica, respostas_publicas')
+    .select('id, nome, palavras, media_id, mensagem_direct, resposta_publica, respostas_publicas, mensagem_followup, followup_minutos')
     .eq('channel_id', canal.id)
     .eq('ativo', true);
   const achado = escolherRegra((regras ?? []) as RegraComentario[], evento.text, evento.media?.id);
@@ -266,6 +269,8 @@ export async function processInstagramComment(
   await atualizar({
     status: 'sent',
     error: null,
+    // Agenda a oferta; quem responder antes vira 'skipped' na hora do envio.
+    followup_em: agendarFollowup(regra),
     contact_id: contactId,
     conversation_id: conversationId,
     public_reply_id: publicReplyId,

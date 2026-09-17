@@ -47,6 +47,19 @@ export function lerRegra(body: Record<string, unknown>, parcial = false) {
     out.resposta_publica = pub || null;
     out.respostas_publicas = pub ? [pub] : [];
   }
+  if ('mensagem_followup' in body) {
+    const msg = String(body.mensagem_followup ?? '').trim();
+    if (msg.length > 1000) return { erro: 'A segunda mensagem passa de 1.000 caracteres.' };
+    out.mensagem_followup = msg || null;
+  }
+  if ('followup_minutos' in body) {
+    const min = Number(body.followup_minutos);
+    // A janela de mensagem do Instagram é de 24h a partir da última interação.
+    if (!Number.isFinite(min) || min < 1 || min > 1380) {
+      return { erro: 'O intervalo da segunda mensagem deve ficar entre 1 e 1.380 minutos (23 horas).' };
+    }
+    out.followup_minutos = Math.round(min);
+  }
   if ('media_id' in body) out.media_id = body.media_id ? String(body.media_id) : null;
   if ('ativo' in body) out.ativo = Boolean(body.ativo);
   if ('channel_id' in body && body.channel_id) out.channel_id = String(body.channel_id);
