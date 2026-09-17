@@ -331,9 +331,33 @@ async function processWhatsAppMessage(
       unreadCount: (conversation.unread_count || 0) + 1,
     });
 
-    // IA: se piloto ativo e mensagem é texto, IA responde direto (ou classifica + escala)
+    // Automação por palavra-chave: quem chega pela página com a frase pronta
+    // ("quero o edital verticalizado") recebe o material na hora. Quando ela
+    // responde, a IA não entra na mesma mensagem — senão saem duas respostas.
     const isTextWithBody = normalized.contentType === 'text' && normalized.body?.trim();
-    if (!isTextWithBody) {
+    let respondidoPorAutomacao = false;
+    if (isTextWithBody) {
+      try {
+        const { responderAutomaticoWhatsapp } = await import('../services/whatsapp-automacoes');
+        respondidoPorAutomacao = await responderAutomaticoWhatsapp({
+          channelId,
+          accessToken,
+          phoneNumberId: webhookValue?.metadata?.phone_number_id,
+          conversationId: conversation.id,
+          contactId: contactRecord.id,
+          telefone: contactRecord.phone || normalized.contactExternalId || '',
+          texto: normalized.body ?? '',
+        });
+      } catch (err) {
+        console.error('[WhatsApp Webhook] Automação por palavra-chave:', err);
+      }
+    }
+
+    if (respondidoPorAutomacao) {
+      console.log('[WhatsApp Webhook] IA não acionada: automação por palavra-chave já respondeu', {
+        conversationId: conversation.id,
+      });
+    } else if (!isTextWithBody) {
       console.log('[WhatsApp Webhook] IA não acionada: mensagem não é texto ou body vazio', {
         contentType: normalized.contentType,
         bodyLength: normalized.body?.length ?? 0,
