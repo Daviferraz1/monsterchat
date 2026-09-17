@@ -12,6 +12,8 @@ interface Regra {
   mensagem_direct: string;
   resposta_publica: string | null;
   respostas_publicas: string[] | null;
+  mensagem_followup: string | null;
+  followup_minutos: number | null;
   ativo: boolean;
   enviados: number;
   falhas: number;
@@ -35,6 +37,8 @@ interface Form {
   media_id: string | null;
   mensagem_direct: string;
   respostas_publicas: string[];
+  mensagem_followup: string;
+  followup_minutos: number;
 }
 
 /** Variações prontas: uma é sorteada a cada comentário, sem repetir a anterior. */
@@ -53,6 +57,8 @@ const VAZIO: Form = {
   media_id: null,
   mensagem_direct: '',
   respostas_publicas: SUGESTOES.slice(0, 4),
+  mensagem_followup: '',
+  followup_minutos: 60,
 };
 
 function variacoesDa(r: Regra): string[] {
@@ -106,6 +112,8 @@ export default function AutomacaoInstagramPage() {
         media_id: form.media_id,
         mensagem_direct: form.mensagem_direct,
         respostas_publicas: form.respostas_publicas.map((t) => t.trim()).filter(Boolean),
+        mensagem_followup: form.mensagem_followup.trim(),
+        followup_minutos: form.followup_minutos,
       };
       const r = await fetch(form.id ? `/api/instagram/comment-rules/${form.id}` : '/api/instagram/comment-rules', {
         method: form.id ? 'PATCH' : 'POST',
@@ -241,6 +249,8 @@ export default function AutomacaoInstagramPage() {
                           media_id: r.media_id,
                           mensagem_direct: r.mensagem_direct,
                           respostas_publicas: variacoesDa(r),
+                          mensagem_followup: r.mensagem_followup ?? '',
+                          followup_minutos: r.followup_minutos ?? 60,
                         })
                       }
                       className="text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 hover:bg-gray-50 inline-flex items-center gap-1"
@@ -340,6 +350,36 @@ export default function AutomacaoInstagramPage() {
               <span className="text-xs text-gray-500 tabular-nums">
                 {form.mensagem_direct.length}/1000 · links da Monster e da Fagenius ganham UTM automaticamente
               </span>
+            </label>
+
+            <label className="block text-sm">
+              <span className="font-medium text-gray-800">Segunda mensagem: a oferta (opcional)</span>
+              <p className="text-xs text-gray-500 mb-1">
+                Enviada só para quem recebeu o material e não respondeu. O Instagram só aceita
+                mensagem até 24 h depois da interação da pessoa.
+              </p>
+              <textarea
+                id="regra-followup"
+                value={form.mensagem_followup}
+                onChange={(e) => setForm({ ...form, mensagem_followup: e.target.value })}
+                rows={3}
+                maxLength={1000}
+                placeholder="Ex.: Conseguiu baixar o edital? Se quiser treinar no estilo da banca, o kit de simulados sai por R$ 37: <link>"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              />
+            </label>
+
+            <label className="block text-sm">
+              <span className="font-medium text-gray-800">Enviar a oferta depois de (minutos)</span>
+              <input
+                id="regra-followup-minutos"
+                type="number"
+                min={1}
+                max={1380}
+                value={form.followup_minutos}
+                onChange={(e) => setForm({ ...form, followup_minutos: Number(e.target.value) })}
+                className="mt-1 w-32 rounded-lg border border-gray-300 px-3 py-2"
+              />
             </label>
 
             <fieldset className="text-sm">

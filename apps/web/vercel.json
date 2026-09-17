@@ -15,6 +15,10 @@
     {
       "path": "/api/instagram/cron/refresh-token",
       "schedule": "0 4 * * 1"
+    },
+    {
+      "path": "/api/instagram/cron/followup",
+      "schedule": "0 * * * *"
     }
   ]
 }

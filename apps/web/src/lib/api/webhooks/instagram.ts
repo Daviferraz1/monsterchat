@@ -10,6 +10,7 @@ import { getInstagramUserProfile } from '../services/instagram';
 import { extractEmailFromText } from '../utils';
 import { supabaseAdmin } from '../supabase';
 import { processInstagramComment, type InstagramCommentEvent } from '../services/instagram-comments';
+import { enviarFollowupsPendentes } from '../services/instagram-followup';
 
 interface InstagramWebhookEntry {
   id: string;
@@ -64,6 +65,13 @@ interface UnifiedInboundMessage {
 
 export async function handleInstagramWebhook(body: unknown) {
   console.log('[Instagram Webhook] Received:', JSON.stringify(body, null, 2));
+
+  // De carona no movimento do canal: a fila da segunda mensagem anda mesmo se o
+  // cron de hora em hora atrasar ou não rodar. Falha aqui não pode derrubar o
+  // processamento do evento que chegou.
+  enviarFollowupsPendentes(10).catch((e) =>
+    console.error('[Instagram Webhook] Falha ao processar follow-ups:', e)
+  );
 
   const webhookBody = body as { entry?: InstagramWebhookEntry[] };
   if (!webhookBody.entry || webhookBody.entry.length === 0) {
