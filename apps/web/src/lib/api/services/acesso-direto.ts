@@ -23,7 +23,7 @@ import { sendWhatsAppText } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
 
-export type OrigemLink = 'boas_vindas' | 'atendente' | 'ia';
+export type OrigemLink = 'boas_vindas' | 'atendente' | 'ia' | 'onboarding';
 
 /** Para onde o magic link manda depois de validar. Precisa estar na allow-list do Auth da plataforma. */
 const REDIRECT_PLATAFORMA = 'https://www.monsterstudy.com.br/';
