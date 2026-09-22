@@ -29,6 +29,7 @@
  * Se a pessoa responde, a janela abre e o atendimento segue normal.
  */
 import { supabaseAdmin } from '../supabase';
+import { lerTudo } from '../paginado';
 import { sendWhatsAppTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
@@ -195,14 +196,20 @@ async function ehParcelaDeAssinatura(transactionId: string | null): Promise<bool
  */
 async function primeirasCompras(dias: number): Promise<Map<string, number>> {
   const desde = new Date(Date.now() - dias * 86400_000).toISOString();
-  const { data } = await supabaseAdmin
-    .from('guru_sales')
-    .select('contact_id, product_names, status, sold_at')
-    .eq('status', 'approved')
-    .gte('sold_at', desde)
-    .limit(20000);
+  // Paginado, e não `.limit()`: o PostgREST corta em 1.000 linhas e devolveria
+  // só as compras mais antigas da janela — com isso toda recompra recente passa
+  // por primeira compra, e um aluno de meses recebe "bem-vindo". Ver `lerTudo`.
+  const data = await lerTudo<Pick<LinhaVenda, 'contact_id' | 'product_names' | 'sold_at'>>((de, ate) =>
+    supabaseAdmin
+      .from('guru_sales')
+      .select('contact_id, product_names, status, sold_at')
+      .eq('status', 'approved')
+      .gte('sold_at', desde)
+      .order('sold_at', { ascending: true })
+      .range(de, ate)
+  );
   const primeira = new Map<string, number>();
-  for (const linha of (data ?? []) as Array<Pick<LinhaVenda, 'contact_id' | 'product_names' | 'sold_at'>>) {
+  for (const linha of data) {
     if (!linha.contact_id) continue;
     const k = chaveCompra(linha.contact_id, linha.product_names);
     const t = new Date(linha.sold_at).getTime();
@@ -240,19 +247,18 @@ async function lerConfig(): Promise<Config> {
 
 async function lerLog(janelaDias: number, apenasTransacao?: string): Promise<LinhaVenda[]> {
   const desde = new Date(Date.now() - janelaDias * 86400_000).toISOString();
-  let consulta = supabaseAdmin
-    .from('guru_sales')
-    .select(
-      'transaction_id, status, sold_at, created_at, contact_id, contact_name, contact_phone, contact_email, product_names, payment_method'
-    )
-    .order('created_at', { ascending: true })
-    .limit(5000);
-  consulta = apenasTransacao
-    ? consulta.eq('transaction_id', apenasTransacao)
-    : consulta.gte('created_at', desde);
-  const { data, error } = await consulta;
-  if (error) throw error;
-  return (data ?? []) as LinhaVenda[];
+  return lerTudo<LinhaVenda>((de, ate) => {
+    const consulta = supabaseAdmin
+      .from('guru_sales')
+      .select(
+        'transaction_id, status, sold_at, created_at, contact_id, contact_name, contact_phone, contact_email, product_names, payment_method'
+      )
+      .order('created_at', { ascending: true })
+      .range(de, ate);
+    return apenasTransacao
+      ? consulta.eq('transaction_id', apenasTransacao)
+      : consulta.gte('created_at', desde);
+  });
 }
 
 /**

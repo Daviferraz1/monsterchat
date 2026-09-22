@@ -143,6 +143,38 @@ select motivo, count(*) from recuperacao_envios
 where status = 'skipped' group by 1 order by 2 desc;
 ```
 
+Os motivos são `ja_comprou`, `parcela_sem_template`, `parcela_abandonada` e
+`sem_template`.
+
+### O que o primeiro disparo real ensinou (22/09/2026)
+
+Saiu às 15:20: **15 enviadas** (11 parcelas em atraso, 4 cobranças novas), 3
+falhas, 50 puladas. As 15 estavam certas — conferidas uma a uma contra o
+`invoice.type` da Guru. Mas duas coisas quebradas só apareceram aqui:
+
+1. **O filtro de pedido duplicado não filtrava nada.** `historicoDeCompras`
+   pedia `.limit(20000)` e o PostgREST devolvia 1.000 — de 6.673 vendas
+   aprovadas, e as mais antigas, porque a consulta não tinha `order`. O filtro
+   rodava e nunca batia em ninguém: zero `ja_comprou` num disparo que tinha 19
+   duplicados. Ninguém recebeu mensagem errada por **coincidência** — todo
+   duplicado era checkout abandonado, e o `template_abandonado` ainda não estava
+   configurado. No dia em que ele for configurado, sem a correção, 19 pessoas
+   receberiam "sua matrícula ficou pendente" já sendo alunas. Corrigido com
+   `lerTudo` (`lib/api/paginado.ts`), que pagina em vez de confiar no `.limit()`.
+
+2. **Parcela de assinatura abandonada quebrava o envio.** O sufixo do botão ia
+   como `undefined` sempre que a venda era `abandoned` — mas uma parcela
+   abandonada usa o `parcela_em_atraso`, que TEM botão, e a Meta recusa com
+   `#131008` ("Button at index 0 of type Url requires a parameter"). Foram as 3
+   falhas. Agora essas são puladas com `parcela_abandonada`: a fatura de uma
+   transação abandonada abre com o carimbo "Abandonada" e nenhuma forma de
+   pagar, então não existe link honesto para mandar.
+
+Antes disso, as execuções das 13:20 e 14:20 responderam 200 em 30ms sem mandar
+nada: o Next cacheava a resposta do `recuperacao_config` e a régua continuava
+lendo `ativo = false` depois de ligada. Resolvido no `supabaseAdmin`
+(`cache: 'no-store'`).
+
 ### Duas regras da Meta que custaram uma rejeição cada
 
 1. **Variável não pode abrir nem fechar o corpo.** O 2º lembrete começava com

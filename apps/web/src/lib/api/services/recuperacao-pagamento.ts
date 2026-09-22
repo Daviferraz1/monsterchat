@@ -21,6 +21,7 @@
  * retry, um deploy no meio — o segundo bate na constraint e desiste.
  */
 import { supabaseAdmin } from '../supabase';
+import { lerTudo } from '../paginado';
 import { sendWhatsAppTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
@@ -167,13 +168,19 @@ async function ehParcelaDeAssinatura(transactionId: string | null): Promise<bool
  */
 async function historicoDeCompras(dias: number): Promise<Set<string>> {
   const desde = new Date(Date.now() - dias * 86400_000).toISOString();
-  const { data } = await supabaseAdmin
-    .from('guru_sales')
-    .select('contact_id, product_names, status')
-    .eq('status', 'approved')
-    .gte('sold_at', desde)
-    .limit(20000);
-  return compradoresPorProduto((data ?? []) as LinhaVenda[]);
+  // Paginado, e não `.limit()`: o PostgREST corta toda resposta em 1.000 linhas,
+  // e este filtro só protege alguém se enxergar TODAS as compras aprovadas. Com
+  // `.limit(20000)` ele via 1.000 de 6.673 e não batia em ninguém. Ver `lerTudo`.
+  const linhas = await lerTudo<LinhaVenda>((de, ate) =>
+    supabaseAdmin
+      .from('guru_sales')
+      .select('contact_id, product_names, status')
+      .eq('status', 'approved')
+      .gte('sold_at', desde)
+      .order('sold_at', { ascending: true })
+      .range(de, ate)
+  );
+  return compradoresPorProduto(linhas);
 }
 
 /** 1 = primeiro lembrete, 2 = segundo, 0 = ainda cedo (ou tarde demais). */
@@ -215,22 +222,27 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
   }
 
   const desde = new Date(Date.now() - cfg.janela_dias * 86400_000).toISOString();
-  const { data: linhas, error } = await supabaseAdmin
-    .from('guru_sales')
-    .select(
-      'transaction_id, status, sold_at, created_at, contact_id, contact_name, contact_phone, product_names, payment_method, payment_total'
-    )
-    .gte('sold_at', desde)
-    .order('created_at', { ascending: true })
-    .limit(5000);
-
-  if (error) {
-    console.error('[Recuperação] falha ao ler guru_sales:', error);
+  let linhas: LinhaVenda[];
+  try {
+    // Paginado: a fila precisa da janela inteira. Uma leitura truncada não erra
+    // mandando demais — erra calando, e calar não aparece em lugar nenhum.
+    linhas = await lerTudo<LinhaVenda>((de, ate) =>
+      supabaseAdmin
+        .from('guru_sales')
+        .select(
+          'transaction_id, status, sold_at, created_at, contact_id, contact_name, contact_phone, product_names, payment_method, payment_total'
+        )
+        .gte('sold_at', desde)
+        .order('created_at', { ascending: true })
+        .range(de, ate)
+    );
+  } catch (erro) {
+    console.error('[Recuperação] falha ao ler guru_sales:', erro);
     return { ...vazio, motivo: 'falha ao ler as vendas' };
   }
 
   const ignorados = (cfg.produtos_ignorados || []).map((p) => p.toLowerCase());
-  const pendentes = pendentesDoLog((linhas ?? []) as LinhaVenda[]).filter((p) => {
+  const pendentes = pendentesDoLog(linhas).filter((p) => {
     if (!p.contact_id || !p.contact_phone) return false;
     const nome = (p.product_names || '').toLowerCase();
     return !ignorados.some((i) => i && nome.includes(i));
@@ -298,9 +310,22 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     const parcela = await ehParcelaDeAssinatura(venda.transaction_id);
 
     let template: string | null;
+    // `true` só para o template que NÃO tem botão de link (o de abandonado). É o
+    // template que manda, não o status da venda: uma parcela de assinatura pode
+    // estar `abandoned` e mesmo assim vai pelo texto de parcela, que TEM botão —
+    // mandar sem o parâmetro dá #131008 e a mensagem não sai. Aconteceu com 3
+    // cobranças no primeiro disparo, em 22/09/2026.
+    let semBotao = false;
     if (parcela === true) {
       if (!cfg.template_parcela) {
         await marcarPulado('parcela_sem_template');
+        continue;
+      }
+      if (abandonado) {
+        // Parcela abandonada: a fatura abre com o carimbo "Abandonada" e nenhuma
+        // forma de pagar (conferido na página em 22/09/2026). Não existe link
+        // honesto para mandar, então esta fica de fora até haver um.
+        await marcarPulado('parcela_abandonada');
         continue;
       }
       template = cfg.template_parcela;
@@ -312,9 +337,12 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     } else {
       // O segundo lembrete tem texto próprio: repetir a mesma mensagem três
       // dias depois lê como robô quebrado. Sem ele, cai no da etapa 1.
-      template = abandonado
-        ? cfg.template_abandonado
-        : (etapa === 2 && cfg.template_nome_etapa2) || cfg.template_nome;
+      if (abandonado) {
+        template = cfg.template_abandonado;
+        semBotao = true;
+      } else {
+        template = (etapa === 2 && cfg.template_nome_etapa2) || cfg.template_nome;
+      }
     }
 
     if (!template) {
@@ -335,7 +363,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
           valorBR(venda.payment_total),
         ],
         // A fatura mora em <link_base><transaction_id>; o template guarda a base.
-        botaoUrlSufixo: abandonado ? undefined : venda.transaction_id || undefined,
+        botaoUrlSufixo: semBotao ? undefined : venda.transaction_id || undefined,
       });
 
       const conversa = await findOrCreateConversation({
@@ -432,14 +460,16 @@ export async function simularRecuperacoes(): Promise<{
   }) as Config;
 
   const desde = new Date(Date.now() - cfg.janela_dias * 86400_000).toISOString();
-  const { data: linhas } = await supabaseAdmin
-    .from('guru_sales')
-    .select(
-      'transaction_id, status, sold_at, created_at, contact_id, contact_name, contact_phone, product_names, payment_method, payment_total'
-    )
-    .gte('sold_at', desde)
-    .order('created_at', { ascending: true })
-    .limit(5000);
+  const linhas = await lerTudo<LinhaVenda>((de, ate) =>
+    supabaseAdmin
+      .from('guru_sales')
+      .select(
+        'transaction_id, status, sold_at, created_at, contact_id, contact_name, contact_phone, product_names, payment_method, payment_total'
+      )
+      .gte('sold_at', desde)
+      .order('created_at', { ascending: true })
+      .range(de, ate)
+  );
 
   const { data: jaEnviados } = await supabaseAdmin
     .from('recuperacao_envios')
@@ -450,7 +480,7 @@ export async function simularRecuperacoes(): Promise<{
   // histórico. Uma prévia calculada de outro jeito não serve para decidir.
   const jaComprou = await historicoDeCompras(cfg.historico_dias ?? 365);
 
-  const candidatos = pendentesDoLog((linhas ?? []) as LinhaVenda[])
+  const candidatos = pendentesDoLog(linhas)
     .filter((p) => p.contact_id && p.contact_phone)
     .map((p) => {
       const horas = (Date.now() - new Date(p.sold_at).getTime()) / 3600_000;
