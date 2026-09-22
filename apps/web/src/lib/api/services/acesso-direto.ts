@@ -53,21 +53,28 @@ async function linkBase(): Promise<string> {
   return (base || 'https://chatmonster.monsterconcursos.com.br/a/').replace(/\/?$/, '/');
 }
 
-/** A conta existe na plataforma? Consulta a tabela User do 2º Supabase pelo e-mail. */
-export async function contaExiste(email: string): Promise<boolean | null> {
+/**
+ * A conta existe na plataforma? Consulta a tabela User do 2º Supabase pelo e-mail.
+ * `null` = não deu para saber; o motivo vai em `erro`, porque "falhou" sem o
+ * código HTTP não diz se a chave está errada ou a plataforma caiu.
+ */
+export async function contaExiste(email: string): Promise<{ existe: boolean | null; erro?: string }> {
   const base = apiEnv.PLATFORM_SUPABASE_URL?.replace(/\/$/, '');
   const key = apiEnv.PLATFORM_SUPABASE_SERVICE_KEY;
-  if (!base || !key) return null;
+  if (!base || !key) return { existe: null, erro: 'PLATFORM_SUPABASE_* não configurados' };
   try {
     const res = await fetch(`${base}/rest/v1/User?email=ilike.${encodeURIComponent(email)}&select=id&limit=1`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       cache: 'no-store',
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const corpo = (await res.text().catch(() => '')).slice(0, 160);
+      return { existe: null, erro: `User: HTTP ${res.status} ${corpo}` };
+    }
     const rows = (await res.json()) as unknown[];
-    return rows.length > 0;
-  } catch {
-    return null;
+    return { existe: rows.length > 0 };
+  } catch (err) {
+    return { existe: null, erro: `User: ${err instanceof Error ? err.message : 'erro de rede'}` };
   }
 }
 
@@ -148,12 +155,12 @@ export async function resolverLink(codigo: string): Promise<ResultadoClique> {
   // Conferir a conta ANTES de pedir o link: o `generate_link` de magiclink CRIA
   // o usuário quando o e-mail não existe (visto no teste de 22/09/2026). Um
   // link de acesso não pode virar um cadastro vazio na plataforma.
-  const existe = await contaExiste(link.email);
-  if (existe === null) {
-    await registrar({ ultimo_erro: 'falha ao consultar a plataforma (tabela User)' });
+  const conta = await contaExiste(link.email);
+  if (conta.existe === null) {
+    await registrar({ ultimo_erro: (conta.erro || 'falha ao consultar a plataforma').slice(0, 300) });
     return { ok: false, motivo: 'plataforma_indisponivel' };
   }
-  if (!existe) {
+  if (!conta.existe) {
     await registrar({ ultimo_erro: 'sem conta na plataforma' });
     return { ok: false, motivo: 'sem_conta' };
   }
@@ -205,8 +212,11 @@ export async function enviarLinkNaConversa(params: {
   const telefone = contato.phone || contato.external_id;
   if (!telefone) return { ok: false, message: 'Contato sem telefone de WhatsApp.' };
 
-  const existe = await contaExiste(contato.email);
-  if (existe === false) {
+  const conta = await contaExiste(contato.email);
+  if (conta.existe === null) {
+    return { ok: false, message: `Não consegui consultar a plataforma agora (${conta.erro || 'erro'}). Tente de novo em instantes.` };
+  }
+  if (conta.existe === false) {
     return { ok: false, message: `Não há conta na plataforma para ${contato.email}. Confira o e-mail da compra ou use "Liberar acesso".` };
   }
 
