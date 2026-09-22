@@ -59,27 +59,36 @@ Exemplos das variáveis: `{{1}}` Danilson · `{{2}}` Tecnólogo em Gestão Públ
 #### 2º lembrete — `pagamento_pendente_final`
 
 ```
-{{1}}, sua vaga no {{2}} continua reservada, mas o prazo do pagamento de R$ {{3}} está acabando.
+Oi, {{1}}! O pagamento de R$ {{3}} da sua matrícula no {{2}} continua pendente e o prazo está acabando.
 
-O link abaixo continua valendo. Se mudou de ideia, é só avisar — a gente encerra e não te incomoda mais.
+Você pode concluir pelo link abaixo. Se preferir outra forma de pagamento ou quiser cancelar, responda aqui.
 ```
 
-Exemplos das variáveis: os mesmos. Mesmos dois botões, com a resposta rápida
-escrita como **Mudei de ideia**.
+Exemplos das variáveis: os mesmos. Mesmo botão de URL dinâmica.
 
 #### Checkout abandonado — `matricula_abandonada`
 
 Sem link: aqui a pessoa nunca chegou a gerar cobrança.
 
 ```
-Oi, {{1}}! Vi que você começou a matrícula no {{2}} e não chegou a concluir.
+Oi, {{1}}! Sua matrícula no {{2}} ficou incompleta: o pagamento de R$ {{3}} não chegou a ser gerado.
 
-Se ficou alguma dúvida sobre o curso ou sobre o pagamento de R$ {{3}}, responda aqui que a gente te ajuda a finalizar.
+Se precisar de ajuda para concluir ou quiser outra forma de pagamento, responda aqui.
 ```
 
-Exemplos das variáveis: os mesmos.
+Exemplos das variáveis: os mesmos. Sem botões.
 
-Botão de resposta rápida: **Quero finalizar a matrícula**
+### Duas regras da Meta que custaram uma rejeição cada
+
+1. **Variável não pode abrir nem fechar o corpo.** O 2º lembrete começava com
+   `{{1}}, sua vaga…` e o editor recusou: "As variáveis não podem estar no
+   início ou no fim do modelo". Por isso todos começam com "Oi,".
+2. **O classificador da Meta reclassifica texto persuasivo como MARKETING.** A
+   primeira versão do 2º lembrete ("sua vaga continua reservada", "se mudou de
+   ideia, é só avisar") recebeu o aviso "A categoria não corresponde — este
+   modelo será rejeitado". Reescrito em linguagem transacional (o que está
+   pendente, quanto é, como concluir), passou. Vale a regra: descreva a
+   transação, não convença.
 
 ### Por que o texto é esse
 
@@ -89,9 +98,8 @@ Botão de resposta rápida: **Quero finalizar a matrícula**
   o sistema não viu.
 - **Nenhum desconto.** Além de a Meta reclassificar para MARKETING (mais caro e
   com mais recusa), quem ia pagar o preço cheio aprende a esperar o lembrete.
-- **A saída explícita no 2º** ("se mudou de ideia, é só avisar") existe para
-  proteger o número: quem não quer responde em vez de bloquear, e bloqueio é o
-  que derruba a qualidade da linha no WhatsApp.
+- **A opção de cancelar** no 2º lembrete protege o número: quem não quer mais
+  responde em vez de bloquear, e bloqueio é o que derruba a qualidade da linha.
 - **Os botões** fazem a pessoa responder com um toque — e a resposta é o que abre
   a janela de 24h para a equipe conversar em texto livre.
 
