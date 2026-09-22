@@ -91,6 +91,108 @@ export interface WhatsAppSendTemplateParams {
 }
 
 /**
+ * Um parâmetro de template não pode ter quebra de linha, tab nem 4 espaços
+ * seguidos: a Meta recusa com (#132000). A limpeza é feita aqui, não em quem
+ * chama — e é a MESMA usada para montar o texto que fica gravado na conversa,
+ * senão o inbox mostraria uma coisa e a pessoa teria lido outra.
+ */
+function limparParametro(v: string): string {
+  return (
+    (v ?? '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s{4,}/g, '   ')
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      .trim() || '-'
+  );
+}
+
+/**
+ * Corpo aprovado de um template, com `{{1}}`, `{{2}}`… ainda no lugar.
+ *
+ * A Meta é a dona do texto: o template é editado e aprovado lá, e uma cópia no
+ * código vira mentira na primeira revisão que alguém fizer pelo painel. Então o
+ * texto é buscado de lá, e guardado num cache de processo porque uma execução
+ * da régua manda dezenas de mensagens com dois ou três templates.
+ *
+ * Devolve `null` se não achar — quem chama continua o envio, que é o que
+ * importa, e grava o rótulo genérico.
+ */
+const corpoEmCache = new Map<string, string>();
+
+export async function corpoDoTemplate(opts: {
+  wabaId: string;
+  accessToken: string;
+  nome: string;
+  idioma?: string;
+}): Promise<string | null> {
+  const idioma = opts.idioma || 'pt_BR';
+  const chave = `${opts.wabaId}:${opts.nome}:${idioma}`;
+  const guardado = corpoEmCache.get(chave);
+  if (guardado !== undefined) return guardado;
+
+  try {
+    const url =
+      `https://graph.facebook.com/v21.0/${opts.wabaId}/message_templates` +
+      `?name=${encodeURIComponent(opts.nome)}&fields=name,language,components&limit=50`;
+    const resposta = await axios.get<{
+      data?: Array<{
+        name: string;
+        language: string;
+        components?: Array<{ type: string; text?: string }>;
+      }>;
+    }>(url, {
+      headers: { Authorization: `Bearer ${sanitizeTokenForHeader(opts.accessToken)}` },
+    });
+
+    const lista = resposta.data?.data ?? [];
+    // `name=` na Graph API filtra por prefixo, não por igualdade: pedir
+    // `pagamento_pendente` traz também `pagamento_pendente_final`.
+    const achado =
+      lista.find((t) => t.name === opts.nome && t.language === idioma) ??
+      lista.find((t) => t.name === opts.nome);
+    const corpo = achado?.components?.find((c) => c.type === 'BODY')?.text;
+    if (!corpo) return null;
+    corpoEmCache.set(chave, corpo);
+    return corpo;
+  } catch (err) {
+    console.error('[WhatsApp] falha ao ler o corpo do template:', opts.nome, err);
+    return null;
+  }
+}
+
+/** Troca `{{1}}`, `{{2}}`… pelos valores, do jeito que a Meta troca no envio. */
+export function aplicarParametros(corpo: string, parametros: string[]): string {
+  return corpo.replace(/\{\{(\d+)\}\}/g, (inteiro, n: string) => {
+    const valor = parametros[Number(n) - 1];
+    return valor === undefined ? inteiro : limparParametro(valor);
+  });
+}
+
+/**
+ * O texto que a pessoa vai ler, pronto para gravar na conversa.
+ *
+ * Sem isto o inbox guardava um rótulo ("🤖 Lembrete de pagamento") no lugar da
+ * mensagem, e quem abria a conversa para atender não tinha como saber o que
+ * havia sido dito.
+ */
+export async function textoDoTemplate(opts: {
+  wabaId?: string | null;
+  accessToken: string;
+  nome: string;
+  idioma?: string;
+  parametros?: string[];
+}): Promise<string | null> {
+  if (!opts.wabaId) return null;
+  const corpo = await corpoDoTemplate({
+    wabaId: opts.wabaId,
+    accessToken: opts.accessToken,
+    nome: opts.nome,
+    idioma: opts.idioma,
+  });
+  return corpo ? aplicarParametros(corpo, opts.parametros ?? []) : null;
+}
+
+/**
  * Envia um template aprovado.
  *
  * Existe porque texto livre só vale dentro da janela de 24h a partir da última
@@ -98,9 +200,6 @@ export interface WhatsAppSendTemplateParams {
  * pagamento, por exemplo — a Meta exige template e recusa o texto livre com
  * (#131047). Quando a pessoa responde ao template, a janela abre e a conversa
  * segue normal.
- *
- * Os parâmetros não podem ter quebra de linha, tab nem 4 espaços seguidos: a
- * Meta recusa com (#132000). A limpeza é feita aqui, não em quem chama.
  */
 export async function sendWhatsAppTemplate(params: WhatsAppSendTemplateParams) {
   const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
@@ -112,18 +211,11 @@ export async function sendWhatsAppTemplate(params: WhatsAppSendTemplateParams) {
     throw new Error('Template não informado.');
   }
 
-  const limpar = (v: string) =>
-    (v ?? '')
-      .replace(/[\r\n\t]+/g, ' ')
-      .replace(/\s{4,}/g, '   ')
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-      .trim() || '-';
-
   const componentes: Array<Record<string, unknown>> = [];
   if (params.parametros?.length) {
     componentes.push({
       type: 'body',
-      parameters: params.parametros.map((v) => ({ type: 'text', text: limpar(v) })),
+      parameters: params.parametros.map((v) => ({ type: 'text', text: limparParametro(v) })),
     });
   }
   if (params.botaoUrlSufixo) {
@@ -131,7 +223,7 @@ export async function sendWhatsAppTemplate(params: WhatsAppSendTemplateParams) {
       type: 'button',
       sub_type: 'url',
       index: String(params.botaoIndice ?? 0),
-      parameters: [{ type: 'text', text: limpar(params.botaoUrlSufixo) }],
+      parameters: [{ type: 'text', text: limparParametro(params.botaoUrlSufixo) }],
     });
   }
 

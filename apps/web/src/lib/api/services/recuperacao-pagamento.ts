@@ -22,7 +22,7 @@
  */
 import { supabaseAdmin } from '../supabase';
 import { lerTudo } from '../paginado';
-import { sendWhatsAppTemplate } from './whatsapp';
+import { sendWhatsAppTemplate, textoDoTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
 import { partesEmBrasilia } from '@/lib/timezone';
@@ -211,7 +211,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
 
   const { data: canal } = await supabaseAdmin
     .from('channels')
-    .select('id, external_id, access_token')
+    .select('id, external_id, access_token, business_account_id')
     .eq('type', 'whatsapp')
     .eq('is_active', true)
     .limit(1)
@@ -350,6 +350,12 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
       continue;
     }
 
+    const parametros = [
+      primeiroNome(venda.contact_name),
+      produtoCurto(venda.product_names),
+      valorBR(venda.payment_total),
+    ];
+
     try {
       const envio = await sendWhatsAppTemplate({
         phoneNumberId: canal.external_id,
@@ -357,11 +363,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
         to: venda.contact_phone!,
         template,
         idioma: cfg.template_idioma,
-        parametros: [
-          primeiroNome(venda.contact_name),
-          produtoCurto(venda.product_names),
-          valorBR(venda.payment_total),
-        ],
+        parametros,
         // A fatura mora em <link_base><transaction_id>; o template guarda a base.
         botaoUrlSufixo: semBotao ? undefined : venda.transaction_id || undefined,
       });
@@ -371,9 +373,21 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
         contactId: venda.contact_id!,
       });
       const externalId = envio.messages?.[0]?.id;
-      const preview = abandonado
+      const rotulo = abandonado
         ? `🤖 Matrícula não concluída (${etapa}ª mensagem)`
         : `🤖 Lembrete de pagamento (${etapa}ª mensagem)`;
+
+      // O que fica na conversa é o texto que a pessoa leu, não um rótulo: quem
+      // abre o inbox para atender precisa ver a mensagem, senão responde no
+      // escuro. O rótulo só entra se a Meta não devolver o corpo do template.
+      const texto = await textoDoTemplate({
+        wabaId: canal.business_account_id,
+        accessToken: canal.access_token,
+        nome: template,
+        idioma: cfg.template_idioma,
+        parametros,
+      });
+      const preview = texto ?? rotulo;
 
       await createMessage({
         conversationId: conversa.id,

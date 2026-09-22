@@ -30,7 +30,7 @@
  */
 import { supabaseAdmin } from '../supabase';
 import { lerTudo } from '../paginado';
-import { sendWhatsAppTemplate } from './whatsapp';
+import { sendWhatsAppTemplate, textoDoTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
 import { partesEmBrasilia } from '@/lib/timezone';
@@ -280,7 +280,7 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
 
   const { data: canal } = await supabaseAdmin
     .from('channels')
-    .select('id, external_id, access_token')
+    .select('id, external_id, access_token, business_account_id')
     .eq('type', 'whatsapp')
     .eq('is_active', true)
     .limit(1)
@@ -380,6 +380,11 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
       continue;
     }
 
+    const parametros =
+      tipo === 'acesso'
+        ? [primeiroNome(venda.contact_name), produtoCurto(venda.product_names), venda.contact_email || 'da compra']
+        : [primeiroNome(venda.contact_name), produtoCurto(venda.product_names)];
+
     try {
       const envio = await sendWhatsAppTemplate({
         phoneNumberId: canal.external_id,
@@ -387,17 +392,27 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
         to: venda.contact_phone!,
         template,
         idioma: cfg.template_idioma,
-        parametros:
-          tipo === 'acesso'
-            ? [primeiroNome(venda.contact_name), produtoCurto(venda.product_names), venda.contact_email || 'da compra']
-            : [primeiroNome(venda.contact_name), produtoCurto(venda.product_names)],
+        parametros,
         // O `pedido` leva a 2ª via do boleto; o `acesso` tem botão de URL fixa.
         botaoUrlSufixo: tipo === 'pedido' ? venda.transaction_id || undefined : undefined,
       });
 
       const conversa = await findOrCreateConversation({ channelId: canal.id, contactId: venda.contact_id! });
       const externalId = envio.messages?.[0]?.id;
-      const preview = tipo === 'acesso' ? '🤖 Boas-vindas: acesso liberado' : '🤖 Boas-vindas: pedido recebido (boleto)';
+      const rotulo =
+        tipo === 'acesso' ? '🤖 Boas-vindas: acesso liberado' : '🤖 Boas-vindas: pedido recebido (boleto)';
+
+      // Na conversa fica o texto que a pessoa leu, não um rótulo: quem abre o
+      // inbox para atender precisa ver a mensagem. O rótulo só entra se a Meta
+      // não devolver o corpo do template.
+      const texto = await textoDoTemplate({
+        wabaId: canal.business_account_id,
+        accessToken: canal.access_token,
+        nome: template,
+        idioma: cfg.template_idioma,
+        parametros,
+      });
+      const preview = texto ?? rotulo;
 
       await createMessage({
         conversationId: conversa.id,
