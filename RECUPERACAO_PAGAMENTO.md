@@ -86,10 +86,30 @@ pendente" está errado aqui: a matrícula existe há meses.
 ```
 Oi, {{1}}! A parcela de R$ {{3}} do seu curso {{2}} está em aberto.
 
-Você pode pagar pelo link abaixo. Se precisar trocar a forma de pagamento ou a data de vencimento, responda aqui.
+Você pode pagar pelo link abaixo. Se já pagou nos últimos dias, desconsidere: boleto e PIX levam até 3 dias úteis para constar no sistema.
+
+Para trocar a forma de pagamento ou a data de vencimento, responda aqui.
 ```
 
+Botão: **Pagar parcela**, URL dinâmica, igual ao do 1º lembrete.
+
 Exemplos das variáveis: os mesmos. Mesmo botão de URL dinâmica do 1º lembrete.
+
+### A ressalva de quem já pagou
+
+Boleto e PIX levam **até 3 dias úteis** para compensar, e a régua dispara em 20h.
+Existe uma janela real em que a pessoa já pagou e o sistema ainda não sabe —
+os filtros não cobrem isso, porque do lado de cá a cobrança ainda consta em
+aberto.
+
+Por isso todo template deve terminar com a ressalva:
+
+> Se já pagou nos últimos dias, desconsidere: boleto e PIX levam até 3 dias
+> úteis para constar no sistema.
+
+Já está no `parcela_em_atraso`. **Falta nos outros três** — `pagamento_pendente`
+e `matricula_abandonada` estão aprovados e editá-los os devolve para análise;
+`pagamento_pendente_final` só pode ser editado depois que sair de análise.
 
 ### Quem a régua NÃO aborda, e por quê
 
