@@ -33,6 +33,7 @@ import { lerTudo } from '../paginado';
 import { sendWhatsAppTemplate, textoDoTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
+import { criarLinkAcesso } from './acesso-direto';
 import { partesEmBrasilia } from '@/lib/timezone';
 
 export type TipoBoasVindas = 'acesso' | 'pedido';
@@ -62,6 +63,9 @@ interface Config {
   produtos_ignorados: string[];
   /** Só transações gravadas a partir daqui. Nulo = qualquer uma dentro da janela. */
   iniciado_em: string | null;
+  /** true = o botão da mensagem de acesso é o link direto /a/<codigo> (template com URL dinâmica). */
+  acesso_com_link: boolean;
+  link_acesso_validade_dias: number;
 }
 
 const CONFIG_PADRAO: Config = {
@@ -77,6 +81,8 @@ const CONFIG_PADRAO: Config = {
   historico_dias: 365,
   produtos_ignorados: ['Tecnologo', 'Tecnólogo', 'Sequencial', 'Direito', 'Alteração', 'Taxa'],
   iniciado_em: null,
+  acesso_com_link: false,
+  link_acesso_validade_dias: 7,
 };
 
 interface LinhaVenda {
@@ -385,6 +391,30 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
         ? [primeiroNome(venda.contact_name), produtoCurto(venda.product_names), venda.contact_email || 'da compra']
         : [primeiroNome(venda.contact_name), produtoCurto(venda.product_names)];
 
+    // O botão da mensagem de acesso pode ser o link direto: a pessoa toca e
+    // entra na plataforma sem procurar e-mail nem senha. O código é gerado
+    // aqui e resolvido só no clique (ver acesso-direto.ts).
+    let linkAcesso: string | null = null;
+    if (tipo === 'acesso' && cfg.acesso_com_link) {
+      if (!venda.contact_email) {
+        await pular('sem_email');
+        continue;
+      }
+      const link = await criarLinkAcesso({
+        email: venda.contact_email,
+        contactId: venda.contact_id,
+        origem: 'boas_vindas',
+        transactionId: venda.transaction_id,
+        validadeDias: cfg.link_acesso_validade_dias,
+      });
+      if (!link.ok) {
+        falhas++;
+        await atualizar({ status: 'failed', erro: link.message });
+        continue;
+      }
+      linkAcesso = link.codigo;
+    }
+
     try {
       const envio = await sendWhatsAppTemplate({
         phoneNumberId: canal.external_id,
@@ -393,8 +423,9 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
         template,
         idioma: cfg.template_idioma,
         parametros,
-        // O `pedido` leva a 2ª via do boleto; o `acesso` tem botão de URL fixa.
-        botaoUrlSufixo: tipo === 'pedido' ? venda.transaction_id || undefined : undefined,
+        // O `pedido` leva a 2ª via do boleto; o `acesso` leva o link direto ou,
+        // sem `acesso_com_link`, um botão de URL fixa no próprio template.
+        botaoUrlSufixo: tipo === 'pedido' ? venda.transaction_id || undefined : linkAcesso || undefined,
       });
 
       const conversa = await findOrCreateConversation({ channelId: canal.id, contactId: venda.contact_id! });
@@ -431,6 +462,7 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
           email: venda.contact_email,
           metodo: venda.payment_method,
           link: tipo === 'pedido' ? `${cfg.link_base}${venda.transaction_id}` : null,
+          link_acesso: linkAcesso,
         },
       });
       await updateConversation(conversa.id, {
