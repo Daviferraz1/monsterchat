@@ -25,15 +25,17 @@ segue normal, em texto livre, com a equipe ou com a IA.
 
 ## O que ligar, na ordem
 
-### 1. Criar o template na Meta
+### 1. Criar os dois templates na Meta
 
-Gerenciador do WhatsApp → **Modelos de mensagem** → Criar modelo.
+Gerenciador do WhatsApp → **Modelos de mensagem** → Criar modelo. São dois: o
+segundo lembrete tem texto próprio, porque repetir a mesma mensagem três dias
+depois lê como robô quebrado, e o momento é outro — a pergunta deixa de ser
+"você esqueceu?" e vira "ainda quer?".
 
-- **Nome:** `pagamento_pendente`
-- **Categoria:** Utilidade
-- **Idioma:** Português (BR)
+Em ambos: **Categoria** Utilidade · **Idioma** Português (BR) · sem cabeçalho e
+sem rodapé.
 
-**Corpo:**
+#### 1º lembrete — `pagamento_pendente`
 
 ```
 Oi, {{1}}! Sua matrícula no {{2}} ficou pendente: o pagamento de R$ {{3}} não foi concluído.
@@ -41,21 +43,36 @@ Oi, {{1}}! Sua matrícula no {{2}} ficou pendente: o pagamento de R$ {{3}} não 
 Se o prazo venceu ou você preferir outra forma de pagar, a gente gera um link novo agora mesmo. É só responder aqui.
 ```
 
-> "não foi concluído", e não "não foi confirmado", porque dois terços da fila são
-> **checkouts abandonados** — gente que chegou ao pagamento e fechou a página, sem
-> nunca gerar boleto. "Não confirmado" daria a entender que a pessoa pagou e o
-> sistema não viu.
+Exemplos das variáveis: `{{1}}` Danilson · `{{2}}` Tecnólogo em Gestão Pública ·
+`{{3}}` 197,00
 
-**Exemplos** (a Meta exige um valor de exemplo para cada variável):
-`{{1}}` Danilson · `{{2}}` Tecnólogo em Gestão Pública · `{{3}}` 197,00
+Botão de resposta rápida: **Quero concluir a matrícula**
 
-**Botão** (opcional, recomendado) — Resposta rápida: `Quero concluir a matrícula`.
-O botão é o que faz a pessoa responder com um toque; a resposta abre a janela de
-24h e a conversa cai na caixa de entrada como qualquer outra.
+#### 2º lembrete — `pagamento_pendente_final`
 
-> Não prometa desconto no template. Além de a Meta reclassificar para MARKETING
-> (mais caro e com mais recusa), quem ia pagar o preço cheio aprende a esperar o
-> lembrete.
+```
+{{1}}, sua vaga no {{2}} continua reservada, mas o prazo do pagamento de R$ {{3}} está acabando.
+
+Quer garantir? Responda aqui que a gente gera um link novo. Se mudou de ideia, é só avisar — a gente encerra e não te incomoda mais.
+```
+
+Exemplos das variáveis: os mesmos.
+
+Botões de resposta rápida: **Quero garantir minha vaga** e **Mudei de ideia**
+
+### Por que o texto é esse
+
+- **"não foi concluído"**, e não "não foi confirmado": dois terços da fila são
+  **checkouts abandonados** — gente que chegou ao pagamento e fechou a página,
+  sem nunca gerar boleto. "Não confirmado" daria a entender que a pessoa pagou e
+  o sistema não viu.
+- **Nenhum desconto.** Além de a Meta reclassificar para MARKETING (mais caro e
+  com mais recusa), quem ia pagar o preço cheio aprende a esperar o lembrete.
+- **A saída explícita no 2º** ("se mudou de ideia, é só avisar") existe para
+  proteger o número: quem não quer responde em vez de bloquear, e bloqueio é o
+  que derruba a qualidade da linha no WhatsApp.
+- **Os botões** fazem a pessoa responder com um toque — e a resposta é o que abre
+  a janela de 24h para a equipe conversar em texto livre.
 
 ### 2. Apontar a configuração para o template
 
@@ -64,9 +81,13 @@ Uma linha na tabela `recuperacao_config`:
 ```sql
 update recuperacao_config set
   template_nome = 'pagamento_pendente',
+  template_nome_etapa2 = 'pagamento_pendente_final',
   template_idioma = 'pt_BR',
   ativo = true;
 ```
+
+`template_nome_etapa2` nulo faz o segundo lembrete repetir o texto do primeiro —
+serve se só um template for aprovado.
 
 ### 3. Conferir a fila antes de ligar
 

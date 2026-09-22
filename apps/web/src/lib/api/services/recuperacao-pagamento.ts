@@ -39,6 +39,8 @@ export interface ResultadoRecuperacao {
 interface Config {
   ativo: boolean;
   template_nome: string | null;
+  /** Template do 2º lembrete. Nulo = repete o da etapa 1. */
+  template_nome_etapa2: string | null;
   template_idioma: string;
   etapa1_horas: number;
   etapa2_horas: number;
@@ -189,12 +191,16 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
       continue;
     }
 
+    // O segundo lembrete tem texto próprio: repetir a mesma mensagem três dias
+    // depois lê como robô quebrado. Sem template próprio, cai no da etapa 1.
+    const template = (etapa === 2 && cfg.template_nome_etapa2) || cfg.template_nome;
+
     try {
       const envio = await sendWhatsAppTemplate({
         phoneNumberId: canal.external_id,
         accessToken: canal.access_token,
         to: venda.contact_phone!,
-        template: cfg.template_nome,
+        template,
         idioma: cfg.template_idioma,
         parametros: [
           primeiroNome(venda.contact_name),
@@ -222,7 +228,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
           via: 'recuperacao_pagamento',
           etapa,
           transaction_id: venda.transaction_id,
-          template: cfg.template_nome,
+          template,
           produto: venda.product_names,
           valor: venda.payment_total,
           metodo: venda.payment_method,
