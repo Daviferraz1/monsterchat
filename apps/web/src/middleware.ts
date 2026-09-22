@@ -27,6 +27,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/ia/cron/', // qualquer cron (protegido por CRON_SECRET no próprio handler)
   '/api/tasks/cron/', // gerador de tarefas recorrentes (idem)
   '/api/instagram/cron/', // renovação do token do Instagram Login (idem)
+  '/api/pagamentos/cron/', // régua de recuperação de boleto e PIX (idem)
 ];
 
 function isPublicApi(pathname: string): boolean {

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   enviarRecuperacoesPendentes,
   simularRecuperacoes,
@@ -16,8 +16,18 @@ export const maxDuration = 60;
  * fechadas ele devolve o motivo e não manda nada.
  *
  * `?simular=1` mostra a fila sem enviar. É como conferir a régua antes de ligar.
+ *
+ * Protegida por CRON_SECRET no header, como os outros crons: o middleware libera
+ * o prefixo /api/pagamentos/cron/ justamente porque a checagem é aqui. Sem isso a
+ * rota levaria 401 do middleware e a régua nunca rodaria — em silêncio.
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization');
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   if (searchParams.get('simular')) {
     const fila = await simularRecuperacoes();
