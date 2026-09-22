@@ -137,6 +137,16 @@ A mensagem aparece na conversa do contato como qualquer outra, com
 5,3 em jun–set/2026) e por semana (~14). Ver
 `ceo/diagnosticos/2026-09-22_monsterchat_reclamacao_acesso.md`.
 
+## Um bug que apareceu no caminho
+
+Na simulação local, a configuração mudava no banco e a rota continuava lendo o
+valor antigo: o **Next 14 guarda no Data Cache as respostas GET do `fetch`**,
+inclusive as do PostgREST — e um `select` sem filtro variável tem sempre a
+mesma URL. `force-dynamic` na rota não bastou. O cliente `supabaseAdmin`
+(`lib/api/supabase.ts`) passou a usar `cache: 'no-store'` em toda chamada, o que
+vale também para a régua de recuperação: uma régua que não vê `ativo = false`
+não é aceitável.
+
 ## O que fica para depois
 
 - **Botão "enviar link de acesso"** no MonsterChat: o atendente informa o e-mail,

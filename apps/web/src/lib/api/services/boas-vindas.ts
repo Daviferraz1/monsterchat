@@ -115,9 +115,17 @@ function chaveCompra(contactId: string | null, produto: string | null): string {
   return `${contactId ?? ''}::${(produto ?? '').trim().toLowerCase()}`;
 }
 
+/** Sem acento e em minúsculas: "Alteração" tem de casar com "Alteraça~o" gravado decomposto. */
+function simplificar(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
 function produtoIgnorado(produto: string | null, ignorados: string[]): boolean {
-  const nome = (produto || '').toLowerCase();
-  return ignorados.some((i) => i && nome.includes(i.toLowerCase()));
+  const nome = simplificar(produto || '');
+  return ignorados.some((i) => i && nome.includes(simplificar(i)));
 }
 
 /**
@@ -440,6 +448,7 @@ export async function simularBoasVindas(): Promise<{
     pularPor: string | null;
   }>;
   enviaria: number;
+  config: Pick<Config, 'ativo' | 'iniciado_em' | 'janela_dias' | 'template_acesso' | 'template_pedido' | 'produtos_ignorados'>;
 }> {
   const cfg = await lerConfig();
   const linhas = await lerLog(cfg.janela_dias);
@@ -472,5 +481,17 @@ export async function simularBoasVindas(): Promise<{
       };
     });
 
-  return { candidatos, enviaria: candidatos.filter((c) => !c.pularPor).length };
+  return {
+    candidatos,
+    enviaria: candidatos.filter((c) => !c.pularPor).length,
+    // A configuração em vigor, para a prévia ser lida junto com as regras que a geraram.
+    config: {
+      ativo: cfg.ativo,
+      iniciado_em: cfg.iniciado_em,
+      janela_dias: cfg.janela_dias,
+      template_acesso: cfg.template_acesso,
+      template_pedido: cfg.template_pedido,
+      produtos_ignorados: cfg.produtos_ignorados,
+    },
+  };
 }
