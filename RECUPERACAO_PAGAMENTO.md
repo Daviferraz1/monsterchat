@@ -220,6 +220,8 @@ olhar essa lista uma vez antes de virar `ativo = true`.
 | **Teto** | 40 envios por execução, para um disparo em massa acidental não queimar o número |
 | **Janela** | Só cobranças dos últimos 7 dias. Lembrar de um boleto de 20 dias atrás é ruído |
 | **Repetição** | A unique `(transaction_id, etapa)` é reservada antes do envio: ninguém recebe o mesmo lembrete duas vezes, nem com dois crons simultâneos |
+| **Uma por pessoa** | Quem já recebeu um lembrete nas últimas 24h fica de fora, mesmo tendo outra cobrança pendente. Duas parcelas atrasadas não viram duas mensagens iguais |
+| **Parcela x matrícula** | A Guru é consultada em todo candidato (`invoice.type`). Ciclo de assinatura recebe o `parcela_em_atraso`; o histórico de compras (365 dias, não a janela da fila) separa pedido duplicado de compra nova |
 | **Quem pagou** | Sai da fila sozinho: o webhook da Guru grava a linha `approved` e a transação deixa de ser pendente |
 
 A mensagem enviada aparece na conversa do contato como qualquer outra, marcada

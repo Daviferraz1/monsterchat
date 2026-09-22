@@ -55,6 +55,8 @@ interface Config {
   hora_fim: number;
   max_por_execucao: number;
   janela_dias: number;
+  /** Janela do histórico de compras, bem maior que a da fila. */
+  historico_dias: number;
   produtos_ignorados: string[];
 }
 
@@ -155,6 +157,25 @@ async function ehParcelaDeAssinatura(transactionId: string | null): Promise<bool
   }
 }
 
+/**
+ * Quem já comprou o quê, numa janela BEM maior que a da fila.
+ *
+ * Usar a mesma janela de 7 dias da fila era um bug com consequência grave: quem
+ * paga a parcela 3 de 12 teve as anteriores aprovadas há 30 ou 60 dias, fora da
+ * janela — então a parcela atrasada dele era lida como matrícula nova e ele
+ * receberia "sua matrícula ficou pendente" depois de meses estudando.
+ */
+async function historicoDeCompras(dias: number): Promise<Set<string>> {
+  const desde = new Date(Date.now() - dias * 86400_000).toISOString();
+  const { data } = await supabaseAdmin
+    .from('guru_sales')
+    .select('contact_id, product_names, status')
+    .eq('status', 'approved')
+    .gte('sold_at', desde)
+    .limit(20000);
+  return compradoresPorProduto((data ?? []) as LinhaVenda[]);
+}
+
 /** 1 = primeiro lembrete, 2 = segundo, 0 = ainda cedo (ou tarde demais). */
 export function etapaDe(horas: number, cfg: Pick<Config, 'etapa1_horas' | 'etapa2_horas' | 'janela_dias'>): 0 | 1 | 2 {
   if (horas > cfg.janela_dias * 24) return 0;
@@ -215,10 +236,18 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     return !ignorados.some((i) => i && nome.includes(i));
   });
 
-  // Quem já comprou o mesmo produto. A janela é maior que a da fila porque o
-  // pagamento que "salvou" a compra pode ser de semanas antes — e uma parcela
-  // de assinatura do mês passado também conta como já comprado.
-  const jaComprou = compradoresPorProduto((linhas ?? []) as LinhaVenda[]);
+  const jaComprou = await historicoDeCompras(cfg.historico_dias);
+
+  // Uma pessoa pode ter duas cobranças pendentes ao mesmo tempo — duas parcelas
+  // atrasadas, por exemplo. Duas mensagens iguais no mesmo dia lê como robô
+  // travado, então quem já foi abordado nas últimas 24h fica de fora.
+  const ontem = new Date(Date.now() - 86400_000).toISOString();
+  const { data: recentes } = await supabaseAdmin
+    .from('recuperacao_envios')
+    .select('contact_id')
+    .eq('status', 'sent')
+    .gte('created_at', ontem);
+  const abordadoHoje = new Set((recentes ?? []).map((r) => r.contact_id).filter(Boolean));
 
   let enviados = 0;
   let falhas = 0;
@@ -230,6 +259,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     const horas = (Date.now() - new Date(venda.sold_at).getTime()) / 3600_000;
     const etapa = etapaDe(horas, cfg);
     if (etapa === 0) continue;
+    if (venda.contact_id && abordadoHoje.has(venda.contact_id)) continue;
 
     // Reserva primeiro: é a unique que serializa, não este if.
     const { error: reservaErro } = await supabaseAdmin.from('recuperacao_envios').insert({
@@ -262,23 +292,23 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     // "Abandonada" e nenhum botão. Vai por um template sem link — ou não vai.
     const abandonado = venda.status === 'abandoned';
 
-    // Já é aluno deste produto? Então ou isto é um pedido duplicado que ele
-    // abandonou antes de pagar pelo outro, ou é uma parcela em atraso. Nos dois
-    // casos o texto de "matrícula pendente" está errado.
+    // A Guru é perguntada SEMPRE, e primeiro: `invoice.type` é a única fonte que
+    // sabe se isto é parcela de assinatura. Depender do histórico para decidir
+    // isso é frágil — foi o que fez parcelas serem lidas como matrícula nova.
+    const parcela = await ehParcelaDeAssinatura(venda.transaction_id);
+
     let template: string | null;
-    if (jaComprou.has(chaveCompra(venda.contact_id, venda.product_names))) {
-      const parcela = await ehParcelaDeAssinatura(venda.transaction_id);
-      if (parcela !== true) {
-        // false = comprou de novo e pagou (pedido duplicado);
-        // null  = não deu para confirmar — na dúvida, não fala nada.
-        await marcarPulado('ja_comprou');
-        continue;
-      }
+    if (parcela === true) {
       if (!cfg.template_parcela) {
         await marcarPulado('parcela_sem_template');
         continue;
       }
       template = cfg.template_parcela;
+    } else if (jaComprou.has(chaveCompra(venda.contact_id, venda.product_names))) {
+      // Não é parcela e a pessoa já tem este produto pago: pedido duplicado.
+      // Se a consulta à Guru falhou (null), também cai aqui — e calar é certo.
+      await marcarPulado('ja_comprou');
+      continue;
     } else {
       // O segundo lembrete tem texto próprio: repetir a mesma mensagem três
       // dias depois lê como robô quebrado. Sem ele, cai no da etapa 1.
@@ -349,6 +379,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
         .eq('transaction_id', venda.transaction_id)
         .eq('etapa', etapa);
 
+      if (venda.contact_id) abordadoHoje.add(venda.contact_id);
       enviados++;
     } catch (err) {
       falhas++;
@@ -415,9 +446,9 @@ export async function simularRecuperacoes(): Promise<{
     .select('transaction_id, etapa');
   const enviado = new Set((jaEnviados ?? []).map((e) => `${e.transaction_id}:${e.etapa}`));
 
-  // A simulação aplica os MESMOS filtros do envio. Uma prévia que mostra fila
-  // maior do que a real não serve para decidir ligar a régua.
-  const jaComprou = compradoresPorProduto((linhas ?? []) as LinhaVenda[]);
+  // A simulação aplica os MESMOS filtros do envio — inclusive a janela longa do
+  // histórico. Uma prévia calculada de outro jeito não serve para decidir.
+  const jaComprou = await historicoDeCompras(cfg.historico_dias ?? 365);
 
   const candidatos = pendentesDoLog((linhas ?? []) as LinhaVenda[])
     .filter((p) => p.contact_id && p.contact_phone)
