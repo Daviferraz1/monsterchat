@@ -81,6 +81,13 @@ export interface WhatsAppSendTemplateParams {
   idioma?: string;
   /** Valores de {{1}}, {{2}}… do corpo, na ordem. */
   parametros?: string[];
+  /**
+   * Sufixo do botão de URL dinâmica (o template guarda a base fixa e recebe só
+   * o final). Ex.: base `.../invoice/` + sufixo `a2cd51fe-…` = link da fatura.
+   */
+  botaoUrlSufixo?: string;
+  /** Posição do botão no template, quando não for o primeiro. */
+  botaoIndice?: number;
 }
 
 /**
@@ -112,14 +119,21 @@ export async function sendWhatsAppTemplate(params: WhatsAppSendTemplateParams) {
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
       .trim() || '-';
 
-  const componentes = params.parametros?.length
-    ? [
-        {
-          type: 'body',
-          parameters: params.parametros.map((v) => ({ type: 'text', text: limpar(v) })),
-        },
-      ]
-    : undefined;
+  const componentes: Array<Record<string, unknown>> = [];
+  if (params.parametros?.length) {
+    componentes.push({
+      type: 'body',
+      parameters: params.parametros.map((v) => ({ type: 'text', text: limpar(v) })),
+    });
+  }
+  if (params.botaoUrlSufixo) {
+    componentes.push({
+      type: 'button',
+      sub_type: 'url',
+      index: String(params.botaoIndice ?? 0),
+      parameters: [{ type: 'text', text: limpar(params.botaoUrlSufixo) }],
+    });
+  }
 
   const response = await axios.post<WhatsAppSendMessageResponse>(
     url,
@@ -130,7 +144,7 @@ export async function sendWhatsAppTemplate(params: WhatsAppSendTemplateParams) {
       template: {
         name: params.template,
         language: { code: params.idioma || 'pt_BR' },
-        ...(componentes ? { components: componentes } : {}),
+        ...(componentes.length ? { components: componentes } : {}),
       },
     },
     {

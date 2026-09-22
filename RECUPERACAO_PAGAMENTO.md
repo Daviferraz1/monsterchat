@@ -35,30 +35,51 @@ depois lê como robô quebrado, e o momento é outro — a pergunta deixa de ser
 Em ambos: **Categoria** Utilidade · **Idioma** Português (BR) · sem cabeçalho e
 sem rodapé.
 
+São três: dois para quem tem cobrança gerada (esses levam o **link de pagamento**
+num botão) e um para checkout abandonado, que não tem o que pagar.
+
 #### 1º lembrete — `pagamento_pendente`
 
 ```
 Oi, {{1}}! Sua matrícula no {{2}} ficou pendente: o pagamento de R$ {{3}} não foi concluído.
 
-Se o prazo venceu ou você preferir outra forma de pagar, a gente gera um link novo agora mesmo. É só responder aqui.
+É só abrir o link abaixo para pagar. Se o prazo venceu ou você preferir outra forma, responda aqui que a gente resolve.
 ```
 
 Exemplos das variáveis: `{{1}}` Danilson · `{{2}}` Tecnólogo em Gestão Pública ·
 `{{3}}` 197,00
 
-Botão de resposta rápida: **Quero concluir a matrícula**
+**Botões:**
+
+1. **Acessar pagamento** — tipo `Visitar site`, opção **URL dinâmica**
+   - URL: `https://pagamento.monsterconcursos.com.br/invoice/{{1}}`
+   - Exemplo para `{{1}}`: `a2cd51fe-ad02-4346-b279-023bfac7405b`
+2. **Falar com a secretaria** — resposta rápida
 
 #### 2º lembrete — `pagamento_pendente_final`
 
 ```
 {{1}}, sua vaga no {{2}} continua reservada, mas o prazo do pagamento de R$ {{3}} está acabando.
 
-Quer garantir? Responda aqui que a gente gera um link novo. Se mudou de ideia, é só avisar — a gente encerra e não te incomoda mais.
+O link abaixo continua valendo. Se mudou de ideia, é só avisar — a gente encerra e não te incomoda mais.
+```
+
+Exemplos das variáveis: os mesmos. Mesmos dois botões, com a resposta rápida
+escrita como **Mudei de ideia**.
+
+#### Checkout abandonado — `matricula_abandonada`
+
+Sem link: aqui a pessoa nunca chegou a gerar cobrança.
+
+```
+Oi, {{1}}! Vi que você começou a matrícula no {{2}} e não chegou a concluir.
+
+Se ficou alguma dúvida sobre o curso ou sobre o pagamento de R$ {{3}}, responda aqui que a gente te ajuda a finalizar.
 ```
 
 Exemplos das variáveis: os mesmos.
 
-Botões de resposta rápida: **Quero garantir minha vaga** e **Mudei de ideia**
+Botão de resposta rápida: **Quero finalizar a matrícula**
 
 ### Por que o texto é esse
 
@@ -82,12 +103,28 @@ Uma linha na tabela `recuperacao_config`:
 update recuperacao_config set
   template_nome = 'pagamento_pendente',
   template_nome_etapa2 = 'pagamento_pendente_final',
+  template_abandonado = 'matricula_abandonada',
   template_idioma = 'pt_BR',
   ativo = true;
 ```
 
-`template_nome_etapa2` nulo faz o segundo lembrete repetir o texto do primeiro —
-serve se só um template for aprovado.
+Os dois últimos são opcionais: `template_nome_etapa2` nulo faz o segundo
+lembrete repetir o texto do primeiro, e `template_abandonado` nulo faz a régua
+**ignorar os abandonados** em vez de mandar um link que não paga nada.
+
+### Sobre o link de pagamento
+
+A fatura da Guru fica sempre em `<base>/invoice/<transaction_id>` — conferido em
+27 de 27 cobranças pendentes. Como `guru_sales` já guarda o `transaction_id`, o
+link sai sem consulta nova: vira o sufixo do botão de URL dinâmica.
+
+Para `billet_printed` e `waiting_payment` essa página abre o boleto ou o PIX. Para
+`abandoned` ela abre com o carimbo "Abandonada" e nenhum botão de pagar — por
+isso o template do abandonado não tem link.
+
+A página da fatura é pública e mostra nome, CPF e endereço do comprador. O link
+só vai para o WhatsApp do próprio comprador, mas quem receber o link encaminhado
+vê esses dados.
 
 ### 3. Conferir a fila antes de ligar
 

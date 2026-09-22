@@ -41,6 +41,9 @@ interface Config {
   template_nome: string | null;
   /** Template do 2º lembrete. Nulo = repete o da etapa 1. */
   template_nome_etapa2: string | null;
+  /** Template do checkout abandonado (sem link). Nulo = não aborda abandonados. */
+  template_abandonado: string | null;
+  link_base: string;
   template_idioma: string;
   etapa1_horas: number;
   etapa2_horas: number;
@@ -191,9 +194,23 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
       continue;
     }
 
+    // Abandonado não tem o que pagar: a página da fatura abre com o carimbo
+    // "Abandonada" e nenhum botão. Vai por um template sem link — ou não vai.
+    const abandonado = venda.status === 'abandoned';
     // O segundo lembrete tem texto próprio: repetir a mesma mensagem três dias
     // depois lê como robô quebrado. Sem template próprio, cai no da etapa 1.
-    const template = (etapa === 2 && cfg.template_nome_etapa2) || cfg.template_nome;
+    const template = abandonado
+      ? cfg.template_abandonado
+      : (etapa === 2 && cfg.template_nome_etapa2) || cfg.template_nome;
+
+    if (!template) {
+      await supabaseAdmin
+        .from('recuperacao_envios')
+        .delete()
+        .eq('transaction_id', venda.transaction_id)
+        .eq('etapa', etapa);
+      continue;
+    }
 
     try {
       const envio = await sendWhatsAppTemplate({
@@ -207,6 +224,8 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
           produtoCurto(venda.product_names),
           valorBR(venda.payment_total),
         ],
+        // A fatura mora em <link_base><transaction_id>; o template guarda a base.
+        botaoUrlSufixo: abandonado ? undefined : venda.transaction_id || undefined,
       });
 
       const conversa = await findOrCreateConversation({
@@ -214,7 +233,9 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
         contactId: venda.contact_id!,
       });
       const externalId = envio.messages?.[0]?.id;
-      const preview = `🤖 Lembrete de pagamento (${etapa}ª mensagem)`;
+      const preview = abandonado
+        ? `🤖 Matrícula não concluída (${etapa}ª mensagem)`
+        : `🤖 Lembrete de pagamento (${etapa}ª mensagem)`;
 
       await createMessage({
         conversationId: conversa.id,
@@ -232,6 +253,8 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
           produto: venda.product_names,
           valor: venda.payment_total,
           metodo: venda.payment_method,
+          // O atendente precisa ver o mesmo link que a pessoa recebeu.
+          link: abandonado ? null : `${cfg.link_base}${venda.transaction_id}`,
         },
       });
 
