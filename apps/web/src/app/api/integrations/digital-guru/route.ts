@@ -12,6 +12,7 @@ import {
   ensureContactForSubscription,
   upsertGuruSubscription,
 } from '@/lib/api/integrations/digital-guru';
+import { enviarBoasVindas } from '@/lib/api/services/boas-vindas';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -166,6 +167,17 @@ export async function POST(request: NextRequest) {
       const err = insertErr as { message?: string; code?: string; details?: string };
       console.error('[Digital Guru] Falha ao salvar em guru_sales:', err?.message ?? insertErr, { code: err?.code, details: err?.details });
       throw insertErr;
+    }
+
+    // Boas-vindas na hora: "acesso liberado" no approved, "pedido recebido" no
+    // boleto. É o que faz o aviso chegar em segundos, não na próxima hora do
+    // cron. Nunca derruba o webhook — a venda já está gravada e o cron cobre.
+    if (typeof body.id === 'string' && ['approved', 'billet_printed', 'waiting_payment'].includes(parsed.situation)) {
+      try {
+        await enviarBoasVindas({ apenasTransacao: body.id });
+      } catch (bvErr) {
+        console.error('[Digital Guru] boas-vindas falharam (o cron tenta de novo):', bvErr);
+      }
     }
 
     if (result.updated === 0 && !result.contact_id) {
