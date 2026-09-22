@@ -415,6 +415,11 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
       linkAcesso = link.codigo;
     }
 
+    // O `pedido` leva a 2ª via do boleto; o `acesso` leva o link direto ou,
+    // sem `acesso_com_link`, um botão de URL fixa no próprio template.
+    const sufixoBotao =
+      tipo === 'pedido' ? venda.transaction_id || undefined : linkAcesso || undefined;
+
     try {
       const envio = await sendWhatsAppTemplate({
         phoneNumberId: canal.external_id,
@@ -423,9 +428,7 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
         template,
         idioma: cfg.template_idioma,
         parametros,
-        // O `pedido` leva a 2ª via do boleto; o `acesso` leva o link direto ou,
-        // sem `acesso_com_link`, um botão de URL fixa no próprio template.
-        botaoUrlSufixo: tipo === 'pedido' ? venda.transaction_id || undefined : linkAcesso || undefined,
+        botaoUrlSufixo: sufixoBotao,
       });
 
       const conversa = await findOrCreateConversation({ channelId: canal.id, contactId: venda.contact_id! });
@@ -442,6 +445,7 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
         nome: template,
         idioma: cfg.template_idioma,
         parametros,
+        botaoUrlSufixo: sufixoBotao,
       });
       const preview = texto ?? rotulo;
 

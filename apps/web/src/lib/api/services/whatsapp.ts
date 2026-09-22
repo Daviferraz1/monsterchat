@@ -117,14 +117,20 @@ function limparParametro(v: string): string {
  * Devolve `null` se não achar — quem chama continua o envio, que é o que
  * importa, e grava o rótulo genérico.
  */
-const corpoEmCache = new Map<string, string>();
+export interface TemplateResolvido {
+  corpo: string;
+  /** Só os botões de URL: são os que viram link na conversa. */
+  botoes: Array<{ texto: string; url: string }>;
+}
+
+const corpoEmCache = new Map<string, TemplateResolvido>();
 
 export async function corpoDoTemplate(opts: {
   wabaId: string;
   accessToken: string;
   nome: string;
   idioma?: string;
-}): Promise<string | null> {
+}): Promise<TemplateResolvido | null> {
   const idioma = opts.idioma || 'pt_BR';
   const chave = `${opts.wabaId}:${opts.nome}:${idioma}`;
   const guardado = corpoEmCache.get(chave);
@@ -138,7 +144,11 @@ export async function corpoDoTemplate(opts: {
       data?: Array<{
         name: string;
         language: string;
-        components?: Array<{ type: string; text?: string }>;
+        components?: Array<{
+          type: string;
+          text?: string;
+          buttons?: Array<{ type?: string; text?: string; url?: string }>;
+        }>;
       }>;
     }>(url, {
       headers: { Authorization: `Bearer ${sanitizeTokenForHeader(opts.accessToken)}` },
@@ -152,8 +162,12 @@ export async function corpoDoTemplate(opts: {
       lista.find((t) => t.name === opts.nome);
     const corpo = achado?.components?.find((c) => c.type === 'BODY')?.text;
     if (!corpo) return null;
-    corpoEmCache.set(chave, corpo);
-    return corpo;
+    const botoes = (achado?.components?.find((c) => c.type === 'BUTTONS')?.buttons ?? [])
+      .filter((b) => b.type === 'URL' && b.url)
+      .map((b) => ({ texto: b.text || 'Abrir', url: b.url as string }));
+    const resolvido: TemplateResolvido = { corpo, botoes };
+    corpoEmCache.set(chave, resolvido);
+    return resolvido;
   } catch (err) {
     console.error('[WhatsApp] falha ao ler o corpo do template:', opts.nome, err);
     return null;
@@ -174,6 +188,11 @@ export function aplicarParametros(corpo: string, parametros: string[]): string {
  * Sem isto o inbox guardava um rótulo ("🤖 Lembrete de pagamento") no lugar da
  * mensagem, e quem abria a conversa para atender não tinha como saber o que
  * havia sido dito.
+ *
+ * O botão de URL entra como uma linha no fim, com o link já montado. No celular
+ * ele aparece como botão abaixo do texto; no inbox não apareceria de jeito
+ * nenhum, e "é só abrir o link abaixo" sem link nenhum é exatamente o tipo de
+ * mensagem que faz o atendente achar que o sistema falhou.
  */
 export async function textoDoTemplate(opts: {
   wabaId?: string | null;
@@ -181,15 +200,27 @@ export async function textoDoTemplate(opts: {
   nome: string;
   idioma?: string;
   parametros?: string[];
+  /** O mesmo sufixo mandado no envio, para o link ficar igual ao que a pessoa recebeu. */
+  botaoUrlSufixo?: string;
 }): Promise<string | null> {
   if (!opts.wabaId) return null;
-  const corpo = await corpoDoTemplate({
+  const resolvido = await corpoDoTemplate({
     wabaId: opts.wabaId,
     accessToken: opts.accessToken,
     nome: opts.nome,
     idioma: opts.idioma,
   });
-  return corpo ? aplicarParametros(corpo, opts.parametros ?? []) : null;
+  if (!resolvido) return null;
+
+  const texto = aplicarParametros(resolvido.corpo, opts.parametros ?? []);
+  const links = resolvido.botoes.map((b) => {
+    // A URL do template guarda a base e recebe o sufixo no lugar do {{1}}.
+    const url = opts.botaoUrlSufixo
+      ? b.url.replace(/\{\{\d+\}\}/g, opts.botaoUrlSufixo)
+      : b.url;
+    return `${b.texto}: ${url}`;
+  });
+  return links.length ? `${texto}\n\n${links.join('\n')}` : texto;
 }
 
 /**

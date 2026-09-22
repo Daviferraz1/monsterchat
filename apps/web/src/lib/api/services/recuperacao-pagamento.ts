@@ -386,6 +386,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
         nome: template,
         idioma: cfg.template_idioma,
         parametros,
+        botaoUrlSufixo: semBotao ? undefined : venda.transaction_id || undefined,
       });
       const preview = texto ?? rotulo;
 
