@@ -32,6 +32,8 @@ const STATUS_RESOLVIDO = ['approved', 'refunded'];
 export interface ResultadoRecuperacao {
   enviados: number;
   falhas: number;
+  /** Filtrados por já ter comprado, parcela sem template ou template ausente. */
+  pulados: number;
   candidatos: number;
   motivo?: string;
 }
@@ -43,6 +45,8 @@ interface Config {
   template_nome_etapa2: string | null;
   /** Template do checkout abandonado (sem link). Nulo = não aborda abandonados. */
   template_abandonado: string | null;
+  /** Template da parcela de assinatura em atraso. Nulo = não aborda. */
+  template_parcela: string | null;
   link_base: string;
   template_idioma: string;
   etapa1_horas: number;
@@ -106,6 +110,51 @@ export function pendentesDoLog(linhas: LinhaVenda[]): LinhaVenda[] {
     .sort((a, b) => new Date(a.sold_at).getTime() - new Date(b.sold_at).getTime());
 }
 
+/**
+ * Chave de "esta pessoa já comprou isto": contato + nome do produto.
+ *
+ * Não dá para usar só o contato — quem comprou o PM BA e abandonou o PC BA
+ * precisa receber o lembrete do PC BA.
+ */
+function chaveCompra(contactId: string | null, produto: string | null): string {
+  return `${contactId ?? ''}::${(produto ?? '').trim().toLowerCase()}`;
+}
+
+/** Conjunto de (contato, produto) com pelo menos um pagamento aprovado. */
+export function compradoresPorProduto(linhas: LinhaVenda[]): Set<string> {
+  const comprou = new Set<string>();
+  for (const linha of linhas) {
+    if (linha.status === 'approved' && linha.contact_id) {
+      comprou.add(chaveCompra(linha.contact_id, linha.product_names));
+    }
+  }
+  return comprou;
+}
+
+/**
+ * Pergunta à Guru se esta cobrança é uma parcela de assinatura.
+ *
+ * `invoice.type === 'cycle'` é o único sinal que separa "parcela 3 de 12 de um
+ * aluno antigo" de "compra única que não foi paga" — `guru_sales` guarda os
+ * dois do mesmo jeito. Sem token ou com a API fora do ar devolve `null`, e quem
+ * chama trata como desconhecido: melhor não mandar do que mandar o texto errado.
+ */
+async function ehParcelaDeAssinatura(transactionId: string | null): Promise<boolean | null> {
+  const token = process.env.DIGITAL_GURU_USER_TOKEN;
+  if (!token || !transactionId) return null;
+  try {
+    const resposta = await fetch(`https://digitalmanager.guru/api/v2/transactions/${transactionId}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    });
+    if (!resposta.ok) return null;
+    const dados = (await resposta.json()) as { invoice?: { type?: string } };
+    return dados?.invoice?.type === 'cycle';
+  } catch (err) {
+    console.error('[Recuperação] falha ao consultar a Guru:', err);
+    return null;
+  }
+}
+
 /** 1 = primeiro lembrete, 2 = segundo, 0 = ainda cedo (ou tarde demais). */
 export function etapaDe(horas: number, cfg: Pick<Config, 'etapa1_horas' | 'etapa2_horas' | 'janela_dias'>): 0 | 1 | 2 {
   if (horas > cfg.janela_dias * 24) return 0;
@@ -115,7 +164,7 @@ export function etapaDe(horas: number, cfg: Pick<Config, 'etapa1_horas' | 'etapa
 }
 
 export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperacao> {
-  const vazio = { enviados: 0, falhas: 0, candidatos: 0 };
+  const vazio = { enviados: 0, falhas: 0, pulados: 0, candidatos: 0 };
 
   const { data: cfgRow } = await supabaseAdmin
     .from('recuperacao_config')
@@ -166,8 +215,14 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     return !ignorados.some((i) => i && nome.includes(i));
   });
 
+  // Quem já comprou o mesmo produto. A janela é maior que a da fila porque o
+  // pagamento que "salvou" a compra pode ser de semanas antes — e uma parcela
+  // de assinatura do mês passado também conta como já comprado.
+  const jaComprou = compradoresPorProduto((linhas ?? []) as LinhaVenda[]);
+
   let enviados = 0;
   let falhas = 0;
+  let pulados = 0;
 
   for (const venda of pendentes) {
     if (enviados >= cfg.max_por_execucao) break;
@@ -194,21 +249,46 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
       continue;
     }
 
+    const marcarPulado = async (motivo: string) => {
+      await supabaseAdmin
+        .from('recuperacao_envios')
+        .update({ status: 'skipped', motivo })
+        .eq('transaction_id', venda.transaction_id)
+        .eq('etapa', etapa);
+      pulados++;
+    };
+
     // Abandonado não tem o que pagar: a página da fatura abre com o carimbo
     // "Abandonada" e nenhum botão. Vai por um template sem link — ou não vai.
     const abandonado = venda.status === 'abandoned';
-    // O segundo lembrete tem texto próprio: repetir a mesma mensagem três dias
-    // depois lê como robô quebrado. Sem template próprio, cai no da etapa 1.
-    const template = abandonado
-      ? cfg.template_abandonado
-      : (etapa === 2 && cfg.template_nome_etapa2) || cfg.template_nome;
+
+    // Já é aluno deste produto? Então ou isto é um pedido duplicado que ele
+    // abandonou antes de pagar pelo outro, ou é uma parcela em atraso. Nos dois
+    // casos o texto de "matrícula pendente" está errado.
+    let template: string | null;
+    if (jaComprou.has(chaveCompra(venda.contact_id, venda.product_names))) {
+      const parcela = await ehParcelaDeAssinatura(venda.transaction_id);
+      if (parcela !== true) {
+        // false = comprou de novo e pagou (pedido duplicado);
+        // null  = não deu para confirmar — na dúvida, não fala nada.
+        await marcarPulado('ja_comprou');
+        continue;
+      }
+      if (!cfg.template_parcela) {
+        await marcarPulado('parcela_sem_template');
+        continue;
+      }
+      template = cfg.template_parcela;
+    } else {
+      // O segundo lembrete tem texto próprio: repetir a mesma mensagem três
+      // dias depois lê como robô quebrado. Sem ele, cai no da etapa 1.
+      template = abandonado
+        ? cfg.template_abandonado
+        : (etapa === 2 && cfg.template_nome_etapa2) || cfg.template_nome;
+    }
 
     if (!template) {
-      await supabaseAdmin
-        .from('recuperacao_envios')
-        .delete()
-        .eq('transaction_id', venda.transaction_id)
-        .eq('etapa', etapa);
+      await marcarPulado('sem_template');
       continue;
     }
 
@@ -286,8 +366,8 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     }
   }
 
-  console.log('[Recuperação]', { candidatos: pendentes.length, enviados, falhas });
-  return { enviados, falhas, candidatos: pendentes.length };
+  console.log('[Recuperação]', { candidatos: pendentes.length, enviados, pulados, falhas });
+  return { enviados, falhas, pulados, candidatos: pendentes.length };
 }
 
 /**
@@ -295,8 +375,18 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
  * para mostrar a fila antes de alguém ligar o interruptor.
  */
 export async function simularRecuperacoes(): Promise<{
-  candidatos: Array<{ produto: string; valor: number | null; metodo: string | null; horas: number; etapa: number }>;
+  candidatos: Array<{
+    produto: string;
+    valor: number | null;
+    metodo: string | null;
+    horas: number;
+    etapa: number;
+    jaComprou: boolean;
+  }>;
   total: number;
+  /** Já são alunos deste produto: pedido duplicado ou parcela em atraso. */
+  jaCompraram: number;
+  jaCompraramTotal: number;
 }> {
   const { data: cfgRow } = await supabaseAdmin
     .from('recuperacao_config')
@@ -325,6 +415,10 @@ export async function simularRecuperacoes(): Promise<{
     .select('transaction_id, etapa');
   const enviado = new Set((jaEnviados ?? []).map((e) => `${e.transaction_id}:${e.etapa}`));
 
+  // A simulação aplica os MESMOS filtros do envio. Uma prévia que mostra fila
+  // maior do que a real não serve para decidir ligar a régua.
+  const jaComprou = compradoresPorProduto((linhas ?? []) as LinhaVenda[]);
+
   const candidatos = pendentesDoLog((linhas ?? []) as LinhaVenda[])
     .filter((p) => p.contact_id && p.contact_phone)
     .map((p) => {
@@ -335,11 +429,23 @@ export async function simularRecuperacoes(): Promise<{
         metodo: p.payment_method,
         horas: Math.round(horas),
         etapa: etapaDe(horas, cfg),
+        jaComprou: jaComprou.has(chaveCompra(p.contact_id, p.product_names)),
         chave: `${p.transaction_id}:${etapaDe(horas, cfg)}`,
       };
     })
     .filter((c) => c.etapa > 0 && !enviado.has(c.chave))
     .map(({ chave: _chave, ...resto }) => resto);
 
-  return { candidatos, total: candidatos.reduce((s, c) => s + (c.valor ?? 0), 0) };
+  // Quem já comprou só recebe se for parcela de assinatura E houver template
+  // para isso — na simulação entra separado, para ficar visível quanto da fila
+  // é aluno antigo.
+  const alunosAntigos = candidatos.filter((c) => c.jaComprou);
+  const novos = candidatos.filter((c) => !c.jaComprou);
+
+  return {
+    candidatos: novos,
+    total: novos.reduce((soma, c) => soma + (c.valor ?? 0), 0),
+    jaCompraram: alunosAntigos.length,
+    jaCompraramTotal: alunosAntigos.reduce((soma, c) => soma + (c.valor ?? 0), 0),
+  };
 }

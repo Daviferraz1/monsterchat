@@ -78,6 +78,42 @@ Se precisar de ajuda para concluir ou quiser outra forma de pagamento, responda 
 
 Exemplos das variáveis: os mesmos. Sem botões.
 
+#### Parcela de assinatura em atraso — `parcela_em_atraso`
+
+Para quem já é aluno e tem uma parcela em aberto. O texto de "matrícula
+pendente" está errado aqui: a matrícula existe há meses.
+
+```
+Oi, {{1}}! A parcela de R$ {{3}} do seu curso {{2}} está em aberto.
+
+Você pode pagar pelo link abaixo. Se precisar trocar a forma de pagamento ou a data de vencimento, responda aqui.
+```
+
+Exemplos das variáveis: os mesmos. Mesmo botão de URL dinâmica do 1º lembrete.
+
+### Quem a régua NÃO aborda, e por quê
+
+Medido na fila real de 7 dias, com 88 cobranças pendentes:
+
+| Caso | Quantos | O que acontece |
+|---|---|---|
+| **Já comprou o mesmo produto** | **41 (47%)** | Não recebe nada. A pessoa tentou o checkout, abandonou, tentou de novo e pagou — ficaram transações abandonadas órfãs. Mandar "sua matrícula ficou incompleta" para quem já é aluno faz ele duvidar do próprio pagamento |
+| **Parcela de assinatura em atraso** | 14 das 23 com cobrança gerada | Recebe o `parcela_em_atraso`, não o de matrícula. Sem esse template configurado, não recebe nada |
+| Compra única de verdade | o resto | Fluxo normal |
+
+A diferença entre "pedido duplicado" e "parcela em atraso" não está em
+`guru_sales`: as duas gravam igual. Vem da Guru no momento do envio
+(`invoice.type == 'cycle'`). Se a consulta falhar, a régua **não manda** — na
+dúvida, calar é mais barato que errar o texto.
+
+Tudo que é pulado fica em `recuperacao_envios` com `status = 'skipped'` e o
+motivo, para dar para auditar se o filtro está exagerando:
+
+```sql
+select motivo, count(*) from recuperacao_envios
+where status = 'skipped' group by 1 order by 2 desc;
+```
+
 ### Duas regras da Meta que custaram uma rejeição cada
 
 1. **Variável não pode abrir nem fechar o corpo.** O 2º lembrete começava com
@@ -112,6 +148,7 @@ update recuperacao_config set
   template_nome = 'pagamento_pendente',
   template_nome_etapa2 = 'pagamento_pendente_final',
   template_abandonado = 'matricula_abandonada',
+  template_parcela = 'parcela_em_atraso',
   template_idioma = 'pt_BR',
   ativo = true;
 ```
@@ -172,6 +209,7 @@ Tudo em `recuperacao_config` — sem deploy:
 | `max_por_execucao` | teto por rodada |
 | `janela_dias` | idade máxima da cobrança |
 | `produtos_ignorados` | trechos de nome de produto que não entram (ex.: `{"Taxa de ativação"}`) |
+| `template_parcela` | texto da parcela em atraso; nulo = não aborda alunos com parcela em aberto |
 
 ## Onde olhar o resultado
 
