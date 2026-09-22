@@ -71,6 +71,86 @@ export async function sendWhatsAppText(params: WhatsAppSendTextParams) {
   return response.data;
 }
 
+export interface WhatsAppSendTemplateParams {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  /** Nome do template aprovado no Gerenciador da Meta. */
+  template: string;
+  /** Código do idioma cadastrado no template (ex.: pt_BR). */
+  idioma?: string;
+  /** Valores de {{1}}, {{2}}… do corpo, na ordem. */
+  parametros?: string[];
+}
+
+/**
+ * Envia um template aprovado.
+ *
+ * Existe porque texto livre só vale dentro da janela de 24h a partir da última
+ * mensagem da pessoa. Para falar com quem está quieto — um lembrete de
+ * pagamento, por exemplo — a Meta exige template e recusa o texto livre com
+ * (#131047). Quando a pessoa responde ao template, a janela abre e a conversa
+ * segue normal.
+ *
+ * Os parâmetros não podem ter quebra de linha, tab nem 4 espaços seguidos: a
+ * Meta recusa com (#132000). A limpeza é feita aqui, não em quem chama.
+ */
+export async function sendWhatsAppTemplate(params: WhatsAppSendTemplateParams) {
+  const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const to = normalizeToPhone(params.to);
+  if (!to) {
+    throw new Error('Número do destinatário inválido (vazio após normalização).');
+  }
+  if (!params.template) {
+    throw new Error('Template não informado.');
+  }
+
+  const limpar = (v: string) =>
+    (v ?? '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s{4,}/g, '   ')
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      .trim() || '-';
+
+  const componentes = params.parametros?.length
+    ? [
+        {
+          type: 'body',
+          parameters: params.parametros.map((v) => ({ type: 'text', text: limpar(v) })),
+        },
+      ]
+    : undefined;
+
+  const response = await axios.post<WhatsAppSendMessageResponse>(
+    url,
+    {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: params.template,
+        language: { code: params.idioma || 'pt_BR' },
+        ...(componentes ? { components: componentes } : {}),
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${sanitizeTokenForHeader(params.accessToken)}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  console.log('WhatsApp template sent:', {
+    phoneNumberId: params.phoneNumberId,
+    to,
+    template: params.template,
+    messageId: response.data.messages[0]?.id,
+  });
+
+  return response.data;
+}
+
 export interface WhatsAppSendMediaParams {
   phoneNumberId: string;
   accessToken: string;
