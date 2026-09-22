@@ -318,3 +318,34 @@ export async function liberarAcesso(params: { email: string }): Promise<{ ok: bo
     return { ok: false, message: isAbort ? 'Timeout ao chamar a função de liberação.' : 'Erro ao chamar a função de liberação.' };
   }
 }
+
+/**
+ * O aluno já começou a estudar, ou seja, abriu alguma aula do curso?
+ *
+ * Usado pelo onboarding: a mensagem de WhatsApp só vale para quem comprou e
+ * não começou — quem já está estudando é atendido pelo bloco de primeiros
+ * passos, dentro da plataforma, e mensagem a mais só gera suporte a mais.
+ *
+ * O sinal é `lesson_progress`: existe linha assim que o aluno abre a primeira
+ * aula. `student_course_enrollments.last_accessed_at` parecia o caminho óbvio,
+ * mas está nulo até para quem estuda todo dia — a plataforma não preenche essa
+ * coluna (conferido em 22/09/2026).
+ *
+ * `null` quando não dá para saber (integração desligada, e-mail sem cadastro).
+ * Quem chama trata `null` como "não mexe": é melhor calar do que falar com quem
+ * já está dentro.
+ */
+export async function naoComecouAEstudar(email: string): Promise<boolean | null> {
+  if (!isPlatformEnabled()) return null;
+  const alvo = (email || '').trim().toLowerCase();
+  if (!alvo.includes('@')) return null;
+
+  const students = await pget<{ id: string }>(`students?email=ilike.${enc(alvo)}&select=id&limit=1`);
+  const student = students[0];
+  if (!student?.id) return null;
+
+  const aulas = await pget<{ id: string }>(
+    `lesson_progress?student_id=eq.${enc(student.id)}&select=id&limit=1`
+  );
+  return aulas.length === 0;
+}

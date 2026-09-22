@@ -1,29 +1,23 @@
 /**
- * Onboarding pós-compra: o que a gente fala depois do "acesso liberado".
+ * Onboarding pós-compra: uma única mensagem, e só para quem não entrou.
  *
  * POR QUE EXISTE: na análise dos 75 reembolsos de 120 dias (22/09/2026), 89%
  * dos pedidos vieram dentro dos 7 dias de garantia, com mediana de 4 dias, e
  * 43% diziam a mesma coisa — "não me adaptei", "não sabia por onde começar",
- * "plataforma confusa". A pessoa compra, entra uma vez, se perde e desiste
- * antes do quarto dia. Boas-vindas fala no dia 0 e depois ninguém mais fala,
- * justamente na janela em que a decisão de ficar ou pedir o dinheiro de volta
- * é tomada.
+ * "plataforma confusa".
  *
- * O QUE MANDA:
- *   dia1 — 24h depois da compra: o acesso está ativo, o login é este, entre
- *          sem senha pelo botão. Só sai se houver template configurado.
- *   dia3 — 72h depois: as três coisas que o aluno não descobre sozinho
- *          (cronograma que se reorganiza, questões por tópico, ranking) e um
- *          convite para responder se algo não estiver claro.
+ * O caminho principal para resolver isso é dentro da plataforma (o bloco de
+ * primeiros passos na home do aluno). Aqui fica só a rede de segurança: quem
+ * comprou e, três dias depois, não abriu nenhuma aula não vai ser alcançado por
+ * nada que esteja dentro da plataforma — esse é o único caso em que uma
+ * mensagem de fora se justifica.
  *
- * QUEM NÃO RECEBE: quem pediu reembolso ou cancelou, quem já respondeu no chat
- * depois da compra (aí tem gente conversando, e robô em cima de conversa humana
- * é o que mais irrita), produtos da Fagenius e compras anteriores a `iniciado_em`.
+ * QUEM NÃO RECEBE: quem já começou a estudar (a maioria), quem pediu reembolso ou
+ * cancelou, quem já está conversando com a equipe, produto da Fagenius e
+ * compra anterior a `iniciado_em`. Quando não dá para saber se o aluno entrou,
+ * também não manda: calar é mais barato que incomodar.
  *
  * Por que template: fora da janela de 24h a Meta recusa texto livre (#131047).
- * O template do dia 3 saiu aprovado como MARKETING; o do dia 1 foi recusado três
- * vezes por INCORRECT_CATEGORY e por isso nasce nulo na config — sem template
- * aprovado, a etapa é pulada em silêncio, sem quebrar a régua.
  */
 import { supabaseAdmin } from '../supabase';
 import { lerTudo } from '../paginado';
@@ -31,16 +25,15 @@ import { sendWhatsAppTemplate, textoDoTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
 import { criarLinkAcesso } from './acesso-direto';
+import { naoComecouAEstudar } from '../integrations/platform-access';
 import { partesEmBrasilia } from '@/lib/timezone';
 
-export type EtapaOnboarding = 'dia1' | 'dia3';
+export type EtapaOnboarding = 'dia3';
 
 interface Config {
   ativo: boolean;
-  template_dia1: string | null;
   template_dia3: string | null;
   template_idioma: string;
-  horas_dia1: number;
   horas_dia3: number;
   tolerancia_horas: number;
   hora_inicio: number;
@@ -53,10 +46,8 @@ interface Config {
 
 const CONFIG_PADRAO: Config = {
   ativo: false,
-  template_dia1: null,
   template_dia3: 'onboarding_dia3',
   template_idioma: 'pt_BR',
-  horas_dia1: 24,
   horas_dia3: 72,
   tolerancia_horas: 36,
   hora_inicio: 9,
@@ -199,7 +190,6 @@ export function candidatos(vendas: Venda[], cfg: Config, agora = Date.now()): Ca
   for (const venda of vendas) {
     if (!venda.transaction_id || !venda.contact_id || !venda.contact_phone) continue;
     if (new Date(venda.sold_at).getTime() < inicio) continue;
-    if (naHora(venda.sold_at, cfg.horas_dia1, cfg.tolerancia_horas, agora)) saida.push({ etapa: 'dia1', venda });
     if (naHora(venda.sold_at, cfg.horas_dia3, cfg.tolerancia_horas, agora)) saida.push({ etapa: 'dia3', venda });
   }
   return saida;
@@ -210,7 +200,7 @@ export async function enviarOnboarding(): Promise<ResultadoOnboarding> {
   const cfg = await lerConfig();
 
   if (!cfg.ativo) return { ...vazio, motivo: 'onboarding desligado' };
-  if (!cfg.template_dia1 && !cfg.template_dia3) return { ...vazio, motivo: 'nenhum template configurado' };
+  if (!cfg.template_dia3) return { ...vazio, motivo: 'nenhum template configurado' };
 
   const agora = partesEmBrasilia();
   if (agora.hora < cfg.hora_inicio || agora.hora >= cfg.hora_fim) {
@@ -244,8 +234,8 @@ export async function enviarOnboarding(): Promise<ResultadoOnboarding> {
   for (const { etapa, venda } of fila) {
     if (enviados >= cfg.max_por_execucao) break;
 
-    const template = etapa === 'dia1' ? cfg.template_dia1 : cfg.template_dia3;
-    if (!template) continue; // etapa sem template aprovado: nem reserva linha
+    const template = cfg.template_dia3;
+    if (!template) continue;
 
     // Reserva primeiro: a unique (transaction_id, tipo) é o que impede duas
     // rodadas do cron mandarem a mesma mensagem duas vezes.
@@ -289,6 +279,12 @@ export async function enviarOnboarding(): Promise<ResultadoOnboarding> {
       await pular('sem_email');
       continue;
     }
+    // O ponto da régua: quem já começou a estudar está sendo atendido pelo bloco
+    // de primeiros passos, dentro da plataforma. `null` é "não sei" e também cala.
+    if ((await naoComecouAEstudar(venda.contact_email)) !== true) {
+      await pular('ja_comecou');
+      continue;
+    }
 
     // O botão leva para dentro da plataforma sem senha: é o atalho que resolve
     // a queixa "não consegui entrar", que é a origem de boa parte dos reembolsos.
@@ -305,10 +301,7 @@ export async function enviarOnboarding(): Promise<ResultadoOnboarding> {
       continue;
     }
 
-    const parametros =
-      etapa === 'dia1'
-        ? [primeiroNome(venda.contact_name), produtoCurto(venda.product_names), venda.contact_email]
-        : [primeiroNome(venda.contact_name), produtoCurto(venda.product_names)];
+    const parametros = [primeiroNome(venda.contact_name), produtoCurto(venda.product_names)];
 
     try {
       const envio = await sendWhatsAppTemplate({
@@ -372,7 +365,7 @@ export async function enviarOnboarding(): Promise<ResultadoOnboarding> {
 /** O que sairia agora, sem mandar nada — para conferir antes de ligar a régua. */
 export async function simularOnboarding(): Promise<{
   enviaria: Array<{ etapa: EtapaOnboarding; produto: string; horas: number; pularPor: string | null }>;
-  config: Pick<Config, 'ativo' | 'template_dia1' | 'template_dia3' | 'horas_dia1' | 'horas_dia3' | 'iniciado_em'>;
+  config: Pick<Config, 'ativo' | 'template_dia3' | 'horas_dia3' | 'iniciado_em'>;
 }> {
   const cfg = await lerConfig();
   const janelaDias = Math.ceil((cfg.horas_dia3 + cfg.tolerancia_horas) / 24) + 1;
@@ -385,28 +378,27 @@ export async function simularOnboarding(): Promise<{
   const { data: jaFeitos } = await supabaseAdmin
     .from('boas_vindas_envios')
     .select('transaction_id, tipo')
-    .in('tipo', ['dia1', 'dia3']);
+    .eq('tipo', 'dia3');
   const feito = new Set((jaFeitos ?? []).map((e) => `${e.transaction_id}:${e.tipo}`));
 
-  const enviaria = fila.map(({ etapa, venda }) => {
+  const enviaria = await Promise.all(fila.map(async ({ etapa, venda }) => {
     const horas = Math.round((Date.now() - new Date(venda.sold_at).getTime()) / 3_600_000);
     let pularPor: string | null = null;
     if (feito.has(`${venda.transaction_id}:${etapa}`)) pularPor = 'ja_enviado';
-    else if (!(etapa === 'dia1' ? cfg.template_dia1 : cfg.template_dia3)) pularPor = 'sem_template';
+    else if (!cfg.template_dia3) pularPor = 'sem_template';
     else if (encerradas.has(venda.transaction_id!)) pularPor = 'reembolsado_ou_cancelado';
     else if (produtoIgnorado(venda.product_names, cfg.produtos_ignorados)) pularPor = 'produto_ignorado';
     else if (falando.has(venda.contact_id!)) pularPor = 'conversa_em_andamento';
     else if (!venda.contact_email) pularPor = 'sem_email';
+    else if ((await naoComecouAEstudar(venda.contact_email)) !== true) pularPor = 'ja_comecou';
     return { etapa, produto: produtoCurto(venda.product_names), horas, pularPor };
-  });
+  }));
 
   return {
     enviaria,
     config: {
       ativo: cfg.ativo,
-      template_dia1: cfg.template_dia1,
       template_dia3: cfg.template_dia3,
-      horas_dia1: cfg.horas_dia1,
       horas_dia3: cfg.horas_dia3,
       iniciado_em: cfg.iniciado_em,
     },
