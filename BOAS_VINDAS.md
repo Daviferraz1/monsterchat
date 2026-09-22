@@ -147,12 +147,56 @@ mesma URL. `force-dynamic` na rota não bastou. O cliente `supabaseAdmin`
 vale também para a régua de recuperação: uma régua que não vê `ativo = false`
 não é aceitável.
 
+## Link de acesso direto (`/a/<codigo>`)
+
+O público tem dificuldade com e-mail. Então a mensagem do WhatsApp passa a
+**ser** o acesso: um link curto e nosso que, no clique, pede ao Supabase da
+plataforma um magic link para o e-mail da compra e redireciona. A pessoa cai
+no `monsterstudy.com.br` logada, numa tela que pede para definir a senha, e
+entra no curso. Testado em 22/09/2026 com a conta de teste, sem nenhuma
+mudança no front do Monster Study. O e-mail com login e senha **continua
+saindo** como antes; o link é um complemento.
+
+Onde aparece:
+
+- **Boas-vindas**: com `acesso_com_link = true` e `template_acesso =
+  'acesso_liberado_link'` (mesmo texto do aprovado, botão de URL dinâmica
+  `https://chatmonster.monsterconcursos.com.br/a/{{1}}`), o botão "Entrar na
+  plataforma" já entra logado. Nasce desligado: o template está em análise.
+- **Atendente**: botão **Enviar link de acesso** no painel do contato (ao lado
+  de "Verificar acesso" e "Liberar acesso"). Manda um texto na conversa com o
+  link; exige e-mail no cadastro e conta existente na plataforma. Texto livre
+  só passa dentro da janela de 24h — fora dela a resposta explica e pede um
+  "oi" da pessoa.
+
+Segurança, e por que dois níveis de link:
+
+| | |
+|---|---|
+| **O que vai no WhatsApp** | `/a/<codigo>`: 128 bits aleatórios, nunca sequencial. Vai só para o número da compra, o mesmo canal da fatura |
+| **Validade** | 7 dias e 5 usos (`acesso_links.expira_em`, `max_usos`); `revogado = true` cancela na hora |
+| **O login de verdade** | O magic link do Supabase é gerado **só no clique** e vale 1 hora. Ninguém fica com um link de login eterno guardado no celular |
+| **Conta inexistente** | O clique confere a conta antes de pedir o link. Descoberto no teste: o `generate_link` de magiclink **cria o usuário** quando o e-mail não existe — sem essa checagem, um link virava cadastro vazio na plataforma |
+| **Registro** | Cada clique grava `usos` e `ultimo_uso_em`; erros ficam em `ultimo_erro`. Dá para ver quem entrou e quem nunca abriu |
+| **Página de erro** | Link vencido, esgotado ou conta ainda não liberada mostram uma página curta em português com botão "Pedir novo link no WhatsApp" |
+
+Depende de `PLATFORM_SUPABASE_URL` e `PLATFORM_SUPABASE_SERVICE_KEY` (já usados
+por "Verificar acesso" e "Liberar acesso") e de `https://www.monsterstudy.com.br/**`
+na allow-list de redirect do Auth da plataforma (já estava).
+
+Onde olhar:
+
+```sql
+select origem, count(*) filter (where usos > 0) as abertos, count(*) as gerados
+from acesso_links group by 1;
+```
+
 ## O que fica para depois
 
-- **Botão "enviar link de acesso"** no MonsterChat: o atendente informa o e-mail,
-  o sistema confirma a conta no Supabase do Questões/Study e manda um link de
-  entrada direta na própria conversa. Cobre os 55 casos "mais de 30 dias" (senha
-  esquecida, migração de plataforma).
+- **"Entrar com WhatsApp"** na tela de login da plataforma: código de 6
+  dígitos por template AUTHENTICATION, para quem perdeu a senha meses depois.
+- A IA do MonsterChat sugerir o botão de link quando reconhecer "não consigo
+  acessar".
 - **Redefinição de senha**: o `LoginModal` do Questões fixa o redirect em
   `monsterquestoes.com.br` mesmo para quem estuda no `monsterstudy.com.br`.
 - Fagenius: mensagem própria, com o portal certo e o passo da secretaria.

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSupabase } from '@/hooks/useSupabase';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
-import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw, ArrowRightLeft, MailOpen } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw, ArrowRightLeft, MailOpen, Link2 } from 'lucide-react';
 import { TransferDialog } from './TransferDialog';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 import type { DigitalGuruMetadata } from '@/types';
@@ -44,6 +44,8 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
   const [accessChecking, setAccessChecking] = useState(false);
   const [liberando, setLiberando] = useState(false);
   const [liberarMsg, setLiberarMsg] = useState<string | null>(null);
+  const [linkEnviando, setLinkEnviando] = useState(false);
+  const [linkMsg, setLinkMsg] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
   const router = useRouter();
   const [marcando, setMarcando] = useState(false);
@@ -219,6 +221,27 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
       setLiberarMsg('Falha ao liberar o acesso.');
     } finally {
       setLiberando(false);
+    }
+  };
+
+  // Manda na conversa um link que entra na plataforma sem senha (vale 7 dias).
+  // É o caminho para quem não acha o e-mail ou não lembra a senha — a maioria.
+  const enviarLinkAcesso = async () => {
+    if (!contactId) return;
+    setLinkEnviando(true);
+    setLinkMsg(null);
+    try {
+      const res = await fetch(`/api/contacts/${contactId}/acesso-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setLinkMsg(data.message || (data.ok ? 'Link enviado.' : 'Falha ao enviar o link.'));
+    } catch {
+      setLinkMsg('Falha ao enviar o link.');
+    } finally {
+      setLinkEnviando(false);
     }
   };
 
@@ -422,7 +445,20 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                       {liberando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5" />}
                       Liberar acesso
                     </button>
+                    <button
+                      type="button"
+                      onClick={enviarLinkAcesso}
+                      disabled={linkEnviando}
+                      title="Envia na conversa um link que entra na plataforma sem senha (vale 7 dias)"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium hover:bg-muted disabled:opacity-50"
+                    >
+                      {linkEnviando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                      Enviar link de acesso
+                    </button>
                   </div>
+                  {linkMsg && (
+                    <p className="text-[11px] text-foreground bg-muted/50 rounded-md p-2">{linkMsg}</p>
+                  )}
                   {accessDiag && (
                     <pre className="text-[11px] text-foreground whitespace-pre-wrap break-words bg-muted/50 rounded-md p-2 mt-1 font-sans">
                       {accessDiag}
