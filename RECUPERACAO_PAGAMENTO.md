@@ -43,7 +43,9 @@ num botão) e um para checkout abandonado, que não tem o que pagar.
 ```
 Oi, {{1}}! Sua matrícula no {{2}} ficou pendente: o pagamento de R$ {{3}} não foi concluído.
 
-É só abrir o link abaixo para pagar. Se o prazo venceu ou você preferir outra forma, responda aqui que a gente resolve.
+É só abrir o link abaixo para pagar. Se já pagou nos últimos dias, desconsidere: boleto e PIX levam até 3 dias úteis para constar no sistema.
+
+Se o prazo venceu ou você preferir outra forma, responda aqui que a gente resolve.
 ```
 
 Exemplos das variáveis: `{{1}}` Danilson · `{{2}}` Tecnólogo em Gestão Pública ·
@@ -73,7 +75,9 @@ Sem link: aqui a pessoa nunca chegou a gerar cobrança.
 ```
 Oi, {{1}}! Sua matrícula no {{2}} ficou incompleta: o pagamento de R$ {{3}} não chegou a ser gerado.
 
-Se precisar de ajuda para concluir ou quiser outra forma de pagamento, responda aqui.
+Se você já concluiu por outro caminho, desconsidere: pagamentos levam até 3 dias úteis para constar no sistema.
+
+Se precisar de ajuda para finalizar ou quiser outra forma de pagamento, responda aqui.
 ```
 
 Exemplos das variáveis: os mesmos. Sem botões.
@@ -107,9 +111,14 @@ Por isso todo template deve terminar com a ressalva:
 > Se já pagou nos últimos dias, desconsidere: boleto e PIX levam até 3 dias
 > úteis para constar no sistema.
 
-Já está no `parcela_em_atraso`. **Falta nos outros três** — `pagamento_pendente`
-e `matricula_abandonada` estão aprovados e editá-los os devolve para análise;
-`pagamento_pendente_final` só pode ser editado depois que sair de análise.
+Está em três dos quatro. `pagamento_pendente` e `matricula_abandonada` foram
+editados em 22/09/2026 para incluí-la — editar um template aprovado o devolve
+para análise, e essa foi a escolha consciente: o risco de cobrar quem já pagou
+custa mais que um dia a mais de espera.
+
+**Falta no `pagamento_pendente_final`**, que estava em análise na hora da edição
+e por isso não podia ser alterado. Assim que ele for aprovado, acrescentar a
+mesma ressalva antes do último parágrafo.
 
 ### Quem a régua NÃO aborda, e por quê
 
