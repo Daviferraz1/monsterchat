@@ -133,18 +133,26 @@ export async function resolverLink(codigo: string): Promise<ResultadoClique> {
   if (new Date(link.expira_em).getTime() < Date.now()) return { ok: false, motivo: 'expirado' };
   if (link.usos >= link.max_usos) return { ok: false, motivo: 'esgotado' };
 
-  const base = apiEnv.PLATFORM_SUPABASE_URL?.replace(/\/$/, '');
-  const key = apiEnv.PLATFORM_SUPABASE_SERVICE_KEY;
-  if (!base || !key) return { ok: false, motivo: 'plataforma_indisponivel' };
-
   const registrar = (campos: Record<string, unknown>) =>
     supabaseAdmin.from('acesso_links').update({ ultimo_uso_em: new Date().toISOString(), ...campos }).eq('id', link.id);
+
+  const base = apiEnv.PLATFORM_SUPABASE_URL?.replace(/\/$/, '');
+  const key = apiEnv.PLATFORM_SUPABASE_SERVICE_KEY;
+  if (!base || !key) {
+    // Fica no registro: "não conseguimos entrar agora" na tela não diz se o
+    // problema é configuração ou a plataforma fora do ar.
+    await registrar({ ultimo_erro: 'PLATFORM_SUPABASE_URL/SERVICE_KEY não configurados neste ambiente' });
+    return { ok: false, motivo: 'plataforma_indisponivel' };
+  }
 
   // Conferir a conta ANTES de pedir o link: o `generate_link` de magiclink CRIA
   // o usuário quando o e-mail não existe (visto no teste de 22/09/2026). Um
   // link de acesso não pode virar um cadastro vazio na plataforma.
   const existe = await contaExiste(link.email);
-  if (existe === null) return { ok: false, motivo: 'plataforma_indisponivel' };
+  if (existe === null) {
+    await registrar({ ultimo_erro: 'falha ao consultar a plataforma (tabela User)' });
+    return { ok: false, motivo: 'plataforma_indisponivel' };
+  }
   if (!existe) {
     await registrar({ ultimo_erro: 'sem conta na plataforma' });
     return { ok: false, motivo: 'sem_conta' };
