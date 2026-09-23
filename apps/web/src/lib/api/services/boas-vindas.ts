@@ -30,7 +30,7 @@
  */
 import { supabaseAdmin } from '../supabase';
 import { lerTudo } from '../paginado';
-import { sendWhatsAppTemplate, textoDoTemplate } from './whatsapp';
+import { sendWhatsAppTemplate, templateIndisponivel, textoDoTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
 import { criarLinkAcesso } from './acesso-direto';
@@ -383,6 +383,19 @@ export async function enviarBoasVindas(opcoes: { apenasTransacao?: string } = {}
     }
     if (parcela) {
       await pular('parcela_de_assinatura');
+      continue;
+    }
+    // Template em análise é temporário; perder a boas-vindas de um aluno novo
+    // não é. Solta a reserva e a próxima rodada tenta com ele já aprovado.
+    const indisponivel = await templateIndisponivel({
+      wabaId: canal.business_account_id,
+      accessToken: canal.access_token,
+      nome: template,
+      idioma: cfg.template_idioma,
+    });
+    if (indisponivel) {
+      console.warn(`[Boas-vindas] ${template} está ${indisponivel}; adiando ${venda.transaction_id}`);
+      await soltar();
       continue;
     }
 

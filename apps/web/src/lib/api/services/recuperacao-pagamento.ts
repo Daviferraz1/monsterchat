@@ -22,7 +22,7 @@
  */
 import { supabaseAdmin } from '../supabase';
 import { lerTudo } from '../paginado';
-import { sendWhatsAppTemplate, textoDoTemplate } from './whatsapp';
+import { sendWhatsAppTemplate, templateIndisponivel, textoDoTemplate } from './whatsapp';
 import { createMessage } from './message';
 import { findOrCreateConversation, updateConversation } from './conversation';
 import { partesEmBrasilia } from '@/lib/timezone';
@@ -35,6 +35,8 @@ export interface ResultadoRecuperacao {
   falhas: number;
   /** Filtrados por já ter comprado, parcela sem template ou template ausente. */
   pulados: number;
+  /** Adiados por algo temporário (template em análise): voltam na próxima rodada. */
+  adiados: number;
   candidatos: number;
   motivo?: string;
 }
@@ -192,7 +194,7 @@ export function etapaDe(horas: number, cfg: Pick<Config, 'etapa1_horas' | 'etapa
 }
 
 export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperacao> {
-  const vazio = { enviados: 0, falhas: 0, pulados: 0, candidatos: 0 };
+  const vazio = { enviados: 0, falhas: 0, pulados: 0, adiados: 0, candidatos: 0 };
 
   const { data: cfgRow } = await supabaseAdmin
     .from('recuperacao_config')
@@ -264,6 +266,7 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
   let enviados = 0;
   let falhas = 0;
   let pulados = 0;
+  let adiados = 0;
 
   for (const venda of pendentes) {
     if (enviados >= cfg.max_por_execucao) break;
@@ -298,6 +301,24 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
         .eq('transaction_id', venda.transaction_id)
         .eq('etapa', etapa);
       pulados++;
+    };
+
+    /**
+     * Apaga a reserva, para esta cobrança voltar na próxima rodada.
+     *
+     * Diferente de `marcarPulado`: pular é uma decisão ("esta pessoa não deve
+     * receber"), e a linha fica de pé justamente para não reabrir a decisão.
+     * Soltar é para o que é temporário — template em análise, por exemplo. Se a
+     * reserva ficasse, a unique (transaction_id, etapa) trancaria o candidato
+     * para sempre por causa de algo que se resolve sozinho em algumas horas.
+     */
+    const soltarReserva = async () => {
+      await supabaseAdmin
+        .from('recuperacao_envios')
+        .delete()
+        .eq('transaction_id', venda.transaction_id)
+        .eq('etapa', etapa);
+      adiados++;
     };
 
     // Abandonado não tem o que pagar: a página da fatura abre com o carimbo
@@ -347,6 +368,20 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
 
     if (!template) {
       await marcarPulado('sem_template');
+      continue;
+    }
+
+    // Template em análise não é motivo para perder a cobrança: solta a reserva e
+    // ela volta na próxima rodada, já aprovada.
+    const indisponivel = await templateIndisponivel({
+      wabaId: canal.business_account_id,
+      accessToken: canal.access_token,
+      nome: template,
+      idioma: cfg.template_idioma,
+    });
+    if (indisponivel) {
+      console.warn(`[Recuperação] ${template} está ${indisponivel}; adiando ${venda.transaction_id}`);
+      await soltarReserva();
       continue;
     }
 
@@ -440,8 +475,8 @@ export async function enviarRecuperacoesPendentes(): Promise<ResultadoRecuperaca
     }
   }
 
-  console.log('[Recuperação]', { candidatos: pendentes.length, enviados, pulados, falhas });
-  return { enviados, falhas, pulados, candidatos: pendentes.length };
+  console.log('[Recuperação]', { candidatos: pendentes.length, enviados, pulados, adiados, falhas });
+  return { enviados, falhas, pulados, adiados, candidatos: pendentes.length };
 }
 
 /**

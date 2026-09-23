@@ -121,6 +121,8 @@ export interface TemplateResolvido {
   corpo: string;
   /** Só os botões de URL: são os que viram link na conversa. */
   botoes: Array<{ texto: string; url: string }>;
+  /** APPROVED, PENDING, REJECTED, PAUSED… como a Meta devolve. */
+  status: string;
 }
 
 const corpoEmCache = new Map<string, TemplateResolvido>();
@@ -139,11 +141,12 @@ export async function corpoDoTemplate(opts: {
   try {
     const url =
       `https://graph.facebook.com/v21.0/${opts.wabaId}/message_templates` +
-      `?name=${encodeURIComponent(opts.nome)}&fields=name,language,components&limit=50`;
+      `?name=${encodeURIComponent(opts.nome)}&fields=name,language,status,components&limit=50`;
     const resposta = await axios.get<{
       data?: Array<{
         name: string;
         language: string;
+        status?: string;
         components?: Array<{
           type: string;
           text?: string;
@@ -165,13 +168,42 @@ export async function corpoDoTemplate(opts: {
     const botoes = (achado?.components?.find((c) => c.type === 'BUTTONS')?.buttons ?? [])
       .filter((b) => b.type === 'URL' && b.url)
       .map((b) => ({ texto: b.text || 'Abrir', url: b.url as string }));
-    const resolvido: TemplateResolvido = { corpo, botoes };
+    const resolvido: TemplateResolvido = { corpo, botoes, status: achado?.status || 'UNKNOWN' };
     corpoEmCache.set(chave, resolvido);
     return resolvido;
   } catch (err) {
     console.error('[WhatsApp] falha ao ler o corpo do template:', opts.nome, err);
     return null;
   }
+}
+
+/**
+ * `true` só quando a Meta CONFIRMA que o template não está aprovado.
+ *
+ * Um template em análise (ou recusado, ou pausado) é recusado no envio. Sem esta
+ * checagem a régua descobre isso levando erro, grava `failed` e a reserva fica
+ * de pé para sempre — aquela cobrança nunca mais entra na fila, nem depois da
+ * aprovação. O template ficar em análise é temporário; perder o candidato não é.
+ *
+ * A dúvida não bloqueia: sem WABA, com a Graph fora do ar ou sem achar o
+ * template, devolve `false` e o envio segue. Um soluço na Graph não pode parar a
+ * régua inteira — quem decide de verdade é a API de envio.
+ */
+export async function templateIndisponivel(opts: {
+  wabaId?: string | null;
+  accessToken: string;
+  nome: string;
+  idioma?: string;
+}): Promise<false | string> {
+  if (!opts.wabaId) return false;
+  const resolvido = await corpoDoTemplate({
+    wabaId: opts.wabaId,
+    accessToken: opts.accessToken,
+    nome: opts.nome,
+    idioma: opts.idioma,
+  });
+  if (!resolvido || resolvido.status === 'UNKNOWN') return false;
+  return resolvido.status === 'APPROVED' ? false : resolvido.status;
 }
 
 /** Troca `{{1}}`, `{{2}}`… pelos valores, do jeito que a Meta troca no envio. */
