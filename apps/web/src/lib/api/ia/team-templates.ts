@@ -47,30 +47,47 @@ function isGreetingOnly(text: string): boolean {
   return words.length > 0 && words.length <= 6 && words.every((w) => GREETING_WORDS.has(w));
 }
 
-function isGenericOpeningMessage(text: string): boolean {
+export function isGenericOpeningMessage(text: string): boolean {
   return GENERIC_SITE_MESSAGES.has(normalize(text)) || isGreetingOnly(text);
+}
+
+/**
+ * Mensagens do lead numa conversa que a equipe ainda não respondeu, ou null se
+ * já houver resposta. Espera o transcript no formato montado em
+ * /api/ia/suggestion ("ALUNO: ..." / "ATENDENTE: ..." por linha).
+ */
+export function openingMessages(transcript: string | undefined): string[] | null {
+  if (!transcript?.trim()) return null;
+  const turns = transcript.split(/\n(?=(?:ALUNO|ATENDENTE): )/);
+  if (turns.some((t) => t.startsWith('ATENDENTE: '))) return null;
+  const bodies = turns.map((t) => t.replace(/^ALUNO: /, '').trim()).filter(Boolean);
+  return bodies.length ? bodies : null;
 }
 
 /**
  * true quando a conversa está começando e o lead ainda não disse o que procura:
  * ninguém da equipe respondeu e todas as mensagens dele são cumprimento ou a
  * mensagem padrão do site. É a hora do roteiro de abertura.
- *
- * Espera o transcript no formato montado em /api/ia/suggestion
- * ("ALUNO: ..." / "ATENDENTE: ..." por linha).
  */
 export function isGenericOpening(transcript: string | undefined): boolean {
-  if (!transcript?.trim()) return false;
-  const turns = transcript.split(/\n(?=(?:ALUNO|ATENDENTE): )/);
-  if (turns.some((t) => t.startsWith('ATENDENTE: '))) return false;
-  const bodies = turns.map((t) => t.replace(/^ALUNO: /, '').trim()).filter(Boolean);
-  return bodies.length > 0 && bodies.every(isGenericOpeningMessage);
+  return openingMessages(transcript)?.every(isGenericOpeningMessage) ?? false;
+}
+
+/**
+ * Nome do curso para o aluno. Alguns itens do catálogo vieram da página de
+ * análise ("Concurso GCM Mauá/SP (análise de edital)") e não podem aparecer assim.
+ */
+export function courseLabel(p: ProductRow): string {
+  return p.name
+    .replace(/\s*\(an[áa]lise de edital\)\s*/i, '')
+    .replace(/^Concurso\s+/i, 'Curso ')
+    .trim();
 }
 
 /** Lista padrão da apresentação de curso preparatório (como a equipe envia). */
 function checklist(p: ProductRow): string[] {
   const items = [
-    `Acesso ao ${p.name}`,
+    `Acesso ao ${courseLabel(p)}`,
     'Atualizado com base no edital',
     'Videoaulas',
     'Acelerador de Vídeos',
@@ -121,8 +138,24 @@ export function formatSalesPitch(p: ProductRow): string | null {
   if (p.brand !== 'monster') return null;
   const link = p.sales_page_url?.trim() || p.checkout_url?.trim();
   if (!link) return null;
-  const parts = [salesLinkWithUtm(link), '', p.name, '', ...checklist(p)];
+  const parts = [salesLinkWithUtm(link), '', courseLabel(p), '', ...checklist(p)];
   const price = formatPriceLine(p.price_display);
   if (price) parts.push('', 'Valores:', price);
   return parts.join('\n');
+}
+
+/**
+ * Resposta ao lead que veio do site já dizendo o concurso: saudação, aviso de
+ * que o curso existe e a apresentação completa (como a equipe faz à mão).
+ */
+export function formatSiteLeadReply(p: ProductRow, saudacao: string | null): string | null {
+  const pitch = formatSalesPitch(p);
+  if (!pitch) return null;
+  const nome = courseLabel(p).replace(/^Curso\s+(Preparat[óo]rio\s+)?/i, '');
+  const oi = saudacao ? `${saudacao.charAt(0).toUpperCase()}${saudacao.slice(1)}! 😊` : 'Olá! 😊';
+  return `${oi}
+
+Temos o curso preparatório para *${nome}* disponível. Confira todos os detalhes aqui:
+
+${pitch}`;
 }

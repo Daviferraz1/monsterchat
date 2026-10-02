@@ -1,11 +1,36 @@
-import { getMatchingProducts } from './catalog';
+import { getMatchingProducts, listProducts } from './catalog';
 import type { ProductRow } from './catalog';
 import { apiEnv } from '../env';
 import { getCredentialsByEmail } from '../contacts-credentials';
 import { searchKnowledge } from './knowledge-search';
 import type { KbRow } from './knowledge-search';
 import { generateAgenticSuggestion } from './agent';
-import { OPENING_SCRIPT, formatSalesPitch, isGenericOpening } from './team-templates';
+import {
+  OPENING_SCRIPT,
+  formatSalesPitch,
+  formatSiteLeadReply,
+  isGenericOpening,
+  isGenericOpeningMessage,
+  openingMessages,
+} from './team-templates';
+import { extractSiteTarget, matchSiteCourse } from './site-course-match';
+
+/**
+ * Primeira mensagem do lead é a do site com o concurso e a equipe ainda não
+ * respondeu → saudação + apresentação do curso, ou null para seguir o fluxo.
+ */
+async function siteLeadReply(agentCtx?: SuggestionAgentContext): Promise<string | null> {
+  const bodies = openingMessages(agentCtx?.transcript);
+  if (!bodies) return null;
+  const specific = bodies.filter((b) => !isGenericOpeningMessage(b));
+  if (specific.length !== 1) return null;
+  const target = extractSiteTarget(specific[0]);
+  if (!target) return null;
+  const product = matchSiteCourse(target, await listProducts({ is_active: true, brand: 'monster' }));
+  if (!product) return null;
+  const saudacao = agentCtx?.nowHint?.match(/"(bom dia|boa tarde|boa noite)"/)?.[1] ?? null;
+  return formatSiteLeadReply(product, saudacao);
+}
 
 /** Confiança para a busca por palavra-chave (ts_rank, valores pequenos). */
 function similarityToConfidence(similarity: number): 'high' | 'medium' | 'low' | 'none' {
@@ -334,6 +359,14 @@ export async function getSuggestion(
     //    abertura da equipe, exato. Não precisa do modelo para isso.
     if (brand !== 'fagenius' && isGenericOpening(agentCtx?.transcript)) {
       return { confidence: 'high', suggestion: OPENING_SCRIPT, category: 'saudacao', alternatives: [] };
+    }
+
+    //    Veio do site já dizendo o concurso ("…sobre o concurso da GCM de
+    //    Paulínia.") → a apresentação do curso dele. Sem curso único que bata,
+    //    segue para o agente (que confere o catálogo e registra o lead).
+    const siteReply = brand !== 'fagenius' ? await siteLeadReply(agentCtx) : null;
+    if (siteReply) {
+      return { confidence: 'high', suggestion: siteReply, category: 'produto', alternatives: [] };
     }
 
     // 4) Modo IA (copiloto): agente com ferramentas
