@@ -15,6 +15,8 @@ import { fetchGuruTransactionsLive } from '../integrations/guru-live';
 import { diagnosticarAcesso } from '../integrations/platform-access';
 import { getAgentModel } from './autopilot';
 import { getOperatorStyleBlock } from './operator-style';
+import { cleanSuggestion } from './suggestion-text';
+import { OPENING_SCRIPT, formatSalesPitch } from './team-templates';
 
 const MAX_ITERATIONS = 6;
 /** Reenvios quando o modelo encerra o turno sem escrever nada (acontece de vez em quando). */
@@ -304,6 +306,12 @@ function formatProductForTool(p: ProductRow): string {
     p.duration ? `Duração: ${p.duration}` : '',
     p.extra_info_for_ia ? `Obs.: ${p.extra_info_for_ia}` : '',
   ];
+  const pitch = formatSalesPitch(p);
+  if (pitch) {
+    lines.push(
+      `APRESENTAÇÃO PRONTA (modelo da equipe — use ao apresentar este curso, sem reescrever):\n<<<\n${pitch}\n>>>`
+    );
+  }
   return lines.filter(Boolean).join('\n');
 }
 
@@ -571,6 +579,14 @@ PAGAMENTO: ${PAYMENT_METHODS_INFO}
 
 LINKS: lead interessado/avaliando um curso → PÁGINA DE VENDAS; LINK DE CHECKOUT só quando já decidiu comprar; sem página de vendas, use o checkout.
 
+ABERTURA (MONSTER): se o lead só cumprimentou ou mandou a mensagem padrão do site e AINDA NÃO DISSE qual curso/concurso procura, envie EXATAMENTE este roteiro da equipe, sem mudar nada:
+<<<
+${OPENING_SCRIPT}
+>>>
+Se ele já disse o que procura, NÃO use o roteiro — responda o que ele pediu.
+
+APRESENTAÇÃO DE CURSO (MONSTER): quando o lead quer conhecer um curso (pediu informações, valor ou link de um curso específico), copie a APRESENTAÇÃO PRONTA que vem em buscar_produto, do link até os valores, sem resumir nem reescrever (pode pôr a saudação antes, se a conversa estiver começando). Para uma pergunta pontual sobre um curso já apresentado ("tem redação?", "é pós-edital?"), responda só a pergunta.
+
 ACESSO ("comprei e não recebi" / "não consigo acessar"): 1) confirme o pagamento (consultar_pagamento; se preciso, consultar_guru_online); 2) rode verificar_acesso_plataforma com o e-mail da compra; 3) se o acesso JÁ está liberado → oriente entrar e, se esqueceu a senha, redefinir a senha; 4) se está PAGO e DENTRO do prazo mas sem acesso (ou sem cadastro) → diga que vai liberar e que o atendente vai ativar (sem prometer prazo); NÃO afirme que já liberou — quem libera é o atendente. 5) se o acesso JÁ VENCEU (prazo acabou) → NÃO é liberação: oriente renovação/nova compra com gentileza; nunca prometa reativar acesso expirado.
 
 RESPONDA SÓ O QUE FOI PERGUNTADO — regra dura:
@@ -585,9 +601,9 @@ OUTRAS REGRAS:
 
 FORMATAÇÃO (WhatsApp, NÃO Markdown): negrito com *um asterisco* (ex.: *Polícia Penal RS*) — NUNCA use ** (dois asteriscos); itálico com _underscore_; nada de títulos (#) ou tabelas.
 
-NADA EM ABERTO: se o aluno já foi atendido e não sobrou pergunta pendente (ele só agradeceu, confirmou, se despediu ou mandou emoji), NÃO invente assunto novo e NÃO escreva recomendações para o atendente. Responda SOMENTE com: [SEM_SUGESTAO]
+NADA EM ABERTO: se o aluno já foi atendido e não sobrou pergunta pendente (ele só agradeceu, confirmou, se despediu ou mandou emoji), NÃO invente assunto novo e NÃO escreva recomendações para o atendente. Responda SOMENTE com: <mensagem>[SEM_SUGESTAO]</mensagem>
 
-SAÍDA: responda APENAS com o texto da mensagem para o aluno — sem prefixos, aspas, explicações ou marcadores. Você escreve PARA O ALUNO, nunca sobre ele: nada de "o aluno já recebeu", "você pode aproveitar para" ou lista de opções para o atendente.`;
+SAÍDA: escreva a mensagem para o aluno entre <mensagem> e </mensagem>. Só o que está dentro das tags chega ao atendente; não escreva análise ("o catálogo confirma…", "o aluno mencionou…", "vou responder…") — se escrever, deixe FORA das tags. Dentro das tags você escreve PARA O ALUNO, nunca sobre ele: nada de "o aluno já recebeu", "você pode aproveitar para" ou lista de opções para o atendente. Sem pergunta em aberto: <mensagem>[SEM_SUGESTAO]</mensagem>.`;
 }
 
 /** Texto do turno do usuário (a conversa, ou o pedido de análise quando só há imagem). */
@@ -750,44 +766,6 @@ async function runGeminiAgent(
 }
 
 /**
- * Gera a sugestão com o modelo escolhido no admin (Claude por padrão; Gemini se selecionado).
- * Devolve null em caso de falha, para o chamador cair no caminho determinístico.
- */
-/** Marcador que o modelo devolve quando não há pergunta em aberto para responder. */
-const NO_SUGGESTION_MARKER = /\[SEM[_\s-]?SUGEST[AÃ]O\]/i;
-
-/**
- * Frases em que o modelo fala COM O ATENDENTE em vez de escrever para o aluno.
- *
- * Rede de segurança para o caso de ele ignorar o marcador: sem isso, o raciocínio
- * dele ("Não há perguntas em aberto. Se desejar, você pode...") aparece na caixa
- * de sugestão e vai parar no chat do aluno se o atendente clicar em usar.
- * Os padrões são propositalmente estreitos — frases que nunca apareceriam numa
- * mensagem escrita para o aluno.
- */
-const META_PATTERNS: RegExp[] = [
-  /n[ãa]o h[áa][^.]{0,40}(pergunta|d[úu]vida|quest[ãa]o)[^.]{0,20}(em aberto|pendente)/i,
-  /o aluno j[áa] (recebeu|foi atendido|agradeceu)/i,
-  /o atendente (pode|poderia|deve)/i,
-  /^\s*(sugest[ãa]o de resposta|an[áa]lise|racioc[íi]nio)\s*:/i,
-];
-
-function sanitizeSuggestion(raw: string | null): string | null {
-  const text = raw?.trim();
-  if (!text) return null;
-  if (NO_SUGGESTION_MARKER.test(text)) return null;
-  const meta = META_PATTERNS.find((re) => re.test(text));
-  if (meta) {
-    console.warn('[IA agent] Sugestão descartada: o modelo respondeu ao atendente, não ao aluno.', {
-      padrao: String(meta),
-      trecho: text.slice(0, 120),
-    });
-    return null;
-  }
-  return text;
-}
-
-/**
  * O que a IA consultou para produzir esta sugestão.
  *
  * Sem isso não havia como responder "ela olhou o catálogo ou respondeu de
@@ -824,6 +802,10 @@ async function storeTrace(
   }
 }
 
+/**
+ * Gera a sugestão com o modelo escolhido no admin (Claude por padrão; Gemini se selecionado).
+ * Devolve null em caso de falha, para o chamador cair no caminho determinístico.
+ */
 export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
   if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
   const [model, styleBlock] = await Promise.all([getAgentModel(), getOperatorStyleBlock()]);
@@ -832,8 +814,13 @@ export async function generateAgenticSuggestion(ctx: AgentContext): Promise<stri
   const raw = model.startsWith('gemini')
     ? await runGeminiAgent(fullCtx, model, trace)
     : await runAnthropicAgent(fullCtx, model, trace);
-  const limpa = sanitizeSuggestion(raw);
-  const descartada = raw && !limpa ? 'saneador: meta-texto ou [SEM_SUGESTAO]' : null;
-  await storeTrace(fullCtx, model, trace, limpa ?? raw, descartada);
+  const { text: limpa, discardedReason } = cleanSuggestion(raw);
+  if (discardedReason?.startsWith('meta-texto')) {
+    console.warn('[IA agent] Sugestão descartada: o modelo respondeu ao atendente, não ao aluno.', {
+      motivo: discardedReason,
+      trecho: raw?.slice(0, 120),
+    });
+  }
+  await storeTrace(fullCtx, model, trace, limpa ?? raw, discardedReason);
   return limpa;
 }

@@ -5,6 +5,7 @@ import { getCredentialsByEmail } from '../contacts-credentials';
 import { searchKnowledge } from './knowledge-search';
 import type { KbRow } from './knowledge-search';
 import { generateAgenticSuggestion } from './agent';
+import { OPENING_SCRIPT, formatSalesPitch, isGenericOpening } from './team-templates';
 
 /** Confiança para a busca por palavra-chave (ts_rank, valores pequenos). */
 function similarityToConfidence(similarity: number): 'high' | 'medium' | 'low' | 'none' {
@@ -147,6 +148,12 @@ function formatProductSuggestion(products: ProductRow[], contactName?: string): 
 
   const blocks: string[] = [];
   products.forEach((p, index) => {
+    // Preparatório Monster: o mesmo texto que a equipe envia (link, ✅ lista, valores).
+    const pitch = formatSalesPitch(p);
+    if (pitch) {
+      blocks.push(index === 0 ? `${lead}${pitch}` : pitch);
+      return;
+    }
     const concurso = concursoLabel(p);
     const noNaConcurso = preposicaoConcurso(concurso);
     const parts: string[] = [];
@@ -323,7 +330,13 @@ export async function getSuggestion(
       }
     }
 
-    // 3) Modo IA (copiloto): agente com ferramentas
+    // 3) Conversa começando e o lead ainda não disse o que procura → roteiro de
+    //    abertura da equipe, exato. Não precisa do modelo para isso.
+    if (brand !== 'fagenius' && isGenericOpening(agentCtx?.transcript)) {
+      return { confidence: 'high', suggestion: OPENING_SCRIPT, category: 'saudacao', alternatives: [] };
+    }
+
+    // 4) Modo IA (copiloto): agente com ferramentas
     if (useAi && apiEnv.ANTHROPIC_API_KEY) {
       const aiSuggestion = await generateAgenticSuggestion({
         conversationText: agentCtx?.transcript || messageBody,
@@ -348,7 +361,7 @@ export async function getSuggestion(
       // se o agente falhar, cai no caminho determinístico abaixo
     }
 
-    // 4) Determinístico: catálogo (intenção comercial) ou base de conhecimento
+    // 5) Determinístico: catálogo (intenção comercial) ou base de conhecimento
     const [kbResult, matchingProducts] = await Promise.all([
       searchKnowledgeBase(messageBody, brand),
       getMatchingProducts(messageBody, brand),
