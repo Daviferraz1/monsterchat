@@ -6,6 +6,7 @@
  * texto de sempre. Com o modelo fixo, a sugestão sai igual ao que ele enviaria.
  */
 import type { ProductRow } from './catalog';
+import { courseRoleTitle } from './site-course-match';
 
 /** Roteiro de abertura (enviado 494 vezes, idêntico, em set/2026). */
 export const OPENING_SCRIPT = `Olá! 🚀
@@ -147,15 +148,30 @@ export function formatSalesPitch(p: ProductRow): string | null {
 /**
  * Resposta ao lead que veio do site já dizendo o concurso: saudação, aviso de
  * que o curso existe e a apresentação completa (como a equipe faz à mão).
+ * Com mais de um cargo (Soldado e CFO), apresenta cada curso em sequência.
  */
-export function formatSiteLeadReply(p: ProductRow, saudacao: string | null): string | null {
-  const pitch = formatSalesPitch(p);
-  if (!pitch) return null;
-  const nome = courseLabel(p).replace(/^Curso\s+(Preparat[óo]rio\s+)?/i, '');
+export function formatSiteLeadReply(products: ProductRow[], saudacao: string | null): string | null {
+  const many = products.length > 1;
+  const pitches = products
+    .map((p) => {
+      const pitch = formatSalesPitch(p);
+      if (!pitch) return null;
+      // Com mais de um curso, o cargo vai no topo: "Curso PM Bahia - 2.500 Vagas"
+      // não diz que é o de Soldado.
+      const role = many ? courseRoleTitle(p) : null;
+      return role ? `👉 *${role}*
+${pitch}` : pitch;
+    })
+    .filter((p): p is string => !!p);
+  if (!pitches.length) return null;
   const oi = saudacao ? `${saudacao.charAt(0).toUpperCase()}${saudacao.slice(1)}! 😊` : 'Olá! 😊';
-  return `${oi}
+  const intro =
+    pitches.length === 1
+      ? `Temos o curso preparatório para *${shortName(products[0])}* disponível. Confira todos os detalhes aqui:`
+      : `Temos ${pitches.length} cursos preparatórios disponíveis para esse concurso. Confira os detalhes de cada um:`;
+  return [oi, intro, ...pitches].join('\n\n');
+}
 
-Temos o curso preparatório para *${nome}* disponível. Confira todos os detalhes aqui:
-
-${pitch}`;
+function shortName(p: ProductRow): string {
+  return courseLabel(p).replace(/^Curso\s+(Preparat[óo]rio\s+)?/i, '');
 }

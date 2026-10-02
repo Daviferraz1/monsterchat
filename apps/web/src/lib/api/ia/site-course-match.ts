@@ -71,7 +71,10 @@ const CORP_SET = new Set(['gcm', 'pp', 'pc', 'pm', 'cbm']);
 const ROLE_WORDS: Record<string, string> = {
   soldado: 'soldado',
   oficial: 'cfo',
+  oficiais: 'cfo',
   cfo: 'cfo',
+  cfopm: 'cfo',
+  cadete: 'cfo',
   investigador: 'investigador',
   escrivao: 'escrivao',
   agente: 'agente',
@@ -82,7 +85,7 @@ const ROLE_WORDS: Record<string, string> = {
 };
 
 const NOISE = new Set(
-  'o a os as de da do das dos e em para no na aqui cidade estado curso cursos preparatorio concurso analise edital vagas monster policia policial militar civil guarda'.split(
+  'o a os as de da do das dos e em para no na aqui cidade estado curso cursos preparatorio concurso analise edital vagas monster policia policial militar civil guarda formacao aluno'.split(
     ' '
   )
 );
@@ -124,16 +127,21 @@ function parseProduct(p: ProductRow): Parsed {
   return parsed;
 }
 
+/** Mais que isso já não é "o curso dele", é uma lista — melhor o agente conversar. */
+const MAX_COURSES = 3;
+
 /**
- * O curso do catálogo para o concurso citado, ou null quando não há um único
- * curso que bata (sem curso, ambíguo, cargo diferente).
+ * Os cursos do catálogo para o concurso citado — normalmente um. Quando a
+ * pessoa não diz o cargo ("PM da Bahia") ou cita mais de um ("Soldado /
+ * Oficial"), vêm todos os cargos daquele concurso (Soldado e CFO). Lista
+ * vazia quando nada bate: sem curso, cargo diferente ou pedido vago demais.
  */
-export function matchSiteCourse(target: string, products: ProductRow[]): ProductRow | null {
+export function matchSiteCourses(target: string, products: ProductRow[]): ProductRow[] {
   const want = parse(target);
-  if (!want.places.size && !want.corp) return null;
+  if (!want.places.size && !want.corp) return [];
 
   const seen = new Set<string>();
-  const candidates: Array<{ p: ProductRow; extras: number }> = [];
+  const candidates: Array<{ p: ProductRow; extraPlaces: number }> = [];
   for (const p of products) {
     if (p.brand !== 'monster') continue;
     const key = p.slug || p.id;
@@ -145,14 +153,31 @@ export function matchSiteCourse(target: string, products: ProductRow[]): Product
     if ([...want.places].some((w) => !have.places.has(w))) continue;
     if (want.roles.size && ![...want.roles].some((r) => have.roles.has(r))) continue;
 
-    // Quanto do curso NÃO foi pedido: "GCM de São Paulo" casa com GCM São Paulo
-    // (0 a mais) e com GCM Paulínia - SP (1 a mais); fica o mais justo.
+    // Lugar que o curso tem e não foi pedido: "GCM de São Paulo" casa com
+    // GCM São Paulo (0 a mais) e com GCM Paulínia - SP (1 a mais); fica o mais justo.
     const extraPlaces = [...have.places].filter((w) => !want.places.has(w) && !UF_SET.has(w)).length;
-    const extraRoles = [...have.roles].filter((r) => !want.roles.has(r)).length;
-    candidates.push({ p, extras: extraPlaces * 10 + extraRoles });
+    candidates.push({ p, extraPlaces });
   }
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => a.extras - b.extras);
-  if (candidates.length > 1 && candidates[0].extras === candidates[1].extras) return null;
-  return candidates[0].p;
+  if (!candidates.length) return [];
+  const best = Math.min(...candidates.map((c) => c.extraPlaces));
+  const matches = candidates.filter((c) => c.extraPlaces === best).map((c) => c.p);
+  return matches.length <= MAX_COURSES ? matches : [];
+}
+
+const ROLE_TITLES: Record<string, string> = {
+  soldado: 'SOLDADO',
+  cfo: 'OFICIAL (CFO)',
+  investigador: 'INVESTIGADOR',
+  escrivao: 'ESCRIVÃO',
+  agente: 'AGENTE',
+  delegado: 'DELEGADO',
+  perito: 'PERITO',
+  inspetor: 'INSPETOR',
+  monitor: 'MONITOR',
+};
+
+/** Cargo do curso para título ("OFICIAL (CFO)"), ou null se não der para dizer qual é. */
+export function courseRoleTitle(p: ProductRow): string | null {
+  const roles = [...parseProduct(p).roles];
+  return roles.length === 1 ? ROLE_TITLES[roles[0]] ?? null : null;
 }

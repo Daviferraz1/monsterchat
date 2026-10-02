@@ -13,11 +13,11 @@ import {
   isGenericOpeningMessage,
   openingMessages,
 } from './team-templates';
-import { extractSiteTarget, matchSiteCourse } from './site-course-match';
+import { extractSiteTarget, matchSiteCourses } from './site-course-match';
 
 /**
  * Primeira mensagem do lead é a do site com o concurso e a equipe ainda não
- * respondeu → saudação + apresentação do curso, ou null para seguir o fluxo.
+ * respondeu → saudação + apresentação do(s) curso(s), ou null para seguir o fluxo.
  */
 async function siteLeadReply(agentCtx?: SuggestionAgentContext): Promise<string | null> {
   const bodies = openingMessages(agentCtx?.transcript);
@@ -26,10 +26,10 @@ async function siteLeadReply(agentCtx?: SuggestionAgentContext): Promise<string 
   if (specific.length !== 1) return null;
   const target = extractSiteTarget(specific[0]);
   if (!target) return null;
-  const product = matchSiteCourse(target, await listProducts({ is_active: true, brand: 'monster' }));
-  if (!product) return null;
+  const courses = matchSiteCourses(target, await listProducts({ is_active: true, brand: 'monster' }));
+  if (!courses.length) return null;
   const saudacao = agentCtx?.nowHint?.match(/"(bom dia|boa tarde|boa noite)"/)?.[1] ?? null;
-  return formatSiteLeadReply(product, saudacao);
+  return formatSiteLeadReply(courses, saudacao);
 }
 
 /** Confiança para a busca por palavra-chave (ts_rank, valores pequenos). */
