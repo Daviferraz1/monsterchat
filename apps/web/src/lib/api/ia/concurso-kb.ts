@@ -412,7 +412,8 @@ async function match(
   return (data ?? []) as KbHit[];
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Edital com PDF processado: id do acervo curado (uuid) ou PDF citado no blog (blog-<hash>). */
+const EDITAL_COM_PDF = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|blog-[0-9a-f]{12})$/i;
 
 /**
  * Busca em duas etapas. Regra de PcD, altura ou conteúdo programático é
@@ -439,7 +440,7 @@ export async function searchConcursoKb(pergunta: string, concurso?: string, uf?:
   // Edital curado (ref = id do "Edital") do MESMO órgão do primeiro colocado —
   // o da edição atual antes do de edição passada, mas nunca trocando de
   // concurso (um registro "atual" da PMMG chegou a ganhar da PM Bahia).
-  const curados = docs.filter((d) => (d.fonte === 'ficha' || d.fonte === 'edital') && UUID.test(d.ref));
+  const curados = docs.filter((d) => (d.fonte === 'ficha' || d.fonte === 'edital') && EDITAL_COM_PDF.test(d.ref));
   const orgao = (h?: KbHit) => (h?.orgao ?? '').trim().toLowerCase();
   const mesmoOrgao = curados.filter((d) => orgao(d) === orgao(curados[0]));
   const edital = mesmoOrgao.find((d) => d.edicao !== 'anterior') ?? curados[0];
