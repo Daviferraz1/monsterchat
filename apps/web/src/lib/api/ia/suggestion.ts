@@ -1,10 +1,36 @@
-import { getMatchingProducts } from './catalog';
+import { getMatchingProducts, listProducts } from './catalog';
 import type { ProductRow } from './catalog';
 import { apiEnv } from '../env';
 import { getCredentialsByEmail } from '../contacts-credentials';
 import { searchKnowledge } from './knowledge-search';
 import type { KbRow } from './knowledge-search';
 import { generateAgenticSuggestion } from './agent';
+import {
+  OPENING_SCRIPT,
+  formatSalesPitch,
+  formatSiteLeadReply,
+  isGenericOpening,
+  isGenericOpeningMessage,
+  openingMessages,
+} from './team-templates';
+import { extractSiteTarget, matchSiteCourses } from './site-course-match';
+
+/**
+ * Primeira mensagem do lead é a do site com o concurso e a equipe ainda não
+ * respondeu → saudação + apresentação do(s) curso(s), ou null para seguir o fluxo.
+ */
+async function siteLeadReply(agentCtx?: SuggestionAgentContext): Promise<string | null> {
+  const bodies = openingMessages(agentCtx?.transcript);
+  if (!bodies) return null;
+  const specific = bodies.filter((b) => !isGenericOpeningMessage(b));
+  if (specific.length !== 1) return null;
+  const target = extractSiteTarget(specific[0]);
+  if (!target) return null;
+  const courses = matchSiteCourses(target, await listProducts({ is_active: true, brand: 'monster' }));
+  if (!courses.length) return null;
+  const saudacao = agentCtx?.nowHint?.match(/"(bom dia|boa tarde|boa noite)"/)?.[1] ?? null;
+  return formatSiteLeadReply(courses, saudacao);
+}
 
 /** Confiança para a busca por palavra-chave (ts_rank, valores pequenos). */
 function similarityToConfidence(similarity: number): 'high' | 'medium' | 'low' | 'none' {
@@ -147,6 +173,12 @@ function formatProductSuggestion(products: ProductRow[], contactName?: string): 
 
   const blocks: string[] = [];
   products.forEach((p, index) => {
+    // Preparatório Monster: o mesmo texto que a equipe envia (link, ✅ lista, valores).
+    const pitch = formatSalesPitch(p);
+    if (pitch) {
+      blocks.push(index === 0 ? `${lead}${pitch}` : pitch);
+      return;
+    }
     const concurso = concursoLabel(p);
     const noNaConcurso = preposicaoConcurso(concurso);
     const parts: string[] = [];
@@ -323,7 +355,21 @@ export async function getSuggestion(
       }
     }
 
-    // 3) Modo IA (copiloto): agente com ferramentas
+    // 3) Conversa começando e o lead ainda não disse o que procura → roteiro de
+    //    abertura da equipe, exato. Não precisa do modelo para isso.
+    if (brand !== 'fagenius' && isGenericOpening(agentCtx?.transcript)) {
+      return { confidence: 'high', suggestion: OPENING_SCRIPT, category: 'saudacao', alternatives: [] };
+    }
+
+    //    Veio do site já dizendo o concurso ("…sobre o concurso da GCM de
+    //    Paulínia.") → a apresentação do curso dele. Sem curso único que bata,
+    //    segue para o agente (que confere o catálogo e registra o lead).
+    const siteReply = brand !== 'fagenius' ? await siteLeadReply(agentCtx) : null;
+    if (siteReply) {
+      return { confidence: 'high', suggestion: siteReply, category: 'produto', alternatives: [] };
+    }
+
+    // 4) Modo IA (copiloto): agente com ferramentas
     if (useAi && apiEnv.ANTHROPIC_API_KEY) {
       const aiSuggestion = await generateAgenticSuggestion({
         conversationText: agentCtx?.transcript || messageBody,
@@ -348,7 +394,7 @@ export async function getSuggestion(
       // se o agente falhar, cai no caminho determinístico abaixo
     }
 
-    // 4) Determinístico: catálogo (intenção comercial) ou base de conhecimento
+    // 5) Determinístico: catálogo (intenção comercial) ou base de conhecimento
     const [kbResult, matchingProducts] = await Promise.all([
       searchKnowledgeBase(messageBody, brand),
       getMatchingProducts(messageBody, brand),

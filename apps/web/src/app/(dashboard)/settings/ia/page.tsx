@@ -8,6 +8,19 @@ interface IAStats {
   conversationsAnalyzed: number;
   knowledgeEntries: number;
   byBrand: Array<{ brand: string; total: number; avg_quality?: number; avg_response_time_s?: number }>;
+  /** O que a equipe fez com as sugestões nos últimos 30 dias (null se a consulta falhou). */
+  suggestions: {
+    total: number;
+    exata: number;
+    quase_igual: number;
+    parcial: number;
+    descartada: number;
+    sem_texto: number;
+  } | null;
+}
+
+function pct(part: number, total: number): string {
+  return total > 0 ? `${Math.round((part / total) * 100)}%` : '—';
 }
 
 export default function IAPage() {
@@ -42,6 +55,7 @@ export default function IAPage() {
         conversationsAnalyzed: statsData.conversationsAnalyzed ?? 0,
         knowledgeEntries: statsData.knowledgeEntries ?? 0,
         byBrand: statsData.byBrand ?? [],
+        suggestions: statsData.suggestions ?? null,
       });
 
       if (!autopilotRes.ok) throw new Error(autopilotData.error || 'Falha ao carregar');
@@ -268,6 +282,37 @@ export default function IAPage() {
                 </div>
               </div>
             </div>
+            {stats.suggestions && stats.suggestions.total > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm font-medium text-gray-700">Aproveitamento das sugestões (30 dias)</p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Comparamos a sugestão com o que foi enviado. &quot;Quase igual&quot; = o atendente colou e só ajustou
+                  detalhes (saudação, emoji), com 80% ou mais das palavras em comum.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {(
+                    [
+                      ['Aproveitadas', stats.suggestions.exata + stats.suggestions.quase_igual, 'enviadas como estavam ou quase iguais'],
+                      ['Quase iguais', stats.suggestions.quase_igual, 'coladas com pequenos ajustes'],
+                      ['Parciais', stats.suggestions.parcial, '50–80% das palavras em comum'],
+                      ['Descartadas', stats.suggestions.descartada, 'equipe escreveu outra coisa'],
+                    ] as const
+                  ).map(([label, n, hint]) => (
+                    <div key={label} className="p-3 rounded-xl bg-white border border-gray-200">
+                      <p className="text-2xl font-bold text-gray-900">{pct(n, stats.suggestions!.total)}</p>
+                      <p className="text-xs font-medium text-gray-700">
+                        {label} · {n}
+                      </p>
+                      <p className="text-xs text-gray-500">{hint}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {stats.suggestions.total} sugestões avaliadas
+                  {stats.suggestions.sem_texto > 0 && ` (${stats.suggestions.sem_texto} respondidas só com mídia)`}.
+                </p>
+              </div>
+            )}
             {stats.byBrand.length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <p className="text-sm font-medium text-gray-700 mb-2">Por marca</p>
