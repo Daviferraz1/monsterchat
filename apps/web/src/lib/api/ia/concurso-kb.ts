@@ -393,11 +393,11 @@ export interface KbHit {
 
 async function match(
   texto: string,
+  embedding: number[] | null,
   fontes: KbRow['fonte'][],
   count: number,
   uf?: string
 ): Promise<KbHit[]> {
-  const embedding = await embedText(texto, 'RETRIEVAL_QUERY');
   const { data, error } = await supabaseAdmin.rpc('match_concurso_kb', {
     query_embedding: embedding,
     query_text: texto,
@@ -420,25 +420,36 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * ganhavam ("PMPE PcD" trazia a PM do Maranhão). Então:
  *   1) acha o concurso pelos documentos inteiros (ficha, edital, blog);
  *   2) procura os trechos só dentro do PDF do edital identificado.
+ * O blog entra por uma busca própria: os editais antigos do acervo (PMBA 2022,
+ * 2023, 2024) tomavam todas as vagas e o post com o edital vigente sumia — a
+ * IA chegou a dizer que não havia edital novo da PMBA com inscrições abertas.
  */
 export async function searchConcursoKb(pergunta: string, concurso?: string, uf?: string): Promise<KbHit[]> {
   const p = pergunta?.trim();
   const c = concurso?.trim();
   if (!p && !c) return [];
 
-  const docs = await match([c, p].filter(Boolean).join(' '), ['ficha', 'edital', 'blog'], 8, uf);
-  const top = docs[0]?.score ?? 0;
-  // Edital curado (ref = id do "Edital") colado no topo — o da edição atual
-  // antes do de edição passada, que o acervo também guarda.
-  const curados = docs.filter((d) => (d.fonte === 'ficha' || d.fonte === 'edital') && UUID.test(d.ref) && d.score >= top - 0.05);
-  const edital = curados.find((d) => d.edicao !== 'anterior') ?? curados[0];
+  const texto = [c, p].filter(Boolean).join(' ');
+  const embedding = await embedText(texto, 'RETRIEVAL_QUERY');
+  const [docs, blog] = await Promise.all([
+    match(texto, embedding, ['ficha', 'edital'], 6, uf),
+    match(texto, embedding, ['blog'], 3, uf),
+  ]);
+
+  // Edital curado (ref = id do "Edital") do MESMO órgão do primeiro colocado —
+  // o da edição atual antes do de edição passada, mas nunca trocando de
+  // concurso (um registro "atual" da PMMG chegou a ganhar da PM Bahia).
+  const curados = docs.filter((d) => (d.fonte === 'ficha' || d.fonte === 'edital') && UUID.test(d.ref));
+  const orgao = (h?: KbHit) => (h?.orgao ?? '').trim().toLowerCase();
+  const mesmoOrgao = curados.filter((d) => orgao(d) === orgao(curados[0]));
+  const edital = mesmoOrgao.find((d) => d.edicao !== 'anterior') ?? curados[0];
 
   let trechos: KbHit[] = [];
   if (edital) {
-    const candidatos = await match([c, p].filter(Boolean).join(' '), ['trecho'], 120, uf);
+    const candidatos = await match(texto, embedding, ['trecho'], 120, uf);
     trechos = candidatos.filter((t) => t.ref.startsWith(`${edital.ref}#`)).slice(0, 4);
   }
-  return [...docs.slice(0, 5), ...trechos];
+  return [...docs.slice(0, 4), ...blog.slice(0, 2), ...trechos];
 }
 
 const ROTULO_FONTE: Record<KbRow['fonte'], string> = {
