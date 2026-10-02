@@ -17,6 +17,7 @@ import { getAgentModel } from './autopilot';
 import { getOperatorStyleBlock } from './operator-style';
 import { cleanSuggestion } from './suggestion-text';
 import { OPENING_SCRIPT, formatSalesPitch } from './team-templates';
+import { formatKbHits, searchConcursoKb } from './concurso-kb';
 
 const MAX_ITERATIONS = 6;
 /** Reenvios quando o modelo encerra o turno sem escrever nada (acontece de vez em quando). */
@@ -95,6 +96,23 @@ const tools: Anthropic.Tool[] = [
       type: 'object',
       properties: {
         consulta: { type: 'string', description: 'A dúvida do aluno em poucas palavras' },
+      },
+      required: ['consulta'],
+    },
+  },
+  {
+    name: 'buscar_concurso',
+    description:
+      'Busca informações do CONCURSO (não do nosso curso) na base da casa: fichas extraídas dos PDFs oficiais dos editais, trechos do edital com a página, editais cadastrados na plataforma e notícias do blog. Use para vagas (inclusive PcD e cotas), requisitos, idade, altura, escolaridade, CNH, etapas, TAF, prova, matérias, salário, taxa, datas, banca, situação (previsto, autorizado, edital publicado, inscrições abertas). Cada resultado traz a fonte, a data e o link.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        consulta: {
+          type: 'string',
+          description:
+            'Concurso + o que o aluno quer saber, em poucas palavras (ex.: "PMPE soldado vagas PcD autismo", "GCM Salvador idade máxima", "PM SP cadete autorização")',
+        },
+        uf: { type: 'string', description: 'Sigla do estado, se souber (ex.: "PE"). Opcional.' },
       },
       required: ['consulta'],
     },
@@ -450,6 +468,10 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
         .map((r, i) => `${i + 1}. Pergunta-tipo: ${r.question_pattern}\nResposta-ouro: ${r.gold_response}`)
         .join('\n\n');
     }
+    case 'buscar_concurso': {
+      const hits = await searchConcursoKb(String(input?.consulta ?? ''), input?.uf ? String(input.uf) : undefined);
+      return formatKbHits(hits);
+    }
     case 'buscar_produto': {
       const intencao = String(input?.intencao ?? '');
       const [matches, all] = await Promise.all([
@@ -553,6 +575,7 @@ CONVERSA:
 - ${ctx.nowHint || 'Use a saudação conforme o horário do dia (bom dia/boa tarde/boa noite).'} Só cumprimente se a conversa estiver começando; se já estiver em andamento (o atendente já cumprimentou), vá direto ao ponto, sem repetir a saudação.
 
 FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, preço, prazo ou acesso exige):
+- buscar_concurso: fatos do CONCURSO (edital, vagas, cotas/PcD, requisitos, idade, TAF, etapas, prova, datas, banca, salário, situação/autorização). Use SEMPRE antes de responder sobre um concurso — nunca de memória.
 - buscar_produto: preço, link, o que inclui (interesse em curso).
 - consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou.
 - consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
@@ -561,6 +584,12 @@ FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, pr
 - buscar_conhecimento: procedimentos/FAQ de atendimento.
 - classificar_lead: quando NÃO há solução imediata e será preciso contatar o lead depois (o curso/concurso que ele quer não existe no catálogo e ele quer ser avisado no lançamento; pediu retorno futuro). Chame ANTES de redigir e, na mensagem, confirme que vai avisá-lo.
 - salvar_dados_contato: registre no cadastro os dados pessoais que o aluno informar (nome completo, CPF, telefone, endereço, e-mail) — para suporte futuro. Só o que ele fornecer; não fique pedindo à toa.
+
+CONCURSO (dados do buscar_concurso):
+- Responda só com o que veio na busca e diga de onde: "pelo edital (p. 12)…", "segundo a ficha do edital…", "pela notícia de 02/10 no nosso blog…". Prefira ficha e trecho do edital (documento oficial) à notícia do blog; se discordarem, fique com o edital e mencione a diferença.
+- Item marcado EDIÇÃO ANTERIOR: deixe claro que é a regra do edital passado e pode mudar. Concurso "previsto"/"autorizado": diga que ainda não há edital, sem cravar datas ou regras.
+- Pode mandar o link do edital (PDF) ou do post do blog que veio no resultado.
+- Se a busca não trouxer a resposta (ou trouxer outro concurso), diga que não encontrou no edital e que vai confirmar — não complete com conhecimento geral. Questões jurídicas individuais (laudo, recurso, caso específico de PcD) podem receber a regra do edital, mas a decisão é da banca/comissão.
 
 NUNCA invente: não cite e-mail, status, valor, login, nome ou qualquer dado que você não obteve de uma ferramenta ou da conversa. NÃO traga assuntos que o aluno não levantou (ex.: não fale de pagamento, acesso ou e-mail se ele não perguntou sobre isso).
 

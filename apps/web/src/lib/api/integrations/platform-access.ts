@@ -11,7 +11,7 @@ export function isPlatformEnabled(): boolean {
   return !!(apiEnv.PLATFORM_SUPABASE_URL && apiEnv.PLATFORM_SUPABASE_SERVICE_KEY);
 }
 
-async function pget<T = Record<string, unknown>>(path: string): Promise<T[]> {
+export async function pget<T = Record<string, unknown>>(path: string): Promise<T[]> {
   const base = apiEnv.PLATFORM_SUPABASE_URL?.replace(/\/$/, '');
   const key = apiEnv.PLATFORM_SUPABASE_SERVICE_KEY;
   if (!base || !key) return [];
