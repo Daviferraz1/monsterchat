@@ -105,7 +105,7 @@ export async function embedBatch(
         outputDimensionality: EMBEDDING_DIM,
       })),
     },
-    20000
+    45000 // lote de trechos de PDF passava de 20 s no Gemini
   );
   const embeddings = json?.embeddings;
   if (!Array.isArray(embeddings)) return { embeddings: texts.map(() => null), status };

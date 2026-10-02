@@ -215,6 +215,21 @@ function concursoLinha(c: Concurso): string {
     .join(', ');
 }
 
+/**
+ * O acervo de editais é histórico (PMPE 2023 ao lado dos de 2026): prova há
+ * mais de 90 dias = edição passada. Mesma regra do edital_kb do monitor.
+ */
+function edicaoPorProva(datas: Array<string | null | undefined>): 'atual' | 'anterior' {
+  const validas = datas.filter((d): d is string => !!d && !Number.isNaN(new Date(d).getTime()));
+  if (!validas.length) return 'atual';
+  const ultima = Math.max(...validas.map((d) => new Date(d).getTime()));
+  return Date.now() - ultima > 90 * 864e5 ? 'anterior' : 'atual';
+}
+
+function ano(d: string | null | undefined): string {
+  return d && /^\d{4}/.test(d) ? ` (${d.slice(0, 4)})` : '';
+}
+
 async function fetchEditais(): Promise<KbRow[]> {
   const [editais, concursos] = await Promise.all([
     pget<Edital>(
@@ -231,7 +246,9 @@ async function fetchEditais(): Promise<KbRow[]> {
   for (const e of editais) {
     const cs = porEdital.get(e.id) ?? [];
     const pdfs = (e.edital_arquivos ?? []).filter((a) => a.url);
-    const titulo = `Edital ${e.orgao_nome ?? e.orgao_sigla} ${e.edital_numero ?? ''}`.trim();
+    const provas = [...cs.map((c) => c.data_prova), e.data_prova_inicio];
+    const ultimaProva = provas.filter(Boolean).sort().pop();
+    const titulo = `Edital ${e.orgao_nome ?? e.orgao_sigla} ${e.edital_numero ?? ''}`.trim() + ano(ultimaProva);
     const texto = linhas(
       `Órgão: ${e.orgao_nome ?? e.orgao_sigla}`,
       e.banca && `Banca: ${e.banca}`,
@@ -246,6 +263,7 @@ async function fetchEditais(): Promise<KbRow[]> {
       fonte: 'edital',
       ref: e.id,
       titulo,
+      edicao: edicaoPorProva(provas),
       orgao: e.orgao_nome,
       cargo: cs.map((c) => c.cargo).filter(Boolean).join(', ') || null,
       situacao: 'edital_publicado',
@@ -264,6 +282,7 @@ async function fetchEditais(): Promise<KbRow[]> {
       fonte: 'edital',
       ref: `concurso:${c.id}`,
       titulo: c.nome,
+      edicao: edicaoPorProva([c.data_prova]),
       orgao: c.orgao,
       cargo: c.cargo,
       situacao: c.status === 'previsto' ? 'previsto' : null,
@@ -322,7 +341,7 @@ export async function embedPending(opts: { maxMs?: number } = {}) {
       .from('concurso_kb')
       .select('id, titulo, texto')
       .is('embedding', null)
-      .limit(50);
+      .limit(20); // 50 trechos de PDF estouravam o timeout de 20 s do embedBatch
     if (error) throw error;
     if (!data?.length) return { feitos, motivo: 'completo' };
     const { embeddings, status } = await embedBatch(
@@ -372,22 +391,54 @@ export interface KbHit {
   score: number;
 }
 
-export async function searchConcursoKb(consulta: string, uf?: string): Promise<KbHit[]> {
-  const q = consulta?.trim();
-  if (!q) return [];
-  const embedding = await embedText(q, 'RETRIEVAL_QUERY');
+async function match(
+  texto: string,
+  fontes: KbRow['fonte'][],
+  count: number,
+  uf?: string
+): Promise<KbHit[]> {
+  const embedding = await embedText(texto, 'RETRIEVAL_QUERY');
   const { data, error } = await supabaseAdmin.rpc('match_concurso_kb', {
     query_embedding: embedding,
-    query_text: q,
+    query_text: texto,
     filtro_uf: uf?.trim() || null,
-    filtro_fontes: null,
-    match_count: 8,
+    filtro_fontes: fontes,
+    match_count: count,
   });
   if (error) {
     console.error('[concurso-kb] busca', error);
     return [];
   }
   return (data ?? []) as KbHit[];
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Busca em duas etapas. Regra de PcD, altura ou conteúdo programático é
+ * parecida em todo edital, e numa busca só os trechos de editais vizinhos
+ * ganhavam ("PMPE PcD" trazia a PM do Maranhão). Então:
+ *   1) acha o concurso pelos documentos inteiros (ficha, edital, blog);
+ *   2) procura os trechos só dentro do PDF do edital identificado.
+ */
+export async function searchConcursoKb(pergunta: string, concurso?: string, uf?: string): Promise<KbHit[]> {
+  const p = pergunta?.trim();
+  const c = concurso?.trim();
+  if (!p && !c) return [];
+
+  const docs = await match([c, p].filter(Boolean).join(' '), ['ficha', 'edital', 'blog'], 8, uf);
+  const top = docs[0]?.score ?? 0;
+  // Edital curado (ref = id do "Edital") colado no topo — o da edição atual
+  // antes do de edição passada, que o acervo também guarda.
+  const curados = docs.filter((d) => (d.fonte === 'ficha' || d.fonte === 'edital') && UUID.test(d.ref) && d.score >= top - 0.05);
+  const edital = curados.find((d) => d.edicao !== 'anterior') ?? curados[0];
+
+  let trechos: KbHit[] = [];
+  if (edital) {
+    const candidatos = await match([c, p].filter(Boolean).join(' '), ['trecho'], 120, uf);
+    trechos = candidatos.filter((t) => t.ref.startsWith(`${edital.ref}#`)).slice(0, 4);
+  }
+  return [...docs.slice(0, 5), ...trechos];
 }
 
 const ROTULO_FONTE: Record<KbRow['fonte'], string> = {
@@ -403,14 +454,25 @@ function dataBr(d: string | null): string {
   return Number.isNaN(t.getTime()) ? d : t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
+/** Ordem de leitura: documento oficial antes de notícia. */
+const PRIORIDADE: Record<KbRow['fonte'], number> = { ficha: 0, trecho: 1, edital: 2, blog: 3 };
+/** Teto de caracteres por item — sem ele, fichas e posts ocupavam todo o espaço e os trechos do PDF não chegavam. */
+const LIMITE_ITEM: Record<KbRow['fonte'], number> = { ficha: 3000, trecho: 1600, edital: 1200, blog: 1500 };
+
 /** Resultado da busca no formato que o agente lê: fonte, data e link de cada item. */
-export function formatKbHits(hits: KbHit[], maxChars = 9000): string {
+/** Edição atual primeiro, depois a notícia, e só então o edital de edição passada. */
+function peso(h: KbHit): number {
+  return PRIORIDADE[h.fonte] + (h.edicao === 'anterior' ? 3.5 : 0);
+}
+
+export function formatKbHits(hits: KbHit[], maxChars = 16000): string {
   if (!hits.length) {
     return 'Nada encontrado na base de concursos (blog, editais e fichas). Não afirme dados deste concurso; diga que vai confirmar com a equipe.';
   }
+  const ordenados = [...hits].sort((a, b) => peso(a) - peso(b) || b.score - a.score);
   const blocos: string[] = [];
   let usado = 0;
-  for (const h of hits) {
+  for (const h of ordenados) {
     const cab = [
       `[${ROTULO_FONTE[h.fonte]}] ${h.titulo}`,
       [h.orgao, h.uf].filter(Boolean).join(' — '),
@@ -422,10 +484,10 @@ export function formatKbHits(hits: KbHit[], maxChars = 9000): string {
     ]
       .filter(Boolean)
       .join(' | ');
-    const limite = h.fonte === 'trecho' ? 1800 : 2500;
+    const limite = LIMITE_ITEM[h.fonte];
     const corpo = h.texto.length > limite ? `${h.texto.slice(0, limite)}…` : h.texto;
     const bloco = `${cab}\n${corpo}`;
-    if (usado + bloco.length > maxChars && blocos.length) break;
+    if (usado + bloco.length > maxChars) continue;
     blocos.push(bloco);
     usado += bloco.length;
   }

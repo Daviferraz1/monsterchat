@@ -107,14 +107,17 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        consulta: {
+        concurso: {
           type: 'string',
-          description:
-            'Concurso + o que o aluno quer saber, em poucas palavras (ex.: "PMPE soldado vagas PcD autismo", "GCM Salvador idade máxima", "PM SP cadete autorização")',
+          description: 'Qual concurso, por extenso e com o lugar (ex.: "PM Pernambuco soldado", "Guarda Municipal de Salvador", "Polícia Penal do Maranhão")',
+        },
+        pergunta: {
+          type: 'string',
+          description: 'O que o aluno quer saber, em poucas palavras (ex.: "vagas PcD autismo laudo", "idade máxima", "altura mínima")',
         },
         uf: { type: 'string', description: 'Sigla do estado, se souber (ex.: "PE"). Opcional.' },
       },
-      required: ['consulta'],
+      required: ['concurso', 'pergunta'],
     },
   },
   {
@@ -469,7 +472,11 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
         .join('\n\n');
     }
     case 'buscar_concurso': {
-      const hits = await searchConcursoKb(String(input?.consulta ?? ''), input?.uf ? String(input.uf) : undefined);
+      const hits = await searchConcursoKb(
+        String(input?.pergunta ?? input?.consulta ?? ''),
+        input?.concurso ? String(input.concurso) : undefined,
+        input?.uf ? String(input.uf) : undefined
+      );
       return formatKbHits(hits);
     }
     case 'buscar_produto': {
@@ -587,9 +594,11 @@ FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, pr
 
 CONCURSO (dados do buscar_concurso):
 - Responda só com o que veio na busca e diga de onde: "pelo edital (p. 12)…", "segundo a ficha do edital…", "pela notícia de 02/10 no nosso blog…". Prefira ficha e trecho do edital (documento oficial) à notícia do blog; se discordarem, fique com o edital e mencione a diferença.
-- Item marcado EDIÇÃO ANTERIOR: deixe claro que é a regra do edital passado e pode mudar. Concurso "previsto"/"autorizado": diga que ainda não há edital, sem cravar datas ou regras.
+- Item marcado EDIÇÃO ANTERIOR: deixe claro que é a regra do edital passado (diga o ano) e pode mudar. Concurso "previsto"/"autorizado": diga que ainda não há edital, sem cravar datas ou regras.
+- NUNCA misture editais de anos diferentes na mesma resposta (vagas, datas e regras mudam de uma edição para outra). Se o resultado tem o edital atual e um de edição anterior, responda pelo atual; use o anterior só quando o atual não traz a informação, avisando que é da edição passada. Confira o ano no título de cada item.
 - Pode mandar o link do edital (PDF) ou do post do blog que veio no resultado.
-- Se a busca não trouxer a resposta (ou trouxer outro concurso), diga que não encontrou no edital e que vai confirmar — não complete com conhecimento geral. Questões jurídicas individuais (laudo, recurso, caso específico de PcD) podem receber a regra do edital, mas a decisão é da banca/comissão.
+- Se a busca não trouxer a resposta (ou trouxer outro concurso), diga que não encontrou no edital e que vai confirmar — não complete com lei, jurisprudência ou "em geral" de outros concursos.
+- PcD, laudo, recurso e casos pessoais: diga o que ESTE edital prevê (percentual/número de vagas, o que o laudo precisa conter, prazo e forma de envio, perícia/avaliação) e que quem decide se a condição do candidato se enquadra é a perícia/comissão do concurso. Não opine se o caso dele se enquadra, não parabenize nem comente o diagnóstico, e não oriente procedimento que o edital não traz.
 
 NUNCA invente: não cite e-mail, status, valor, login, nome ou qualquer dado que você não obteve de uma ferramenta ou da conversa. NÃO traga assuntos que o aluno não levantou (ex.: não fale de pagamento, acesso ou e-mail se ele não perguntou sobre isso).
 
