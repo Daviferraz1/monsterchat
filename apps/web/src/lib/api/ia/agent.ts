@@ -18,6 +18,7 @@ import { getOperatorStyleBlock } from './operator-style';
 import { cleanSuggestion } from './suggestion-text';
 import { OPENING_SCRIPT, formatSalesPitch } from './team-templates';
 import { formatKbHits, searchConcursoKb } from './concurso-kb';
+import { toolConsultarAluno, toolConsultarConteudoCurso } from './student-tools';
 
 const MAX_ITERATIONS = 6;
 /** Reenvios quando o modelo encerra o turno sem escrever nada (acontece de vez em quando). */
@@ -98,6 +99,33 @@ const tools: Anthropic.Tool[] = [
         consulta: { type: 'string', description: 'A dúvida do aluno em poucas palavras' },
       },
       required: ['consulta'],
+    },
+  },
+  {
+    name: 'consultar_aluno',
+    description:
+      'Tudo sobre o ALUNO desta conversa na plataforma (Monster Questões + Study): cursos e acesso (até quando), % de aulas, última atividade, cronograma (início/fim, tarefas de hoje, atrasadas, próximas, aderência), desempenho em questões (matérias fortes/fracas, tópicos em risco) e simulados. Identifica pelo telefone do WhatsApp e pelas compras; se não achar, peça o e-mail da compra e passe aqui. Use em dúvida de suporte, de cronograma, de estudo ou quando o aluno fala do "meu curso".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', description: 'E-mail da compra/plataforma, se o aluno informou. Opcional.' },
+        cpf: { type: 'string', description: 'CPF (ou os 3 últimos dígitos) — só quando a ferramenta pedir para confirmar a identidade.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'consultar_conteudo_curso',
+    description:
+      'Conteúdo de um curso do Study como o aluno vê: disciplinas → tópicos (nº de aulas, liberação por data). Com comparar_edital=true, traz junto o conteúdo programático do edital (ficha extraída do PDF oficial) para comparar curso x edital. Use quando perguntam o que o curso tem, se cobre um assunto, ou reclamam que falta/sobra matéria em relação ao edital.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        curso: { type: 'string', description: 'Nome do curso/concurso (ex.: "PMPE soldado") ou id. Vazio = curso do aluno da conversa.' },
+        disciplina: { type: 'string', description: 'Filtra uma disciplina (ex.: "Direito Constitucional"). Opcional.' },
+        comparar_edital: { type: 'boolean', description: 'true para trazer o conteúdo programático do edital junto.' },
+      },
+      required: [],
     },
   },
   {
@@ -471,6 +499,17 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
         .map((r, i) => `${i + 1}. Pergunta-tipo: ${r.question_pattern}\nResposta-ouro: ${r.gold_response}`)
         .join('\n\n');
     }
+    case 'consultar_aluno':
+      return toolConsultarAluno(ctx, {
+        email: input?.email ? String(input.email) : undefined,
+        cpf: input?.cpf ? String(input.cpf) : undefined,
+      });
+    case 'consultar_conteudo_curso':
+      return toolConsultarConteudoCurso(ctx, {
+        curso: input?.curso ? String(input.curso) : undefined,
+        disciplina: input?.disciplina ? String(input.disciplina) : undefined,
+        comparar_edital: input?.comparar_edital === true,
+      });
     case 'buscar_concurso': {
       const hits = await searchConcursoKb(
         String(input?.pergunta ?? input?.consulta ?? ''),
@@ -582,6 +621,8 @@ CONVERSA:
 - ${ctx.nowHint || 'Use a saudação conforme o horário do dia (bom dia/boa tarde/boa noite).'} Só cumprimente se a conversa estiver começando; se já estiver em andamento (o atendente já cumprimentou), vá direto ao ponto, sem repetir a saudação.
 
 FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, preço, prazo ou acesso exige):
+- consultar_aluno: dados do ALUNO desta conversa (cursos, acesso, progresso, cronograma, desempenho, simulados). Use antes de responder qualquer dúvida sobre o estudo, o curso ou o acesso dele.
+- consultar_conteudo_curso: o que tem no curso (disciplinas, tópicos, aulas) e, com comparar_edital, o edital ao lado.
 - buscar_concurso: fatos do CONCURSO (edital, vagas, cotas/PcD, requisitos, idade, TAF, etapas, prova, datas, banca, salário, situação/autorização). Use SEMPRE antes de responder sobre um concurso — nunca de memória.
 - buscar_produto: preço, link, o que inclui (interesse em curso).
 - consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou.
@@ -591,6 +632,20 @@ FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, pr
 - buscar_conhecimento: procedimentos/FAQ de atendimento.
 - classificar_lead: quando NÃO há solução imediata e será preciso contatar o lead depois (o curso/concurso que ele quer não existe no catálogo e ele quer ser avisado no lançamento; pediu retorno futuro). Chame ANTES de redigir e, na mensagem, confirme que vai avisá-lo.
 - salvar_dados_contato: registre no cadastro os dados pessoais que o aluno informar (nome completo, CPF, telefone, endereço, e-mail) — para suporte futuro. Só o que ele fornecer; não fique pedindo à toa.
+
+ALUNO (dados do consultar_aluno):
+- Personalize com os dados reais: "vi que você está com 12 tarefas atrasadas desde 20/09", "seu acerto em Direito Constitucional está em 41%". Nunca invente número que não veio da ferramenta.
+- Privacidade: não mostre CPF, endereço, telefone nem e-mail completo. Se a ferramenta pedir confirmação de CPF, peça só os 3 últimos dígitos e não passe dados de estudo antes.
+- Cronograma: explique com base nas tarefas dele (hoje, atrasadas, próximas). Para mudar a data de início ou as horas por dia, oriente: no Study, botão "Refazer Plano de Estudos" na página do cronograma (ou item "Gerador de Plano" no menu), ajustar a data/disponibilidade e gerar de novo — o que já foi estudado não se perde. Atraso grande: sugira regerar a partir de hoje ou priorizar as matérias fracas — sem prometer resultado.
+- Desempenho: aponte as matérias fracas e os tópicos em risco e sugira o próximo passo concreto (revisar o tópico X, fazer questões de Y no Monster Questões). Elogie o que estiver forte, sem exagero.
+- Acesso: se o curso aparece "SEM acesso", siga a regra de ACESSO abaixo (verificar_acesso_plataforma / pagamento).
+
+CURSO x EDITAL (consultar_conteudo_curso com comparar_edital=true):
+- Compare disciplina por disciplina o que está no curso e o que está no edital e responda o que encontrou: o que o curso cobre, o que o edital pede e o curso não tem (ou tem com outro nome), e o que o curso tem a mais.
+- Matéria a mais no curso não é erro por si: pode ser base para outra matéria ou cobrança de edição anterior — diga isso só se for o caso evidente; senão, diga que vai encaminhar à equipe pedagógica para avaliar.
+- Item do edital que o curso não cobre: reconheça, diga que vai encaminhar à equipe pedagógica e não prometa prazo.
+- Se a comparação usou edital de EDIÇÃO ANTERIOR, comece por isso ("o edital novo ainda não saiu; no último, de 2022, ...") e lembre que o próximo pode mudar. Sem ficha do edital, diga que não dá para comparar e encaminhe.
+- NUNCA diga com base em qual edital o curso foi montado, nem por que a equipe incluiu ou deixou de fora uma matéria: você não tem essa informação. Fale do que o curso tem e do que o edital pede, e o resto encaminhe.
 
 CONCURSO (dados do buscar_concurso):
 - Responda só com o que veio na busca e diga de onde: "pelo edital (p. 12)…", "segundo a ficha do edital…", "pela notícia de 02/10 no nosso blog…". Prefira ficha e trecho do edital (documento oficial) à notícia do blog; se discordarem, fique com o edital e mencione a diferença.
