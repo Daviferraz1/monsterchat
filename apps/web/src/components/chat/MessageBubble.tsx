@@ -115,6 +115,18 @@ export function MessageBubble({
             avatarName={isOutbound ? undefined : contactName}
           />
         )}
+        {/* Transcrição automática do áudio (gerada quando a IA monta a sugestão): dá para ler
+            sem ouvir, e é o que a IA usou para entender o áudio. */}
+        {message.content_type === 'audio' && message.transcricao?.trim() && (
+          <p
+            className={`mt-1.5 whitespace-pre-wrap text-xs italic ${
+              isOutbound ? 'text-primary-foreground/80' : 'text-muted-foreground'
+            }`}
+            title="Transcrição automática — pode ter erros"
+          >
+            📝 {message.transcricao.trim()}
+          </p>
+        )}
         {/* Legenda da mídia. O WhatsApp manda a legenda em `caption`, que o webhook grava em
             `body` — mas o balão só mostrava `body` quando NÃO havia mídia, então toda foto
             com texto chegava muda. */}

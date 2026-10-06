@@ -150,6 +150,8 @@ export interface Message {
   reaction_meta?: { message_id?: string } | null;
   /** Alvo da reação no Instagram — extraído de `metadata.mid` no select. */
   reaction_mid?: string | null;
+  /** Transcrição automática do áudio recebido — `metadata.transcricao` (ver lib/api/ia/audio-transcription.ts). */
+  transcricao?: string | null;
   created_at: string;
 }
 

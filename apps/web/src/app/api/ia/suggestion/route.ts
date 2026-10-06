@@ -3,6 +3,7 @@ import { isSuggestionEnabled, isSuggestionAIEnabled } from '@/lib/api/ia/autopil
 import { getSuggestion, type SuggestionAgentContext } from '@/lib/api/ia/suggestion';
 import { refreshConversationMemory, buildMemoryBlock } from '@/lib/api/ia/conversation-memory';
 import { supabaseAdmin } from '@/lib/api/supabase';
+import { transcreverAudiosPendentes } from '@/lib/api/ia/audio-transcription';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,20 +84,33 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Áudios do aluno sem transcrição são transcritos agora (uma vez só; o texto fica na mensagem).
+      await transcreverAudiosPendentes(conversationId);
+
       // Conversa completa (aluno + atendente) para a IA entender o que já foi respondido.
+      // Áudio entra pela transcrição — antes a IA só via texto e respondia sem saber o que foi dito.
       const { data: convMsgs } = await supabaseAdmin
         .from('messages')
-        .select('direction, body')
+        .select('direction, body, content_type, metadata->>transcricao')
         .eq('conversation_id', conversationId)
-        .eq('content_type', 'text')
-        .not('body', 'is', null)
-        .neq('body', '')
+        .in('content_type', ['text', 'audio'])
         .order('created_at', { ascending: false })
         .limit(20);
-      const ordered = ((convMsgs ?? []) as Array<{ direction: string; body: string }>).reverse();
+      const ordered = ((convMsgs ?? []) as Array<{ direction: string; body: string | null; content_type: string; transcricao: string | null }>)
+        .map((m) => ({
+          direction: m.direction,
+          body:
+            m.content_type === 'audio'
+              ? m.transcricao?.trim()
+                ? `(áudio, transcrição automática — pode ter erros) ${m.transcricao.trim()}`
+                : '(enviou um áudio que não foi possível transcrever)'
+              : (m.body ?? '').trim(),
+        }))
+        .filter((m) => m.body)
+        .reverse();
       if (ordered.length > 0) {
         agentCtx.transcript = ordered
-          .map((m) => `${m.direction === 'inbound' ? 'ALUNO' : 'ATENDENTE'}: ${m.body.trim()}`)
+          .map((m) => `${m.direction === 'inbound' ? 'ALUNO' : 'ATENDENTE'}: ${m.body}`)
           .join('\n');
         const inbound = ordered
           .filter((m) => m.direction === 'inbound')

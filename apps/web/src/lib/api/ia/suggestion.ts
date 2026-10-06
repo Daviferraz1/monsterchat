@@ -383,6 +383,8 @@ export async function getSuggestion(
         memoryBlock: agentCtx?.memoryBlock,
         contactDataBlock: agentCtx?.contactDataBlock,
       });
+      // '' = o agente rodou e decidiu que não há o que sugerir: respeita, sem cair no catálogo.
+      if (aiSuggestion === '') return EMPTY_RESULT;
       if (aiSuggestion) {
         return {
           confidence: 'high',
@@ -391,7 +393,7 @@ export async function getSuggestion(
           alternatives: [],
         };
       }
-      // se o agente falhar, cai no caminho determinístico abaixo
+      // null = o agente falhou (API fora, timeout): cai no caminho determinístico abaixo
     }
 
     // 5) Determinístico: catálogo (intenção comercial) ou base de conhecimento

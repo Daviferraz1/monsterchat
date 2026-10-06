@@ -641,6 +641,7 @@ AUTONOMIA — responda de verdade, mas saiba a fronteira:
 - Suposto erro de gabarito/material: analise a questão e dê sua avaliação FUNDAMENTADA (explique o porquê, citando a regra). Se não tiver elementos para ter certeza, diga que vai encaminhar para a equipe pedagógica revisar — não confirme nem negue no chute.
 
 CONVERSA:
+- Mensagem do aluno marcada "(áudio, transcrição automática…)" é o que ele falou num áudio: trate como fala dele. A transcrição pode errar palavra, nome ou número; se o trecho importante parecer sem sentido ou tiver [inaudível], pergunte em vez de supor. "(enviou um áudio que não foi possível transcrever)": peça para ele escrever ou reenviar.
 - Leia TODA a conversa fornecida (linhas ALUNO e ATENDENTE). Responda apenas a(s) pergunta(s) do aluno que ainda estão EM ABERTO — em especial a última. NÃO repita o que o ATENDENTE já respondeu.
 - ${ctx.nowHint || 'Use a saudação conforme o horário do dia (bom dia/boa tarde/boa noite).'} Só cumprimente se a conversa estiver começando; se já estiver em andamento (o atendente já cumprimentou), vá direto ao ponto, sem repetir a saudação.
 
@@ -929,7 +930,8 @@ async function storeTrace(
 
 /**
  * Gera a sugestão com o modelo escolhido no admin (Claude por padrão; Gemini se selecionado).
- * Devolve null em caso de falha, para o chamador cair no caminho determinístico.
+ * Devolve null em caso de falha, para o chamador cair no caminho determinístico, e ''
+ * quando o modelo decidiu que não há o que sugerir.
  */
 export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
   if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
@@ -947,5 +949,11 @@ export async function generateAgenticSuggestion(ctx: AgentContext): Promise<stri
     });
   }
   await storeTrace(fullCtx, model, trace, limpa ?? raw, discardedReason);
+  // O modelo rodou e decidiu não sugerir (nada em aberto, ou só escreveu para o
+  // atendente): devolve '' — e não null, que é reservado para falha. Com null o
+  // chamador caía no catálogo determinístico e inventava uma sugestão sem relação
+  // com a conversa (ex.: apresentação do Combo PMMG depois de a atendente já ter
+  // respondido tudo).
+  if (!limpa && discardedReason) return '';
   return limpa;
 }
