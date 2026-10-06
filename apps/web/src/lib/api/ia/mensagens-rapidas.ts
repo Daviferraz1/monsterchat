@@ -64,6 +64,12 @@ export const RESPOSTAS_INICIAIS: RespostaEquipe[] = [
       '{nome}, depois da matrícula você pode abrir uma solicitação de dispensa de disciplina pelo portal do aluno. Cada pedido é analisado individualmente pela coordenação, então não há garantia de quais disciplinas serão dispensadas. E a dispensa não reduz o tempo do curso: o Tecnólogo continua com duração de 1 ano e 6 meses.',
   },
   {
+    id: 'ensino-medio',
+    titulo: 'Ainda não terminei o ensino médio (Tecnólogo/Sequencial)',
+    texto:
+      '{nome}, para se matricular no Tecnólogo ou no Sequencial é obrigatório já ter concluído o ensino médio, porque são cursos de nível superior. Assim que você terminar, é só me chamar que eu te ajudo com a matrícula 😊',
+  },
+  {
     id: 'sequencial-pcmg',
     titulo: 'Sequencial não vale para a PCMG',
     texto:
