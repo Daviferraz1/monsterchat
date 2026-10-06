@@ -1,55 +1,50 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { indexar, sugerirContinuacao, type FraseIndexada } from '@/lib/autocompletar';
+import { preencherNome } from '@/components/chat/MensagensRapidas';
 
-const PAUSA_MS = 700;
+// As frases mudam uma vez por dia: baixa uma vez por sessão do navegador.
+let carregadas: Array<[string, number]> | null = null;
+let carregando: Promise<Array<[string, number]>> | null = null;
+
+function baixarFrases(): Promise<Array<[string, number]>> {
+  if (carregadas) return Promise.resolve(carregadas);
+  carregando ??= fetch('/api/ia/frases')
+    .then((r) => r.json())
+    .then((d) => (carregadas = Array.isArray(d.frases) ? d.frases : []))
+    .catch(() => {
+      carregando = null;
+      return [];
+    });
+  return carregando;
+}
 
 /**
- * Continuação sugerida pela IA para o que o atendente está digitando (ver
- * /api/ia/completar). Pede depois de uma pausa na digitação; se ele continuar
- * digitando exatamente o que foi sugerido, a sugestão vai encolhendo em vez de
- * sumir. Esc descarta até o texto mudar.
+ * Continuação para o que o atendente está digitando, tirada das frases que a
+ * equipe mais usa (sem IA, sem custo, na hora). Tab aceita; Esc descarta até o
+ * texto mudar. `{nome}` das respostas da equipe vira o nome do contato.
  */
-export function useAutocompletar(conversationId: string, texto: string, ativo: boolean) {
-  const [sug, setSug] = useState<{ base: string; cont: string } | null>(null);
+export function useAutocompletar(texto: string, ativo: boolean, nomeContato?: string | null) {
+  const [brutas, setBrutas] = useState<Array<[string, number]> | null>(carregadas);
   const [descartadoEm, setDescartadoEm] = useState<string | null>(null);
 
-  const completo = sug ? sug.base + sug.cont : '';
-  const continuacao = sug && texto.startsWith(sug.base) && completo.startsWith(texto) ? completo.slice(texto.length) : '';
-
   useEffect(() => {
-    if (continuacao) return; // digitou o que estava sugerido: segue valendo
-    setSug(null);
-    if (!ativo || texto === descartadoEm || texto.trim().length < 3 || texto.startsWith('/') || texto.length > 2000) return;
-    const ctrl = new AbortController();
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/ia/completar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conversationId, texto }),
-          signal: ctrl.signal,
-        });
-        const d = await res.json().catch(() => ({}));
-        if (typeof d.continuacao === 'string' && d.continuacao) setSug({ base: texto, cont: d.continuacao });
-      } catch {
-        /* abortado: o atendente voltou a digitar */
-      }
-    }, PAUSA_MS);
-    return () => {
-      clearTimeout(t);
-      ctrl.abort();
-    };
-    // continuacao fora das dependências de propósito: ela deriva de texto + sug.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [texto, ativo, conversationId, descartadoEm]);
+    if (!brutas) baixarFrases().then(setBrutas);
+  }, [brutas]);
 
-  const descartar = useCallback(() => {
-    setDescartadoEm(texto);
-    setSug(null);
-  }, [texto]);
+  const frases: FraseIndexada[] = useMemo(
+    () => indexar((brutas ?? []).map(([t, n]) => [t.includes('{nome}') ? preencherNome(t, nomeContato) : t, n])),
+    [brutas, nomeContato]
+  );
 
-  const limpar = useCallback(() => setSug(null), []);
+  const continuacao = useMemo(
+    () => (ativo && texto !== descartadoEm && !texto.startsWith('/') ? sugerirContinuacao(texto, frases) : ''),
+    [ativo, texto, descartadoEm, frases]
+  );
+
+  const descartar = useCallback(() => setDescartadoEm(texto), [texto]);
+  const limpar = useCallback(() => setDescartadoEm(null), []);
 
   return { continuacao, descartar, limpar };
 }
