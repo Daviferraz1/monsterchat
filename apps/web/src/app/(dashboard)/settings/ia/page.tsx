@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle, Users, Sparkles } from 'lucide-react';
+import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle, Users, Sparkles, Zap } from 'lucide-react';
 
 interface IAStats {
   conversationsAnalyzed: number;
@@ -456,6 +456,24 @@ export default function IAPage() {
             >
               <Package className="w-5 h-5" />
               Gerenciar catálogo
+            </Link>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-[#7c3aed]" />
+              Respostas rápidas
+            </h2>
+            <p className="text-gray-700 text-sm mb-4">
+              Textos que a equipe manda sempre igual (garantia, acesso, dispensa…). Aparecem no ⚡ da caixa de mensagem,
+              com o nome do aluno no lugar de {'{nome}'}.
+            </p>
+            <Link
+              href="/settings/ia/respostas"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-colors font-medium"
+            >
+              <Zap className="w-5 h-5" />
+              Editar respostas rápidas
             </Link>
           </div>
 
