@@ -8,6 +8,7 @@ import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, Contact, Channel } from '@/types';
 import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw, ArrowRightLeft, MailOpen, Link2 } from 'lucide-react';
 import { TransferDialog } from './TransferDialog';
+import { LinkDesconto } from './LinkDesconto';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 import type { DigitalGuruMetadata } from '@/types';
 
@@ -470,6 +471,8 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
                 </>
               )}
             </div>
+
+            <LinkDesconto contactId={contact.id} />
 
             {channel && (
               <div className="pt-2 border-t text-xs text-muted-foreground">
