@@ -19,6 +19,7 @@ import { cleanSuggestion } from './suggestion-text';
 import { OPENING_SCRIPT, formatSalesPitch } from './team-templates';
 import { formatKbHits, searchConcursoKb } from './concurso-kb';
 import { toolConsultarAluno, toolConsultarConteudoCurso } from './student-tools';
+import { toolVerificarDescontoAluno } from './discount-tools';
 
 const MAX_ITERATIONS = 6;
 /** Reenvios quando o modelo encerra o turno sem escrever nada (acontece de vez em quando). */
@@ -99,6 +100,19 @@ const tools: Anthropic.Tool[] = [
         consulta: { type: 'string', description: 'A dúvida do aluno em poucas palavras' },
       },
       required: ['consulta'],
+    },
+  },
+  {
+    name: 'verificar_desconto_aluno',
+    description:
+      'Desconto para quem JÁ É ALUNO (ex.: PCMG). Confere no Guru se o e-mail tem compra paga e, só então, devolve o preço especial e o link exclusivo. Use sempre que pedirem desconto/condição de aluno ou de ex-aluno. Sem e-mail, ela pede o e-mail.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        curso: { type: 'string', description: 'Curso em que pedem o desconto (ex.: "PCMG investigador").' },
+        email: { type: 'string', description: 'E-mail usado nas compras anteriores. Opcional na primeira chamada.' },
+      },
+      required: ['curso'],
     },
   },
   {
@@ -499,6 +513,11 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
         .map((r, i) => `${i + 1}. Pergunta-tipo: ${r.question_pattern}\nResposta-ouro: ${r.gold_response}`)
         .join('\n\n');
     }
+    case 'verificar_desconto_aluno':
+      return toolVerificarDescontoAluno({
+        curso: input?.curso ? String(input.curso) : undefined,
+        email: input?.email ? String(input.email) : undefined,
+      });
     case 'consultar_aluno':
       return toolConsultarAluno(ctx, {
         email: input?.email ? String(input.email) : undefined,
@@ -626,6 +645,7 @@ CONVERSA:
 - ${ctx.nowHint || 'Use a saudação conforme o horário do dia (bom dia/boa tarde/boa noite).'} Só cumprimente se a conversa estiver começando; se já estiver em andamento (o atendente já cumprimentou), vá direto ao ponto, sem repetir a saudação.
 
 FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, preço, prazo ou acesso exige):
+- verificar_desconto_aluno: quando pedirem desconto de aluno/ex-aluno. Só ela libera preço especial e link de desconto, depois de confirmar a compra no Guru.
 - consultar_aluno: dados do ALUNO desta conversa (cursos, acesso, progresso, cronograma, desempenho, simulados). Use antes de responder qualquer dúvida sobre o estudo, o curso ou o acesso dele.
 - consultar_conteudo_curso: o que tem no curso (disciplinas, tópicos, aulas) e, com comparar_edital, o edital ao lado.
 - buscar_concurso: fatos do CONCURSO (edital, vagas, cotas/PcD, requisitos, idade, TAF, etapas, prova, datas, banca, salário, situação/autorização). Use SEMPRE antes de responder sobre um concurso — nunca de memória.
@@ -664,6 +684,8 @@ CONCURSO (dados do buscar_concurso):
 NUNCA invente: não cite e-mail, status, valor, login, nome ou qualquer dado que você não obteve de uma ferramenta ou da conversa. NÃO traga assuntos que o aluno não levantou (ex.: não fale de pagamento, acesso ou e-mail se ele não perguntou sobre isso).
 
 REGRAS DO NOSSO CURSO (duração, dispensa/aproveitamento de disciplinas, diploma, TCC, pré-requisito, reconhecimento MEC): chame buscar_produto do curso — o FAQ do produto é a regra oficial e vale mais que buscar_conhecimento (respostas antigas de atendimento). "O curso" numa conversa sobre Tecnólogo é o Tecnólogo, mesmo que o aluno cite outro curso que já tem. Quem diz "já tenho o curso X" e pergunta se pode aproveitá-lo quer usar a grade no PRÓXIMO curso, não no X; se a conversa não deixar claro qual é esse próximo curso, pergunte antes de responder. Não invente procedimento (e-mail, envio de histórico, prazo) que o FAQ não traz.
+
+DESCONTO: nunca prometa nem invente desconto. Pedido de desconto de quem diz ser (ex-)aluno → verificar_desconto_aluno (peça o e-mail das compras se ainda não tiver). Envie valor e link de desconto SOMENTE se a ferramenta disser "ALUNO CONFIRMADO"; caso contrário, não cite o valor especial e ofereça o preço normal.
 
 NOSSO CURSO SERVE PARA ESTE CONCURSO? (ex.: "o tecnólogo serve pra PCMG?", "o sequencial vale para a PP MG?"): chame buscar_produto do nosso curso (o FAQ dele lista os concursos e cargos em que é aceito) junto com buscar_concurso. O que estiver no FAQ do produto é a posição oficial da casa: responda com clareza ("sim, para Investigador e Escrivão; para Delegado, não"), citando os requisitos que o FAQ traz, e só depois a ressalva leve de que o edital novo é que confirma. Não transforme em "depende" o que o FAQ afirma.
 
