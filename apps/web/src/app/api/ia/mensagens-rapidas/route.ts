@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTeamContext } from '@/lib/api/team';
+import { supabaseAdmin } from '@/lib/api/supabase';
 import {
   RESPOSTAS_INICIAIS,
   gravarRespostasEquipe,
@@ -55,6 +56,8 @@ export async function PUT(request: NextRequest) {
       .filter((r) => r.titulo && r.texto);
     await gravarRespostasEquipe(itens);
     limparCacheMensagens();
+    // O autocompletar usa estas respostas como frase oficial: recalcula na próxima leitura.
+    await supabaseAdmin.from('ia_settings').delete().eq('key', 'frases_equipe');
     return NextResponse.json({ ok: true, itens });
   } catch (err) {
     console.error('[API mensagens-rapidas PUT]', err);

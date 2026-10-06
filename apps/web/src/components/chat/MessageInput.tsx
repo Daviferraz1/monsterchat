@@ -159,7 +159,7 @@ export function MessageInput({
     continuacao,
     descartar: descartarCompletar,
     limpar: limparCompletar,
-  } = useAutocompletar(conversationId, text, suggestionEnabled && !pendingFile && !porBarra && !rapidasBotao);
+  } = useAutocompletar(text, !pendingFile && !porBarra && !rapidasBotao, contactName);
 
   // Auto-expand textarea conforme o texto (até TEXTAREA_MAX_HEIGHT)
   useEffect(() => {
