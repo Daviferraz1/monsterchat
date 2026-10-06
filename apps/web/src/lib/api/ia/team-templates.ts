@@ -85,8 +85,20 @@ export function courseLabel(p: ProductRow): string {
     .trim();
 }
 
+/** Combo junta produtos diferentes (ex.: Sequencial + preparatório): a lista padrão de preparatório não o descreve. */
+function ehCombo(p: ProductRow): boolean {
+  return /\bcombo\b/i.test(p.name) && !!p.includes?.trim();
+}
+
 /** Lista padrão da apresentação de curso preparatório (como a equipe envia). */
 function checklist(p: ProductRow): string[] {
+  if (ehCombo(p)) {
+    return p
+      .includes!.split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => `✅${l}`);
+  }
   const items = [
     `Acesso ao ${courseLabel(p)}`,
     'Atualizado com base no edital',
@@ -142,6 +154,8 @@ export function formatSalesPitch(p: ProductRow): string | null {
   const parts = [salesLinkWithUtm(link), '', courseLabel(p), '', ...checklist(p)];
   const price = formatPriceLine(p.price_display);
   if (price) parts.push('', 'Valores:', price);
+  // Combo também é vendido em mensalidades (ex.: 6x de R$ 297); a linha à vista sozinha escondia a opção.
+  if (price && ehCombo(p) && p.price_recurring_display?.trim()) parts.push(`ou ${p.price_recurring_display.trim()}`);
   return parts.join('\n');
 }
 
