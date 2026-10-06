@@ -283,7 +283,9 @@ function buildCourseExtraInfo(course: Record<string, any>): string | null {
     parts.push(`Cadastro MEC: ${course.cadastro_mec.trim()}`);
   }
   const out = parts.join('\n\n').trim();
-  return out ? out.slice(0, 4000) : null;
+  // Teto alto: o FAQ do Tecnólogo e do Sequencial já passa de 5 mil caracteres. Só vai
+  // inteiro para a IA quando ela busca aquele curso (buscar_produto).
+  return out ? out.slice(0, 12000) : null;
 }
 
 function buildPriceDisplay(preco: unknown): string {
