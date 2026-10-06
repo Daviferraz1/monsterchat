@@ -71,7 +71,8 @@ export const MESSAGE_SELECT = `
   reply_to_id,
   created_at,
   reaction_meta:metadata->reaction,
-  reaction_mid:metadata->>mid
+  reaction_mid:metadata->>mid,
+  transcricao:metadata->>transcricao
 `;
 
 /**

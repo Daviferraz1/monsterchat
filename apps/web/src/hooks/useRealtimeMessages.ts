@@ -28,11 +28,12 @@ function merge(previous: Message[], incoming: Message[]): Message[] {
  * `MESSAGE_SELECT`). Normaliza para o chat não precisar saber de onde veio.
  */
 function fromRealtime(raw: Record<string, unknown>): Message {
-  const meta = (raw.metadata ?? null) as { reaction?: { message_id?: string }; mid?: string } | null;
+  const meta = (raw.metadata ?? null) as { reaction?: { message_id?: string }; mid?: string; transcricao?: string } | null;
   return {
     ...(raw as unknown as Message),
     reaction_meta: meta?.reaction ?? null,
     reaction_mid: meta?.mid ?? null,
+    transcricao: meta?.transcricao ?? null,
   };
 }
 
