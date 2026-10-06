@@ -472,7 +472,7 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
               )}
             </div>
 
-            <LinkDesconto contactId={contact.id} />
+            <LinkDesconto contactId={contact.id} email={contact.email} />
 
             {channel && (
               <div className="pt-2 border-t text-xs text-muted-foreground">
