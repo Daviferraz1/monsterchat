@@ -18,6 +18,7 @@
 import { supabaseAdmin } from '../supabase';
 import { lerTudo } from '../paginado';
 import { lerRespostasEquipe } from './mensagens-rapidas';
+import { semTravessao } from './team-templates';
 
 const CHAVE = 'frases_equipe';
 const DIAS = 90;
@@ -59,7 +60,7 @@ async function calcular(): Promise<Frase[]> {
   const vezes = new Map<string, number>();
   const somar = (t: string) => vezes.set(t, (vezes.get(t) ?? 0) + 1);
   for (const { body } of linhas) {
-    const corpo = (body ?? '').trim();
+    const corpo = semTravessao((body ?? '').trim());
     if (!corpo) continue;
     if (corpo.includes('\n') && aproveitavel(corpo)) somar(corpo);
     for (const f of frasesDe(corpo)) if (aproveitavel(f)) somar(f);

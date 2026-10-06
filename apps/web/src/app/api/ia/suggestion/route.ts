@@ -4,14 +4,17 @@ import { getSuggestion, type SuggestionAgentContext } from '@/lib/api/ia/suggest
 import { refreshConversationMemory, buildMemoryBlock } from '@/lib/api/ia/conversation-memory';
 import { supabaseAdmin } from '@/lib/api/supabase';
 import { transcreverAudiosPendentes } from '@/lib/api/ia/audio-transcription';
-import { comSaudacao } from '@/lib/api/ia/team-templates';
+import { comSaudacao, semTravessao } from '@/lib/api/ia/team-templates';
 
 export const dynamic = 'force-dynamic';
 
-/** Converte negrito Markdown (**texto** / __texto__) para o formato do WhatsApp (*texto*). */
+/**
+ * Converte negrito Markdown (**texto** / __texto__) para o formato do WhatsApp (*texto*)
+ * e tira o travessão, que deixa a mensagem com cara de texto de IA.
+ */
 function toWhatsApp(s: string | null): string | null {
   if (!s) return s;
-  return s.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/__(.+?)__/g, '*$1*');
+  return semTravessao(s.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/__(.+?)__/g, '*$1*'));
 }
 
 /**

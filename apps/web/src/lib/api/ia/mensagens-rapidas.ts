@@ -12,7 +12,7 @@
  */
 import { supabaseAdmin } from '../supabase';
 import { listProducts, type ProductRow } from './catalog';
-import { OPENING_SCRIPT, courseLabel, formatPriceLine, formatSalesPitch, salesLinkWithUtm } from './team-templates';
+import { OPENING_SCRIPT, courseLabel, formatPriceLine, formatSalesPitch, salesLinkWithUtm, semTravessao } from './team-templates';
 import { pendentesDoLog } from '../services/recuperacao-pagamento';
 
 export interface MensagemRapida {
@@ -202,6 +202,8 @@ export async function mensagensGerais(forcar = false): Promise<MensagemRapida[]>
     ...cursos.sort((a, b) => a.grupo.localeCompare(b.grupo) || a.titulo.localeCompare(b.titulo, 'pt-BR')),
     ...editais.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR')),
   ];
+  // Texto que vai para o aluno sem travessão; o título, que só o atendente vê, fica como está.
+  for (const m of itens) m.texto = semTravessao(m.texto);
   cacheGeral = { em: Date.now(), itens };
   return itens;
 }
@@ -251,7 +253,7 @@ export async function mensagensDoAluno(conversationId: string): Promise<Mensagem
     .map((p) => {
       const metodo = METODO[p.payment_method ?? ''] ?? 'pagamento';
       const valor = p.payment_total != null ? ` (R$ ${p.payment_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})` : '';
-      const produto = (p.product_names ?? 'seu curso').split(/\s*[,;|]\s*/)[0];
+      const produto = semTravessao((p.product_names ?? 'seu curso').split(/\s*[,;|]\s*/)[0]);
       return {
         id: `fatura:${p.transaction_id}`,
         titulo: `💳 ${metodo[0].toUpperCase()}${metodo.slice(1)} em aberto — ${produto}${valor}`,
