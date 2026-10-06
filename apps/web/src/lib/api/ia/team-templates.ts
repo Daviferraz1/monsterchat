@@ -234,3 +234,18 @@ export function comSaudacao(texto: string, saudacao: string, nome: string | null
   }
   return `${abre} 😊\n\n${texto}`;
 }
+
+/**
+ * Tira o travessão (— e –) do texto que vai para o aluno: é marca de texto de IA e
+ * deixa a mensagem com cara de robô. No meio da frase vira vírgula; intervalo de
+ * números ("1–2") vira "1 a 2"; no começo ou no fim da linha some.
+ */
+export function semTravessao(texto: string): string {
+  return texto
+    .replace(/(\d)\s*[–—]\s*(\d)/g, '$1 a $2')
+    .replace(/^[ \t]*[–—][ \t]*/gm, '')
+    .replace(/[ \t]*[–—][ \t]*$/gm, '')
+    .replace(/[ \t]*[–—][ \t]*/g, ', ')
+    .replace(/,\s*([,.;:!?)])/g, '$1')
+    .replace(/([(:])\s*,\s*/g, '$1 ');
+}
