@@ -7,6 +7,7 @@ import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { transcodeToMp3 } from '@/lib/audio/transcodeToMp3';
 import { Send, Smile, Paperclip, Mic, Video, Camera, Loader2, MessageCircle, Check, Plus, X, FileText, Square, Zap } from 'lucide-react';
 import { MensagensRapidas, type MensagensRapidasHandle } from './MensagensRapidas';
+import { useAutocompletar } from '@/hooks/useAutocompletar';
 
 /** Prefixo do gatilho de sugestão para mensagem só de mídia (ver ChatWindow). */
 export const MARCADOR_MIDIA = '[mídia:';
@@ -100,6 +101,8 @@ export function MessageInput({
   const videoInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Camada atrás da caixa com o texto digitado (invisível) + a continuação da IA em cinza.
+  const fantasmaRef = useRef<HTMLDivElement>(null);
   const spellMenuRef = useRef<HTMLDivElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -149,16 +152,26 @@ export function MessageInput({
     }
   }, [suggestionEnabled, lastInboundBody, conversationId, lastMessageFromOperator, fetchSuggestion, clearSuggestion]);
 
+  // "/pcmg" no começo da caixa abre a lista já filtrada; Esc fecha até a barra sair.
+  const porBarra = !rapidasBotao && !barraFechada && /^\/[^\n]{0,40}$/.test(text);
+
+  const {
+    continuacao,
+    descartar: descartarCompletar,
+    limpar: limparCompletar,
+  } = useAutocompletar(conversationId, text, suggestionEnabled && !pendingFile && !porBarra && !rapidasBotao);
+
   // Auto-expand textarea conforme o texto (até TEXTAREA_MAX_HEIGHT)
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
-    const h = Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT);
+    // A continuação sugerida também ocupa linha: a caixa cresce para mostrá-la inteira.
+    const h = Math.min(Math.max(ta.scrollHeight, fantasmaRef.current?.scrollHeight ?? 0), TEXTAREA_MAX_HEIGHT);
     ta.style.height = `${Math.max(TEXTAREA_MIN_HEIGHT, h)}px`;
     if (h >= TEXTAREA_MAX_HEIGHT) ta.style.overflowY = 'auto';
     else ta.style.overflowY = 'hidden';
-  }, [text]);
+  }, [text, continuacao]);
 
   useEffect(() => {
     if (!spellMenu) return;
@@ -350,9 +363,6 @@ export function MessageInput({
       // não limpa a sugestão aqui; o feedback (wasUsed) será enviado no handleSubmit
     }
   }, [suggestionResult?.suggestion]);
-
-  // "/pcmg" no começo da caixa abre a lista já filtrada; Esc fecha até a barra sair.
-  const porBarra = !rapidasBotao && !barraFechada && /^\/[^\n]{0,40}$/.test(text);
 
   const escolherRapida = (texto: string) => {
     // Pela barra, o "/busca" some; pelo botão, soma ao que já estava escrito.
@@ -627,7 +637,22 @@ export function MessageInput({
             >
               <Zap className="w-5 h-5" />
             </button>
-            <div lang="pt-BR" className="flex-1 min-w-0 flex items-end">
+            <div lang="pt-BR" className="relative flex-1 min-w-0 flex items-end">
+              <div
+                ref={fantasmaRef}
+                aria-hidden
+                className="pointer-events-none absolute inset-0 py-2.5 px-3 leading-normal whitespace-pre-wrap break-words overflow-hidden text-transparent"
+              >
+                {continuacao && (
+                  <>
+                    {text}
+                    <span className="text-muted-foreground/70">{continuacao}</span>
+                    <span className="ml-1.5 align-middle text-[10px] px-1 py-px rounded border border-muted-foreground/30 text-muted-foreground/70">
+                      Tab
+                    </span>
+                  </>
+                )}
+              </div>
               <textarea
                 ref={textareaRef}
                 value={text}
@@ -637,13 +662,26 @@ export function MessageInput({
                   if (error) setError(null);
                 }}
                 onKeyDown={(e) => {
-                  if (porBarra) rapidasRef.current?.tecla(e);
+                  if (porBarra && rapidasRef.current?.tecla(e)) return;
+                  // Tab aceita a continuação da IA (com o cursor no fim); Esc descarta.
+                  const ta = e.currentTarget;
+                  if (continuacao && e.key === 'Tab' && !e.shiftKey && ta.selectionStart === text.length) {
+                    e.preventDefault();
+                    setText(text + continuacao);
+                    limparCompletar();
+                  } else if (continuacao && e.key === 'Escape') {
+                    e.preventDefault();
+                    descartarCompletar();
+                  }
+                }}
+                onScroll={(e) => {
+                  if (fantasmaRef.current) fantasmaRef.current.scrollTop = e.currentTarget.scrollTop;
                 }}
                 onPaste={handlePaste}
                 onContextMenu={handleContextMenu}
                 onBlur={() => setTimeout(() => setEmojiOpen(false), 150)}
                 placeholder={pendingFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
-                className="flex-1 w-full min-h-[40px] py-2.5 px-3 border-0 bg-transparent resize-none focus:outline-none focus:ring-0 placeholder:text-muted-foreground text-foreground leading-normal"
+                className="relative flex-1 w-full min-h-[40px] py-2.5 px-3 border-0 bg-transparent resize-none focus:outline-none focus:ring-0 placeholder:text-muted-foreground text-foreground leading-normal"
                 style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
                 disabled={busy}
                 rows={1}
