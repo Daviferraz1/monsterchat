@@ -181,3 +181,23 @@ export function courseRoleTitle(p: ProductRow): string | null {
   const roles = [...parseProduct(p).roles];
   return roles.length === 1 ? ROLE_TITLES[roles[0]] ?? null : null;
 }
+
+/**
+ * Mesmo critério rígido para qualquer lista com nome (ex.: cursos do Study,
+ * "CURSO PM PE SOLDADO"): devolve os itens que batem com o texto, do mais
+ * justo ao menos. Vazio quando nada bate.
+ */
+export function matchByName<T extends { name: string }>(target: string, items: T[]): T[] {
+  const want = parse(target);
+  if (!want.places.size && !want.corp) return [];
+  const out: Array<{ item: T; extras: number }> = [];
+  for (const item of items) {
+    const have = parse(item.name);
+    if (want.corp && have.corp !== want.corp) continue;
+    if ([...want.places].some((w) => !have.places.has(w))) continue;
+    if (want.roles.size && ![...want.roles].some((r) => have.roles.has(r))) continue;
+    const extras = [...have.places].filter((w) => !want.places.has(w) && !UF_SET.has(w)).length;
+    out.push({ item, extras });
+  }
+  return out.sort((a, b) => a.extras - b.extras).map((o) => o.item);
+}
