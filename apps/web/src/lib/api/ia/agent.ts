@@ -481,9 +481,14 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
     }
     case 'buscar_produto': {
       const intencao = String(input?.intencao ?? '');
+      // O WhatsApp da Monster também vende os cursos superiores da Fagenius
+      // (Tecnólogo, Sequencial — o roteiro de abertura oferece os dois). Filtrar
+      // por "monster" escondia esses produtos da IA, e "o tecnólogo serve pra
+      // PCMG?" ficava sem o FAQ oficial. Só o canal da Fagenius filtra.
+      const marcaCatalogo = ctx.brand === 'fagenius' ? 'fagenius' : undefined;
       const [matches, all] = await Promise.all([
-        getMatchingProducts(intencao, ctx.brand),
-        listProducts({ is_active: true, brand: ctx.brand || undefined }),
+        getMatchingProducts(intencao, marcaCatalogo),
+        listProducts({ is_active: true, brand: marcaCatalogo }),
       ]);
       const parts: string[] = [];
       if (matches.length) {
@@ -602,6 +607,8 @@ CONCURSO (dados do buscar_concurso):
 - PcD, laudo, recurso e casos pessoais: diga o que ESTE edital prevê (percentual/número de vagas, o que o laudo precisa conter, prazo e forma de envio, perícia/avaliação) e que quem decide se a condição do candidato se enquadra é a perícia/comissão do concurso. Não opine se o caso dele se enquadra, não parabenize nem comente o diagnóstico, e não oriente procedimento que o edital não traz.
 
 NUNCA invente: não cite e-mail, status, valor, login, nome ou qualquer dado que você não obteve de uma ferramenta ou da conversa. NÃO traga assuntos que o aluno não levantou (ex.: não fale de pagamento, acesso ou e-mail se ele não perguntou sobre isso).
+
+NOSSO CURSO SERVE PARA ESTE CONCURSO? (ex.: "o tecnólogo serve pra PCMG?", "o sequencial vale para a PP MG?"): chame buscar_produto do nosso curso (o FAQ dele lista os concursos e cargos em que é aceito) junto com buscar_concurso. O que estiver no FAQ do produto é a posição oficial da casa: responda com clareza ("sim, para Investigador e Escrivão; para Delegado, não"), citando os requisitos que o FAQ traz, e só depois a ressalva leve de que o edital novo é que confirma. Não transforme em "depende" o que o FAQ afirma.
 
 NÃO diga que um curso NÃO existe sem antes conferir o CATÁLOGO COMPLETO de buscar_produto: o aluno costuma usar siglas/abreviações (PMBA = PM Bahia, CBMMG = Bombeiros MG, GCM = Guarda Municipal). Se estiver no catálogo, ofereça-o.
 
