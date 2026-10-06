@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlarmClock, Check, Loader2, X } from 'lucide-react';
 import { useSupabase } from '@/hooks/useSupabase';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
+import { avisarMudancaLembretes, quandoLembrete } from '@/hooks/useLembretes';
 
 interface Tarefa {
   id: string;
@@ -90,6 +91,8 @@ export function Lembrete({ conversationId, contactId, contactName }: { conversat
       setNota('');
       setPersonalizado('');
       await carregar();
+      avisarMudancaLembretes();
+      setAberto(false);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao criar o lembrete.');
     } finally {
@@ -104,6 +107,7 @@ export function Lembrete({ conversationId, contactId, contactName }: { conversat
       body: JSON.stringify({ id, status: 'closed' }),
     });
     await carregar();
+    avisarMudancaLembretes();
   };
 
   return (
@@ -111,13 +115,22 @@ export function Lembrete({ conversationId, contactId, contactName }: { conversat
       <button
         type="button"
         onClick={() => setAberto((a) => !a)}
-        className={`h-16 border-b flex items-center gap-1.5 px-3 hover:bg-muted/50 hover:text-foreground transition-colors ${
-          pendentes.length ? 'text-primary' : 'text-muted-foreground'
-        }`}
+        className="h-16 border-b flex items-center gap-1.5 px-3 text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
         title={pendentes.length ? `Lembrete: ${quando(pendentes[0].due_at)}` : 'Me lembrar de voltar nesta conversa'}
       >
-        <AlarmClock className="w-4 h-4" />
-        <span className="hidden lg:inline text-sm">{pendentes.length ? quando(pendentes[0].due_at) : 'Lembrar'}</span>
+        {pendentes.length ? (
+          // Com lembrete marcado: selo âmbar com a data, para ver de longe que há retorno combinado.
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 text-xs font-medium">
+            <AlarmClock className="w-3.5 h-3.5" />
+            {quandoLembrete(pendentes[0].due_at!)}
+            {pendentes.length > 1 && <span className="opacity-70">+{pendentes.length - 1}</span>}
+          </span>
+        ) : (
+          <>
+            <AlarmClock className="w-4 h-4 text-amber-500" />
+            <span className="hidden lg:inline text-sm">Lembrar</span>
+          </>
+        )}
       </button>
 
       {aberto && (
