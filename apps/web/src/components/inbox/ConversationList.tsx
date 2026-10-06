@@ -4,6 +4,7 @@ import { ConversationItem } from './ConversationItem';
 import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, ChannelType } from '@/types';
 import type { ChannelTypeFilter } from '@/hooks/useConversations';
+import { useLembretes } from '@/hooks/useLembretes';
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -40,6 +41,8 @@ function groupByChannel(conversations: Conversation[]): { channelId: string; cha
 }
 
 export function ConversationList({ conversations, loading, channelTypeFilter = 'all', onConversationClick }: ConversationListProps) {
+  // Lembrete aberto por conversa (badge ⏰ na lista).
+  const lembretes = useLembretes();
   if (loading) {
     return (
       <div className="p-4 text-center text-gray-500 text-sm">
@@ -62,7 +65,12 @@ export function ConversationList({ conversations, loading, channelTypeFilter = '
     return (
       <div className="divide-y divide-white/5">
         {conversations.map((conversation) => (
-          <ConversationItem key={conversation.id} conversation={conversation} onSelect={onConversationClick} />
+          <ConversationItem
+            key={conversation.id}
+            conversation={conversation}
+            onSelect={onConversationClick}
+            lembrete={lembretes.get(conversation.id)}
+          />
         ))}
       </div>
     );
@@ -80,7 +88,12 @@ export function ConversationList({ conversations, loading, channelTypeFilter = '
             <span className="text-[10px] text-gray-500 ml-auto flex-shrink-0">{group.items.length}</span>
           </div>
           {group.items.map((conversation) => (
-            <ConversationItem key={conversation.id} conversation={conversation} onSelect={onConversationClick} />
+            <ConversationItem
+            key={conversation.id}
+            conversation={conversation}
+            onSelect={onConversationClick}
+            lembrete={lembretes.get(conversation.id)}
+          />
           ))}
         </div>
       ))}

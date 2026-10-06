@@ -10,7 +10,8 @@ import { isFinalized } from '@/lib/conversationStatus';
 import { useSupabase } from '@/hooks/useSupabase';
 import type { Conversation } from '@/types';
 import type { DigitalGuruMetadata, LeadCampaign } from '@/types';
-import { Megaphone, CheckCheck, RotateCcw, UserRound, MailOpen, Mail } from 'lucide-react';
+import { Megaphone, CheckCheck, RotateCcw, UserRound, MailOpen, Mail, AlarmClock } from 'lucide-react';
+import { quandoLembrete } from '@/hooks/useLembretes';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 
 const AVATAR_COLORS = [
@@ -39,9 +40,11 @@ interface ConversationItemProps {
   conversation: Conversation;
   /** No mobile, chamado ao tocar na conversa para fechar o drawer */
   onSelect?: () => void;
+  /** Prazo do lembrete aberto do atendente nesta conversa (ISO), se houver. */
+  lembrete?: string;
 }
 
-export function ConversationItem({ conversation, onSelect }: ConversationItemProps) {
+export function ConversationItem({ conversation, onSelect, lembrete }: ConversationItemProps) {
   const pathname = usePathname();
   const supabase = useSupabase();
   const contact = conversation.contact;
@@ -269,6 +272,19 @@ export function ConversationItem({ conversation, onSelect }: ConversationItemPro
                 (conversation.last_message_at ? 'Mensagem' : 'Sem mensagens')}
             </p>
             <div className="flex flex-wrap items-center gap-1.5 mt-1">
+              {lembrete && (
+                <span
+                  className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit ${
+                    new Date(lembrete).getTime() <= Date.now()
+                      ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  }`}
+                  title="Você marcou um lembrete para voltar nesta conversa"
+                >
+                  <AlarmClock className="w-3 h-3 shrink-0" />
+                  {new Date(lembrete).getTime() <= Date.now() ? 'Retornar agora' : quandoLembrete(lembrete)}
+                </span>
+              )}
               {finalized && (
                 <span
                   className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit bg-green-500/15 text-green-400 border-green-500/30"

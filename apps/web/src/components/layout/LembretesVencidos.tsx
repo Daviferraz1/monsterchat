@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AlarmClock, Check, X } from 'lucide-react';
 import { useSupabase } from '@/hooks/useSupabase';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
+import { avisarMudancaLembretes } from '@/hooks/useLembretes';
 
 interface Vencido {
   id: string;
@@ -56,6 +57,7 @@ export function LembretesVencidos() {
       body: JSON.stringify({ id, ...corpo }),
     });
     await carregar();
+    avisarMudancaLembretes();
   };
 
   const visiveis = itens.filter((i) => !dispensados.has(i.id));
