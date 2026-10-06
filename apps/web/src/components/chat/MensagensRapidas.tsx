@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Search, Zap } from 'lucide-react';
+import { primeiroNome } from '@/lib/api/ia/team-templates';
 
 interface MensagemRapida {
   id: string;
@@ -26,9 +27,8 @@ const CACHE_MS = 5 * 60 * 1000;
 
 /** "{nome}" → primeiro nome do contato; sem nome, some junto com a vírgula ("Olá, {nome}!" → "Olá!"). */
 export function preencherNome(texto: string, nomeContato?: string | null): string {
-  const primeiro = (nomeContato ?? '').trim().split(/\s+/)[0] ?? '';
-  // Nome de WhatsApp às vezes é emoji ou apelido com símbolo; só usa se tiver letra.
-  const nome = /\p{L}/u.test(primeiro) ? primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase() : '';
+  // Mesma regra da saudação da IA (primeiroNome): pula emoji, recusa @usuário do Instagram.
+  const nome = primeiroNome(nomeContato);
   if (nome) return texto.replace(/\{nome\}/g, nome);
   return texto
     .replace(/,\s*\{nome\}(?=[!?.,])/g, '')

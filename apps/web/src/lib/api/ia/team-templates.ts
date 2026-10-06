@@ -189,3 +189,48 @@ ${pitch}` : pitch;
 function shortName(p: ProductRow): string {
   return courseLabel(p).replace(/^Curso\s+(Preparat[óo]rio\s+)?/i, '');
 }
+
+/** "FERNANDA scarmigliati" → "Fernanda". Nome de WhatsApp só com emoji ou símbolo não serve. */
+export function primeiroNome(nome: string | null | undefined): string {
+  // Primeira palavra com letra: "🔥 Bia" → "Bia".
+  const p = (nome ?? '').trim().split(/\s+/).find((t) => /\p{L}/u.test(t)) ?? '';
+  // "@aleg.moc" e "vt__novs" são usuário do Instagram, não nome: viravam "Alegmoc", "Vtnovs".
+  if (!/\p{L}/u.test(p) || /[@._\d]/.test(p)) return '';
+  const limpo = p.replace(/[^\p{L}'-]/gu, '');
+  return limpo ? limpo.charAt(0).toUpperCase() + limpo.slice(1).toLowerCase() : '';
+}
+
+/**
+ * Cumprimento solto no começo: "Olá!", "Oi, tudo bem?", "Boa noite! 😊", "Olá, Maria! 🚀".
+ * O nome só é reconhecido se for o do lead: senão "Olá, o curso…" tomaria "o" por nome.
+ * Grupos: 1 = "tudo bem?", 2 = emoji.
+ */
+function cumprimentoInicial(nome: string): RegExp {
+  const n = nome ? `(?:,?\\s+${nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?` : '';
+  return new RegExp(
+    `^(?:ol[áa]|oi+|bom dia|boa tarde|boa noite)${n}(?:,?\\s+(tudo bem\\??))?[ \\t]*[!.,]?[ \\t]*(\\p{Extended_Pictographic}\\uFE0F?)?[ \\t]*`,
+    'iu'
+  );
+}
+
+/**
+ * Abre a resposta com a saudação do horário e o nome do lead ("Boa noite, Fernanda! 😊").
+ * Se o texto já começa com um cumprimento ("Olá! 🚀" do roteiro de abertura), troca esse
+ * cumprimento, mantendo o emoji e o "tudo bem?"; senão, acrescenta uma linha antes.
+ */
+export function comSaudacao(texto: string, saudacao: string, nome: string | null | undefined): string {
+  const s = saudacao.charAt(0).toUpperCase() + saudacao.slice(1);
+  const n = primeiroNome(nome);
+  let abre = n ? `${s}, ${n}!` : `${s}!`;
+  const m = texto.match(cumprimentoInicial(n));
+  if (m && m[0].trim()) {
+    if (m[1]) abre += ' Tudo bem?';
+    const resto = texto.slice(m[0].length);
+    // Cumprimento ocupando a linha toda: troca, mantendo o emoji.
+    if (!resto || resto.startsWith('\n')) return `${abre} ${m[2] ?? '😊'}${resto}`;
+    // "Olá, o curso custa…": a saudação entra no lugar do "Olá" e a frase segue.
+    const frase = resto.replace(/^[,\s]+/, '');
+    return `${abre} ${frase.charAt(0).toUpperCase()}${frase.slice(1)}`;
+  }
+  return `${abre} 😊\n\n${texto}`;
+}

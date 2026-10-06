@@ -4,6 +4,7 @@ import { getSuggestion, type SuggestionAgentContext } from '@/lib/api/ia/suggest
 import { refreshConversationMemory, buildMemoryBlock } from '@/lib/api/ia/conversation-memory';
 import { supabaseAdmin } from '@/lib/api/supabase';
 import { transcreverAudiosPendentes } from '@/lib/api/ia/audio-transcription';
+import { comSaudacao } from '@/lib/api/ia/team-templates';
 
 export const dynamic = 'force-dynamic';
 
@@ -167,6 +168,21 @@ export async function POST(request: NextRequest) {
       suggestionAiEnabled,
       agentCtx
     );
+
+    // Conversa começando (nenhum atendente escreveu nas últimas 12h): a resposta abre com
+    // "Boa noite, Fernanda! 😊". O catálogo e o roteiro de abertura saíam frios, começando
+    // pelo link ou por "Olá!", e o atendente completava a saudação à mão.
+    if (result.suggestion?.trim() && conversationId) {
+      const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+      const { count } = await supabaseAdmin
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+        .eq('direction', 'outbound')
+        .not('agent_user_id', 'is', null)
+        .gte('created_at', desde);
+      if (!count) result.suggestion = comSaudacao(result.suggestion, sauda, contactName);
+    }
     return NextResponse.json({
       confidence: result.confidence,
       suggestion: toWhatsApp(result.suggestion),
