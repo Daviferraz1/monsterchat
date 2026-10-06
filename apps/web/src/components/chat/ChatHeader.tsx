@@ -9,6 +9,7 @@ import type { Conversation, Contact, Channel } from '@/types';
 import { User, Phone, Mail, FileText, X, MessageCircle, Calendar, GraduationCap, Package, Info, Receipt, ArrowLeft, Key, Copy, Unlock, Loader2, RefreshCw, ArrowRightLeft, MailOpen, Link2 } from 'lucide-react';
 import { TransferDialog } from './TransferDialog';
 import { LinkDesconto } from './LinkDesconto';
+import { Lembrete } from './Lembrete';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 import type { DigitalGuruMetadata } from '@/types';
 
@@ -291,6 +292,12 @@ export function ChatHeader({ conversationId }: ChatHeaderProps) {
           )}
         </div>
       </button>
+
+      <Lembrete
+        conversationId={conversationId}
+        contactId={contactId}
+        contactName={(conversation?.contact as Contact | undefined)?.name}
+      />
 
       <button
         type="button"

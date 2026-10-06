@@ -303,6 +303,7 @@ export function ChatWindow() {
         lastInboundBody={lastInboundBody}
         suggestionEnabled={suggestionEnabled && !isClosed}
         lastMessageFromOperator={lastMessageFromOperator}
+        contactName={contactName}
       />
     </div>
   );

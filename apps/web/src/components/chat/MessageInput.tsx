@@ -63,6 +63,8 @@ interface MessageInputProps {
   suggestionEnabled?: boolean;
   /** Quando true, não busca sugestão (última msg é do operador — evita gastar IA). */
   lastMessageFromOperator?: boolean;
+  /** Para trocar {nome} nas mensagens rápidas. */
+  contactName?: string | null;
 }
 
 type SpellMenu = {
@@ -78,6 +80,7 @@ export function MessageInput({
   lastInboundBody = null,
   suggestionEnabled = false,
   lastMessageFromOperator = false,
+  contactName = null,
 }: MessageInputProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -466,6 +469,8 @@ export function MessageInput({
           {(rapidasBotao || porBarra) && (
             <MensagensRapidas
               ref={rapidasRef}
+              conversationId={conversationId}
+              nomeContato={contactName}
               comBusca={rapidasBotao}
               consulta={porBarra ? text.slice(1) : ''}
               onEscolher={escolherRapida}

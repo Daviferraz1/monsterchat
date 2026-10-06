@@ -6,6 +6,7 @@ import { useTotalUnreadCount } from '@/hooks/useTotalUnreadCount';
 import { MobileNavRail } from './MobileNavRail';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileInboxContent } from './MobileInboxContent';
+import { LembretesVencidos } from './LembretesVencidos';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -26,6 +27,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
+      <LembretesVencidos />
       {/* Rail de ícones à esquerda (somente desktop, estilo WhatsApp Web) */}
       {isDesktop && <MobileNavRail totalUnread={totalUnread} />}
 

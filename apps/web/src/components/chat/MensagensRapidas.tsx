@@ -20,33 +20,70 @@ function normalizar(t: string): string {
   return t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-// A lista muda pouco (catálogo); guarda entre aberturas para abrir na hora.
-let cache: MensagemRapida[] | null = null;
+// A lista geral (equipe, cursos, editais) muda pouco: guarda 5 minutos entre aberturas.
+let cache: { em: number; itens: MensagemRapida[] } | null = null;
+const CACHE_MS = 5 * 60 * 1000;
+
+/** "{nome}" → primeiro nome do contato; sem nome, some junto com a vírgula ("Olá, {nome}!" → "Olá!"). */
+export function preencherNome(texto: string, nomeContato?: string | null): string {
+  const primeiro = (nomeContato ?? '').trim().split(/\s+/)[0] ?? '';
+  // Nome de WhatsApp às vezes é emoji ou apelido com símbolo; só usa se tiver letra.
+  const nome = /\p{L}/u.test(primeiro) ? primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase() : '';
+  if (nome) return texto.replace(/\{nome\}/g, nome);
+  return texto
+    .replace(/,\s*\{nome\}(?=[!?.,])/g, '')
+    .replace(/^\{nome\},\s*(\p{L})/gmu, (_, l: string) => l.toUpperCase())
+    .replace(/\{nome\}/g, '');
+}
 
 /**
- * Lista de mensagens prontas (abertura e apresentação de cada curso). Abre pelo
- * botão ⚡ (com campo de busca) ou digitando "/" no início da mensagem (a busca
- * é o próprio texto depois da barra).
+ * Lista de mensagens prontas: as "deste aluno" (boleto/PIX em aberto), as da
+ * equipe, a apresentação de cada curso e os editais. Abre pelo botão ⚡ (com
+ * campo de busca) ou digitando "/" no início da mensagem (a busca é o próprio
+ * texto depois da barra).
  */
 export const MensagensRapidas = forwardRef<
   MensagensRapidasHandle,
-  { consulta?: string; comBusca: boolean; onEscolher: (texto: string) => void; onFechar: () => void }
->(function MensagensRapidas({ consulta = '', comBusca, onEscolher, onFechar }, ref) {
-  const [lista, setLista] = useState<MensagemRapida[] | null>(cache);
+  {
+    conversationId: string;
+    nomeContato?: string | null;
+    consulta?: string;
+    comBusca: boolean;
+    onEscolher: (texto: string) => void;
+    onFechar: () => void;
+  }
+>(function MensagensRapidas({ conversationId, nomeContato, consulta = '', comBusca, onEscolher, onFechar }, ref) {
+  const fresco = cache && Date.now() - cache.em < CACHE_MS ? cache.itens : null;
+  const [gerais, setGerais] = useState<MensagemRapida[] | null>(fresco);
+  const [doAluno, setDoAluno] = useState<MensagemRapida[]>([]);
   const [busca, setBusca] = useState('');
   const [ativo, setAtivo] = useState(0);
   const listaRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
-    if (cache) return;
+    if (cache && Date.now() - cache.em < CACHE_MS) return;
     fetch('/api/ia/mensagens-rapidas')
       .then((r) => r.json())
       .then((d) => {
-        cache = Array.isArray(d.mensagens) ? d.mensagens : [];
-        setLista(cache);
+        cache = { em: Date.now(), itens: Array.isArray(d.mensagens) ? d.mensagens : [] };
+        setGerais(cache.itens);
       })
-      .catch(() => setLista([]));
+      .catch(() => setGerais([]));
   }, []);
+
+  useEffect(() => {
+    let cancelado = false;
+    fetch(`/api/ia/mensagens-rapidas?conversationId=${encodeURIComponent(conversationId)}`)
+      .then((r) => r.json())
+      .then((d) => !cancelado && setDoAluno(Array.isArray(d.mensagens) ? d.mensagens : []))
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [conversationId]);
+
+  const lista = useMemo(() => (gerais ? [...doAluno, ...gerais] : null), [gerais, doAluno]);
+  const escolher = (m: MensagemRapida) => onEscolher(preencherNome(m.texto, nomeContato));
 
   const termo = normalizar(comBusca ? busca : consulta);
   const filtradas = useMemo(() => {
@@ -72,7 +109,7 @@ export const MensagensRapidas = forwardRef<
     if (!filtradas.length) return false;
     if (e.key === 'ArrowDown') setAtivo((i) => (i + 1) % filtradas.length);
     else if (e.key === 'ArrowUp') setAtivo((i) => (i - 1 + filtradas.length) % filtradas.length);
-    else if (e.key === 'Enter' || e.key === 'Tab') onEscolher(filtradas[ativo].texto);
+    else if (e.key === 'Enter' || e.key === 'Tab') escolher(filtradas[ativo]);
     else return false;
     e.preventDefault();
     return true;
@@ -96,7 +133,7 @@ export const MensagensRapidas = forwardRef<
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             onKeyDown={(e) => tecla(e)}
-            placeholder="Buscar curso (ex.: pcmg, guarda bh, tecnólogo)"
+            placeholder="Buscar (ex.: pcmg, reembolso, edital pmpe, matérias)"
             className="flex-1 text-sm bg-transparent focus:outline-none"
           />
         </div>
@@ -113,7 +150,7 @@ export const MensagensRapidas = forwardRef<
                 type="button"
                 onMouseEnter={() => setAtivo(i)}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onEscolher(m.texto)}
+                onClick={() => escolher(m)}
                 className={`w-full text-left px-3 py-1.5 text-sm ${i === ativo ? 'bg-muted' : 'hover:bg-muted/60'}`}
               >
                 <span className="block truncate">{m.titulo}</span>
@@ -123,7 +160,7 @@ export const MensagensRapidas = forwardRef<
           ))}
         </ul>
         <pre className="flex-1 overflow-y-auto p-3 text-xs whitespace-pre-wrap break-words font-sans text-muted-foreground">
-          {selecionada?.texto ?? ''}
+          {selecionada ? preencherNome(selecionada.texto, nomeContato) : ''}
         </pre>
       </div>
     </div>
