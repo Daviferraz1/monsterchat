@@ -5,7 +5,8 @@ import { useSendMessage } from '@/hooks/useSendMessage';
 import { useSuggestion } from '@/hooks/useSuggestion';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { transcodeToMp3 } from '@/lib/audio/transcodeToMp3';
-import { Send, Smile, Paperclip, Mic, Video, Camera, Loader2, MessageCircle, Check, Plus, X, FileText, Square } from 'lucide-react';
+import { Send, Smile, Paperclip, Mic, Video, Camera, Loader2, MessageCircle, Check, Plus, X, FileText, Square, Zap } from 'lucide-react';
+import { MensagensRapidas, type MensagensRapidasHandle } from './MensagensRapidas';
 
 /** Prefixo do gatilho de sugestão para mensagem só de mídia (ver ChatWindow). */
 export const MARCADOR_MIDIA = '[mídia:';
@@ -82,6 +83,10 @@ export function MessageInput({
   const [error, setError] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  // Mensagens rápidas: pelo botão ⚡ (com busca) ou "/curso" no começo do texto.
+  const [rapidasBotao, setRapidasBotao] = useState(false);
+  const [barraFechada, setBarraFechada] = useState(false);
+  const rapidasRef = useRef<MensagensRapidasHandle>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [spellMenu, setSpellMenu] = useState<SpellMenu | null>(null);
   const [spellLoading, setSpellLoading] = useState(false);
@@ -343,6 +348,17 @@ export function MessageInput({
     }
   }, [suggestionResult?.suggestion]);
 
+  // "/pcmg" no começo da caixa abre a lista já filtrada; Esc fecha até a barra sair.
+  const porBarra = !rapidasBotao && !barraFechada && /^\/[^\n]{0,40}$/.test(text);
+
+  const escolherRapida = (texto: string) => {
+    // Pela barra, o "/busca" some; pelo botão, soma ao que já estava escrito.
+    setText((prev) => (porBarra || !prev.trim() ? texto : `${prev.trimEnd()}\n\n${texto}`));
+    setRapidasBotao(false);
+    setBarraFechada(false);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="border-t p-3 sm:p-4 shrink-0">
       {suggestionEnabled && (suggestionLoading || suggestionResult?.suggestion) && (
@@ -447,6 +463,18 @@ export function MessageInput({
       )}
       <div className="flex gap-2 items-end">
         <div className="flex flex-col flex-1 min-w-0 relative">
+          {(rapidasBotao || porBarra) && (
+            <MensagensRapidas
+              ref={rapidasRef}
+              comBusca={rapidasBotao}
+              consulta={porBarra ? text.slice(1) : ''}
+              onEscolher={escolherRapida}
+              onFechar={() => {
+                setRapidasBotao(false);
+                setBarraFechada(true);
+              }}
+            />
+          )}
           <div className="flex gap-0.5 sm:gap-1 items-center border rounded-xl bg-background">
             <input
               ref={fileInputRef}
@@ -577,13 +605,34 @@ export function MessageInput({
                 </div>
               )}
             </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                setRapidasBotao((o) => !o);
+                setAttachMenuOpen(false);
+                setEmojiOpen(false);
+              }}
+              className={`p-2 min-h-[44px] flex items-center justify-center rounded-lg flex-shrink-0 ${
+                rapidasBotao ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Mensagens rápidas (ou digite / e o nome do curso)"
+              aria-label="Mensagens rápidas"
+              aria-expanded={rapidasBotao}
+            >
+              <Zap className="w-5 h-5" />
+            </button>
             <div lang="pt-BR" className="flex-1 min-w-0 flex items-end">
               <textarea
                 ref={textareaRef}
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
+                  if (barraFechada && !e.target.value.startsWith('/')) setBarraFechada(false);
                   if (error) setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (porBarra) rapidasRef.current?.tecla(e);
                 }}
                 onPaste={handlePaste}
                 onContextMenu={handleContextMenu}

@@ -129,7 +129,7 @@ export function formatPriceLine(priceDisplay: string | null | undefined): string
 }
 
 /** Página de vendas com a UTM do chat — mesma convenção dos links que a equipe envia. */
-export function salesLinkWithUtm(url: string): string {
+export function salesLinkWithUtm(url: string, utmContent: 'ia' | 'rapida' = 'ia'): string {
   const clean = url.trim();
   if (clean.includes('?')) return clean;
   const campaign = clean.replace(/\/+$/, '').split('/').pop() || 'curso';
@@ -137,7 +137,7 @@ export function salesLinkWithUtm(url: string): string {
     utm_source: 'monsterchat',
     utm_medium: 'whatsapp',
     utm_campaign: campaign,
-    utm_content: 'ia',
+    utm_content: utmContent,
     utm_term: 'organico',
   });
   return `${clean}?${params.toString()}`;
@@ -147,11 +147,11 @@ export function salesLinkWithUtm(url: string): string {
  * Apresentação de curso no modelo da equipe: link, nome, ✅ lista, valores.
  * Só para preparatórios Monster; Fagenius tem tom formal e outro formato.
  */
-export function formatSalesPitch(p: ProductRow): string | null {
+export function formatSalesPitch(p: ProductRow, utmContent: 'ia' | 'rapida' = 'ia'): string | null {
   if (p.brand !== 'monster') return null;
   const link = p.sales_page_url?.trim() || p.checkout_url?.trim();
   if (!link) return null;
-  const parts = [salesLinkWithUtm(link), '', courseLabel(p), '', ...checklist(p)];
+  const parts = [salesLinkWithUtm(link, utmContent), '', courseLabel(p), '', ...checklist(p)];
   const price = formatPriceLine(p.price_display);
   if (price) parts.push('', 'Valores:', price);
   // Combo também é vendido em mensalidades (ex.: 6x de R$ 297); a linha à vista sozinha escondia a opção.
