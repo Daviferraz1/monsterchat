@@ -18,7 +18,7 @@ export const maxDuration = 60;
  *
  *   GET  /api/contacts/:id/link-desconto           → opções (curso + forma de pagamento)
  *   GET  /api/contacts/:id/link-desconto?item=…    → preço cheio atual na Guru e plano
- *   POST /api/contacts/:id/link-desconto  { item, valor } → { link, de, por, cupom? }
+ *   POST /api/contacts/:id/link-desconto  { item, valor, email? } → { link, de, por, cupom? }
  *
  * `item` é "<productId>|principal" ou "<productId>|mensal" (o segundo link das
  * assinaturas). Pagamento único vira oferta dinâmica com o valor novo; assinatura
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: contactId } = await params;
-    const body = (await request.json().catch(() => ({}))) as { item?: string; valor?: number };
+    const body = (await request.json().catch(() => ({}))) as { item?: string; valor?: number; email?: string };
     const valor = centavos(Number(body.valor));
     if (!body.item || !Number.isFinite(valor) || valor <= 0) {
       return NextResponse.json({ ok: false, message: 'Informe o curso e o valor final.' }, { status: 400 });
@@ -116,8 +116,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       );
     }
 
-    const contato = { nome: c?.name, email: c?.email, telefone: c?.phone };
     const assinatura = ehAssinatura(l.url);
+    // Assinatura exige e-mail: o checkout só aplica o cupom do link com o contato
+    // preenchido, e sem e-mail não preenche nada. O que o atendente digitar vale e,
+    // se o contato não tinha e-mail, fica salvo nele.
+    const emailDigitado = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (emailDigitado && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailDigitado)) {
+      return NextResponse.json({ ok: false, message: 'E-mail inválido.' }, { status: 400 });
+    }
+    const email = emailDigitado || c?.email?.trim() || '';
+    if (assinatura && !email) {
+      return NextResponse.json({ ok: false, message: 'Informe o e-mail do aluno para aplicar o cupom no link.' }, { status: 400 });
+    }
+    if (emailDigitado && !c?.email) {
+      await supabaseAdmin.from('contacts').update({ email: emailDigitado }).eq('id', contactId);
+    }
+    const contato = { nome: c?.name, email: email || null, telefone: c?.phone };
     const r = assinatura
       ? await gerarLinkComCupom({ base, valor, contactId, contato })
       : { ...(await gerarLinkComDesconto({ base, valor, contactId, contato })), cupom: null };
@@ -140,7 +154,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       cupom: r.cupom,
       ciclos: base.ciclos ?? null,
       intervalo: base.intervalo ?? null,
-      semEmail: assinatura && !c?.email,
       reaproveitado: r.reaproveitado,
     });
   } catch (err) {

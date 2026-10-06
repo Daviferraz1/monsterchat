@@ -156,8 +156,12 @@ function contatoGuru(c: ContatoOferta): Record<string, string> {
   if (c.nome) contact.name = c.nome;
   if (c.email) contact.email = c.email;
   if (fone.length >= 10) {
+    let local = fone.startsWith('55') && fone.length >= 12 ? fone.slice(2) : fone;
+    // Celular no formato antigo (DDD + 8 dígitos, WhatsApp guarda assim): o checkout
+    // recusa como "número inválido" sem o 9 na frente.
+    if (local.length === 10 && /[6-9]/.test(local[2])) local = `${local.slice(0, 2)}9${local.slice(2)}`;
     contact.phone_local_code = '55';
-    contact.phone_number = fone.startsWith('55') && fone.length >= 12 ? fone.slice(2) : fone;
+    contact.phone_number = local;
   }
   return contact;
 }
@@ -167,6 +171,7 @@ interface GuruDynamicOffer {
   value?: number;
   source?: string | null;
   url?: string;
+  contact_email?: string | null;
 }
 
 /** Arredonda para centavos (a Guru guarda o valor como número decimal). */
@@ -221,8 +226,9 @@ export async function gerarLinkComDesconto(params: {
  * A Guru não troca o valor de assinatura pela oferta dinâmica, mas aceita cupom
  * pela URL (`coupon=`). O cupom fica preso ao e-mail do aluno, a um uso, ao
  * produto e a 7 dias, e vale para todas as mensalidades (maximum_subscription_cycles
- * = 0). Cupom preso a e-mail só entra depois que o contato está preenchido, então o
- * link leva também uma oferta dinâmica só com o contato. Testado em 06/10/2026 no
+ * = 0). O checkout só aplica o cupom do link depois que o contato está preenchido, e
+ * sem e-mail ele não preenche nada (nem nome): por isso o e-mail é obrigatório aqui e
+ * o link leva também uma oferta dinâmica só com o contato. Testado em 06/10/2026 no
  * Tecnólogo mensal: "Cupom aplicado! Válido para todos os ciclos", R$ 197 → R$ 177,30.
  *
  * O checkout precisa estar com "Permitir cupom de desconto" ligado no produto (painel
@@ -239,8 +245,8 @@ interface GuruCupom {
 }
 
 /** Código estável por aluno + oferta + valor, para devolver o mesmo cupom se pedirem de novo. */
-function codigoCupom(contactId: string, offerId: string, desconto: number, tentativa = 0): string {
-  const h = createHash('sha256').update(`${contactId}|${offerId}|${desconto}|${tentativa}`).digest('hex');
+function codigoCupom(contactId: string, offerId: string, desconto: number, email: string, tentativa = 0): string {
+  const h = createHash('sha256').update(`${contactId}|${offerId}|${desconto}|${email.toLowerCase()}|${tentativa}`).digest('hex');
   return `MC${h.slice(0, 8).toUpperCase()}`;
 }
 
@@ -256,7 +262,10 @@ async function ofertaSoContato(base: OfertaBase, contactId: string, contato: Con
   if (!Object.keys(contact).length) return null;
   const source = `monsterchat:${contactId}:${base.offerId}:contato`;
   const lista = await guru<GuruLista<GuruDynamicOffer>>('/dynamic-offers');
-  const igual = (lista.data ?? []).find((d) => d.source === source);
+  // Só reaproveita se o e-mail bate: sem e-mail o checkout não preenche nada e o cupom não entra.
+  const igual = (lista.data ?? []).find(
+    (d) => d.source === source && (d.contact_email ?? '').toLowerCase() === (contact.email ?? '').toLowerCase()
+  );
   if (igual) return igual.id;
   const criada = await guru<GuruDynamicOffer>('/dynamic-offers', {
     method: 'POST',
@@ -278,7 +287,7 @@ export async function gerarLinkComCupom(params: {
   let codigo = '';
   let reaproveitado = false;
   for (let tentativa = 0; tentativa < 5 && !codigo; tentativa++) {
-    const c = codigoCupom(params.contactId, params.base.offerId, desconto, tentativa);
+    const c = codigoCupom(params.contactId, params.base.offerId, desconto, params.contato.email?.trim() ?? '', tentativa);
     const existente = await cupomPorCodigo(c);
     if (!existente) {
       const email = params.contato.email?.trim();

@@ -35,8 +35,12 @@ function parcelas(p: Plano | null): number | null {
  * no pagamento único, cupom preso ao aluno na assinatura. O visor mostra o valor
  * final antes de gerar, para o atendente conferir.
  */
-export function LinkDesconto({ contactId }: { contactId: string }) {
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function LinkDesconto({ contactId, email }: { contactId: string; email?: string | null }) {
   const [cursos, setCursos] = useState<Curso[]>([]);
+  // Assinatura precisa do e-mail: sem ele o checkout não preenche o contato e o cupom não entra.
+  const [emailAluno, setEmailAluno] = useState(email ?? '');
   const [item, setItem] = useState('');
   const [de, setDe] = useState<number | null>(null);
   const [plano, setPlano] = useState<Plano | null>(null);
@@ -50,7 +54,6 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
     de: number;
     por: number;
     cupom: string | null;
-    semEmail: boolean;
     reaproveitado: boolean;
   } | null>(null);
   const [copiado, setCopiado] = useState<'link' | 'msg' | null>(null);
@@ -96,9 +99,11 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
     return Math.round(v * 100) / 100;
   }, [de, entrada, modo]);
   const valido = de != null && por != null && por > 0 && por < de;
+  const pedeEmail = plano?.tipo === 'cupom';
+  const emailValido = !pedeEmail || EMAIL_OK.test(emailAluno.trim());
 
   const gerar = async () => {
-    if (!valido || por == null) return;
+    if (!valido || !emailValido || por == null) return;
     setGerando(true);
     setErro(null);
     setResultado(null);
@@ -106,11 +111,11 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
       const res = await fetch(`/api/contacts/${contactId}/link-desconto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item, valor: por }),
+        body: JSON.stringify({ item, valor: por, email: pedeEmail ? emailAluno.trim() : undefined }),
       });
       const d = await res.json().catch(() => ({}));
       if (d.ok) {
-        setResultado({ link: d.link, de: d.de, por: d.por, cupom: d.cupom, semEmail: d.semEmail, reaproveitado: d.reaproveitado });
+        setResultado({ link: d.link, de: d.de, por: d.por, cupom: d.cupom, reaproveitado: d.reaproveitado });
       }
       else setErro(d.message || 'Falha ao gerar o link.');
     } catch {
@@ -130,7 +135,11 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
   const n = parcelas(plano);
   const preco = (v: number) => (n ? `${n}x de ${brl(v)}` : brl(v));
   const mensagem = resultado
-    ? `Consegui uma condição especial pra você no ${curso?.nome.replace(/ — (mensal|à vista)$/, '') ?? 'curso'}: de ${preco(resultado.de)} por ${preco(resultado.por)} 🎉\n\nO desconto já vem aplicado neste link, é só finalizar:\n${resultado.link}`
+    ? `Consegui uma condição especial pra você no ${curso?.nome.replace(/ — (mensal|à vista)$/, '') ?? 'curso'}: de ${preco(resultado.de)} por ${preco(resultado.por)} 🎉\n\nO desconto já vem aplicado neste link, é só finalizar:\n${resultado.link}${
+        resultado.cupom
+          ? `\n\nUse o e-mail ${emailAluno.trim()} na compra. Se o desconto não aparecer, digite o cupom ${resultado.cupom}.`
+          : ''
+      }`
     : '';
 
   return (
@@ -185,6 +194,28 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
             />
           </div>
 
+          {pedeEmail && (
+            <div className="space-y-1">
+              <input
+                value={emailAluno}
+                onChange={(e) => {
+                  setEmailAluno(e.target.value);
+                  setResultado(null);
+                }}
+                type="email"
+                placeholder="E-mail do aluno (obrigatório no cupom)"
+                className={`w-full text-xs border rounded-md px-2 py-1.5 bg-background ${
+                  emailAluno && !emailValido ? 'border-red-400' : ''
+                }`}
+              />
+              {!email && (
+                <p className="text-[10px] text-muted-foreground">
+                  Sem e-mail no cadastro: peça ao aluno. Ele fica salvo no contato e preenche o checkout.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Visor: o atendente vê o valor final antes de gerar o link. */}
           <div className="rounded-md bg-muted/50 p-2 text-xs space-y-0.5">
             {consultando ? (
@@ -229,7 +260,7 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
           <button
             type="button"
             onClick={gerar}
-            disabled={!valido || gerando}
+            disabled={!valido || !emailValido || gerando}
             className="w-full inline-flex justify-center items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50"
           >
             {gerando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgePercent className="w-3.5 h-3.5" />}
@@ -245,12 +276,7 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
           <p className="break-all text-foreground">{resultado.link}</p>
           {resultado.cupom && (
             <p className="text-[10px] text-muted-foreground">
-              Cupom {resultado.cupom}: só para o e-mail do aluno, 1 uso, vale 7 dias, em todas as mensalidades.
-            </p>
-          )}
-          {resultado.semEmail && (
-            <p className="text-[10px] text-amber-700">
-              Contato sem e-mail: o cupom ficou aberto (1 uso). Cadastre o e-mail para prender ao aluno.
+              Cupom {resultado.cupom}: só para {emailAluno.trim()}, 1 uso, vale 7 dias, em todas as mensalidades.
             </p>
           )}
           {resultado.reaproveitado && (
