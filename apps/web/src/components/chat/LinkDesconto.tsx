@@ -16,22 +16,43 @@ function numero(texto: string): number {
 interface Curso {
   id: string;
   nome: string;
+  tipo: 'oferta' | 'cupom';
+}
+
+interface Plano {
+  tipo: 'oferta' | 'cupom';
+  ciclos: number | null;
+  intervalo: string | null;
+}
+
+/** Assinatura mensal com mais de uma cobrança: o visor mostra mensalidade e total. */
+function parcelas(p: Plano | null): number | null {
+  return p?.tipo === 'cupom' && p.intervalo === 'month' && (p.ciclos ?? 0) > 1 ? p.ciclos : null;
 }
 
 /**
- * Gera um link de checkout com desconto (oferta dinâmica da Guru) para este contato.
- * O visor mostra o valor final antes de gerar, para o atendente conferir.
+ * Gera um link de checkout com desconto para este contato: oferta dinâmica da Guru
+ * no pagamento único, cupom preso ao aluno na assinatura. O visor mostra o valor
+ * final antes de gerar, para o atendente conferir.
  */
 export function LinkDesconto({ contactId }: { contactId: string }) {
   const [cursos, setCursos] = useState<Curso[]>([]);
-  const [productId, setProductId] = useState('');
+  const [item, setItem] = useState('');
   const [de, setDe] = useState<number | null>(null);
+  const [plano, setPlano] = useState<Plano | null>(null);
   const [consultando, setConsultando] = useState(false);
   const [modo, setModo] = useState<'pct' | 'valor'>('pct');
   const [entrada, setEntrada] = useState('');
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{ link: string; de: number; por: number; reaproveitado: boolean } | null>(null);
+  const [resultado, setResultado] = useState<{
+    link: string;
+    de: number;
+    por: number;
+    cupom: string | null;
+    semEmail: boolean;
+    reaproveitado: boolean;
+  } | null>(null);
   const [copiado, setCopiado] = useState<'link' | 'msg' | null>(null);
 
   useEffect(() => {
@@ -43,16 +64,20 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
 
   useEffect(() => {
     setDe(null);
+    setPlano(null);
     setResultado(null);
     setErro(null);
-    if (!productId) return;
+    if (!item) return;
     let cancelado = false;
     setConsultando(true);
-    fetch(`/api/contacts/${contactId}/link-desconto?productId=${encodeURIComponent(productId)}`)
+    fetch(`/api/contacts/${contactId}/link-desconto?item=${encodeURIComponent(item)}`)
       .then((r) => r.json())
       .then((d) => {
         if (cancelado) return;
-        if (d.ok) setDe(Number(d.de));
+        if (d.ok) {
+          setDe(Number(d.de));
+          setPlano({ tipo: d.tipo, ciclos: d.ciclos, intervalo: d.intervalo });
+        }
         else setErro(d.message || 'Não consegui ler o preço na Guru.');
       })
       .catch(() => !cancelado && setErro('Não consegui ler o preço na Guru.'))
@@ -60,7 +85,7 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
     return () => {
       cancelado = true;
     };
-  }, [contactId, productId]);
+  }, [contactId, item]);
 
   // Valor final calculado ao vivo, a partir do preço cheio da Guru.
   const por = useMemo(() => {
@@ -81,10 +106,12 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
       const res = await fetch(`/api/contacts/${contactId}/link-desconto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, valor: por }),
+        body: JSON.stringify({ item, valor: por }),
       });
       const d = await res.json().catch(() => ({}));
-      if (d.ok) setResultado({ link: d.link, de: d.de, por: d.por, reaproveitado: d.reaproveitado });
+      if (d.ok) {
+        setResultado({ link: d.link, de: d.de, por: d.por, cupom: d.cupom, semEmail: d.semEmail, reaproveitado: d.reaproveitado });
+      }
       else setErro(d.message || 'Falha ao gerar o link.');
     } catch {
       setErro('Falha ao gerar o link.');
@@ -99,9 +126,11 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
     setTimeout(() => setCopiado(null), 1500);
   };
 
-  const curso = cursos.find((c) => c.id === productId);
+  const curso = cursos.find((c) => c.id === item);
+  const n = parcelas(plano);
+  const preco = (v: number) => (n ? `${n}x de ${brl(v)}` : brl(v));
   const mensagem = resultado
-    ? `Consegui uma condição especial pra você no ${curso?.nome ?? 'curso'}: de ${brl(resultado.de)} por ${brl(resultado.por)} 🎉\n\nÉ só finalizar por este link:\n${resultado.link}`
+    ? `Consegui uma condição especial pra você no ${curso?.nome.replace(/ — (mensal|à vista)$/, '') ?? 'curso'}: de ${preco(resultado.de)} por ${preco(resultado.por)} 🎉\n\nO desconto já vem aplicado neste link, é só finalizar:\n${resultado.link}`
     : '';
 
   return (
@@ -113,19 +142,20 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
       </h4>
 
       <select
-        value={productId}
-        onChange={(e) => setProductId(e.target.value)}
+        value={item}
+        onChange={(e) => setItem(e.target.value)}
         className="w-full text-xs border rounded-md px-2 py-1.5 bg-background"
       >
         <option value="">Escolha o curso…</option>
         {cursos.map((c) => (
           <option key={c.id} value={c.id}>
             {c.nome}
+            {c.tipo === 'cupom' ? ' (cupom)' : ''}
           </option>
         ))}
       </select>
 
-      {productId && (
+      {item && (
         <>
           <div className="flex items-center gap-2">
             <div className="flex rounded-md border overflow-hidden text-xs shrink-0">
@@ -166,8 +196,8 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
             ) : (
               <>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Preço cheio</span>
-                  <span>{brl(de)}</span>
+                  <span className="text-muted-foreground">{n ? 'Mensalidade cheia' : 'Preço cheio'}</span>
+                  <span>{preco(de)}</span>
                 </div>
                 {por != null && (
                   <>
@@ -179,8 +209,16 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
                     </div>
                     <div className={`flex justify-between font-semibold ${valido ? 'text-foreground' : 'text-red-600'}`}>
                       <span>Aluno paga</span>
-                      <span>{brl(por)}</span>
+                      <span>{preco(por)}</span>
                     </div>
+                    {n && valido && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Total do curso</span>
+                        <span>
+                          {brl(de * n)} → {brl(por * n)}
+                        </span>
+                      </div>
+                    )}
                     {!valido && <p className="text-[11px] text-red-600">O valor final tem de ficar entre zero e o preço cheio.</p>}
                   </>
                 )}
@@ -195,7 +233,7 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
             className="w-full inline-flex justify-center items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50"
           >
             {gerando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgePercent className="w-3.5 h-3.5" />}
-            {por != null && valido ? `Gerar link de ${brl(por)}` : 'Gerar link'}
+            {por != null && valido ? `Gerar link de ${preco(por)}` : 'Gerar link'}
           </button>
         </>
       )}
@@ -205,6 +243,16 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
       {resultado && (
         <div className="rounded-md border p-2 text-xs space-y-1.5">
           <p className="break-all text-foreground">{resultado.link}</p>
+          {resultado.cupom && (
+            <p className="text-[10px] text-muted-foreground">
+              Cupom {resultado.cupom}: só para o e-mail do aluno, 1 uso, vale 7 dias, em todas as mensalidades.
+            </p>
+          )}
+          {resultado.semEmail && (
+            <p className="text-[10px] text-amber-700">
+              Contato sem e-mail: o cupom ficou aberto (1 uso). Cadastre o e-mail para prender ao aluno.
+            </p>
+          )}
           {resultado.reaproveitado && (
             <p className="text-[10px] text-muted-foreground">Esse aluno já tinha um link com esse valor; é o mesmo.</p>
           )}
@@ -222,7 +270,8 @@ export function LinkDesconto({ contactId }: { contactId: string }) {
       )}
 
       <p className="text-[10px] text-muted-foreground">
-        Só cursos de pagamento único. Em assinatura (Tecnólogo, Sequencial, combo) a Guru não troca o valor: use cupom.
+        Pagamento único vira oferta com o valor novo. Assinatura (marcada &quot;cupom&quot;) vira cupom só deste aluno; confira no
+        link se aparece &quot;Cupom aplicado&quot;: sem isso, o checkout está com cupom desligado na Guru.
       </p>
     </div>
   );

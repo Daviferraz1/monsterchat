@@ -1,57 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/api/supabase';
 import { getTeamContext } from '@/lib/api/team';
-import { acharOfertaBase, centavos, ehAssinatura, gerarLinkComDesconto } from '@/lib/api/integrations/guru-dynamic-offer';
+import {
+  acharOfertaBase,
+  centavos,
+  ehAssinatura,
+  gerarLinkComCupom,
+  gerarLinkComDesconto,
+} from '@/lib/api/integrations/guru-dynamic-offer';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 /**
- * Link de checkout com desconto para este contato (oferta dinâmica da Guru).
+ * Link de checkout com desconto para este contato.
  *
- *   GET  /api/contacts/:id/link-desconto              → cursos que aceitam desconto
- *   GET  /api/contacts/:id/link-desconto?productId=…  → preço cheio atual na Guru
- *   POST /api/contacts/:id/link-desconto  { productId, valor } → { link, de, por }
+ *   GET  /api/contacts/:id/link-desconto           → opções (curso + forma de pagamento)
+ *   GET  /api/contacts/:id/link-desconto?item=…    → preço cheio atual na Guru e plano
+ *   POST /api/contacts/:id/link-desconto  { item, valor } → { link, de, por, cupom? }
+ *
+ * `item` é "<productId>|principal" ou "<productId>|mensal" (o segundo link das
+ * assinaturas). Pagamento único vira oferta dinâmica com o valor novo; assinatura
+ * vira cupom preso ao aluno (a Guru não troca valor de assinatura).
  *
  * Sem teto de desconto por enquanto (fase de teste): só exige valor entre zero e o
  * preço cheio. O teto entra aqui quando for combinado.
  */
 
-async function produto(productId: string) {
+const CHECKOUT_GURU = /pagamento\.monsterconcursos\.com\.br/;
+
+async function linkDoItem(item: string): Promise<{ nome: string; url: string } | null> {
+  const [productId, qual] = item.split('|');
+  if (!productId) return null;
   const { data } = await supabaseAdmin
     .from('products')
-    .select('id, name, checkout_url, price_cents')
+    .select('name, checkout_url, checkout_url_subscription')
     .eq('id', productId)
     .maybeSingle();
-  return data;
+  if (!data) return null;
+  const url = qual === 'mensal' ? data.checkout_url_subscription : data.checkout_url;
+  return url && CHECKOUT_GURU.test(url) ? { nome: data.name, url } : null;
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const productId = request.nextUrl.searchParams.get('productId');
-    if (!productId) {
+    const item = request.nextUrl.searchParams.get('item');
+    if (!item) {
       const { data } = await supabaseAdmin
         .from('products')
-        .select('id, name, brand, checkout_url, price_cents')
+        .select('id, name, checkout_url, checkout_url_subscription')
         .eq('is_active', true)
         .eq('status', 'available')
         .order('name');
-      // Só checkout da Guru e de pagamento único: assinatura não aceita valor dinâmico.
-      const cursos = (data ?? [])
-        .filter((p) => /pagamento\.monsterconcursos\.com\.br/.test(p.checkout_url ?? '') && !ehAssinatura(p.checkout_url))
-        .filter((p, i, arr) => arr.findIndex((q) => q.checkout_url === p.checkout_url) === i)
-        .map((p) => ({ id: p.id, nome: p.name, precoCents: p.price_cents }));
-      return NextResponse.json({ ok: true, cursos });
+      const vistos = new Set<string>();
+      const opcoes: Array<{ id: string; nome: string; tipo: 'oferta' | 'cupom' }> = [];
+      for (const p of data ?? []) {
+        const links: Array<[string, string | null]> = [
+          ['principal', p.checkout_url],
+          ['mensal', p.checkout_url_subscription],
+        ];
+        for (const [qual, url] of links) {
+          if (!url || !CHECKOUT_GURU.test(url) || vistos.has(url)) continue;
+          vistos.add(url);
+          const assinatura = ehAssinatura(url);
+          const sufixo = !p.checkout_url_subscription ? '' : qual === 'mensal' ? ' — mensal' : ' — à vista';
+          opcoes.push({ id: `${p.id}|${qual}`, nome: `${p.name}${sufixo}`, tipo: assinatura ? 'cupom' : 'oferta' });
+        }
+      }
+      return NextResponse.json({ ok: true, cursos: opcoes });
     }
 
-    const p = await produto(productId);
-    if (!p) return NextResponse.json({ ok: false, message: 'Curso não encontrado.' }, { status: 404 });
-    const base = await acharOfertaBase(p.checkout_url);
+    const l = await linkDoItem(item);
+    if (!l) return NextResponse.json({ ok: false, message: 'Curso não encontrado.' }, { status: 404 });
+    const base = await acharOfertaBase(l.url);
     if (!base) {
       return NextResponse.json({ ok: false, message: 'Não achei na Guru a oferta desse link de checkout.' }, { status: 404 });
     }
-    return NextResponse.json({ ok: true, de: base.valor, oferta: base.nome });
+    return NextResponse.json({
+      ok: true,
+      de: base.valor,
+      tipo: ehAssinatura(l.url) ? 'cupom' : 'oferta',
+      ciclos: base.ciclos ?? null,
+      intervalo: base.intervalo ?? null,
+    });
   } catch (err) {
     console.error('[API link-desconto GET]', err);
     return NextResponse.json({ ok: false, message: 'Falha ao consultar a Guru.' }, { status: 500 });
@@ -61,25 +93,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: contactId } = await params;
-    const body = (await request.json().catch(() => ({}))) as { productId?: string; valor?: number };
+    const body = (await request.json().catch(() => ({}))) as { item?: string; valor?: number };
     const valor = centavos(Number(body.valor));
-    if (!body.productId || !Number.isFinite(valor) || valor <= 0) {
+    if (!body.item || !Number.isFinite(valor) || valor <= 0) {
       return NextResponse.json({ ok: false, message: 'Informe o curso e o valor final.' }, { status: 400 });
     }
 
-    const [p, { data: contato }] = await Promise.all([
-      produto(body.productId),
+    const [l, { data: c }] = await Promise.all([
+      linkDoItem(body.item),
       supabaseAdmin.from('contacts').select('name, email, phone').eq('id', contactId).maybeSingle(),
     ]);
-    if (!p) return NextResponse.json({ ok: false, message: 'Curso não encontrado.' }, { status: 404 });
-    if (ehAssinatura(p.checkout_url)) {
-      return NextResponse.json(
-        { ok: false, message: 'Esse curso é assinatura: a Guru não troca o valor nesse checkout. Use cupom.' },
-        { status: 400 }
-      );
-    }
+    if (!l) return NextResponse.json({ ok: false, message: 'Curso não encontrado.' }, { status: 404 });
 
-    const base = await acharOfertaBase(p.checkout_url);
+    const base = await acharOfertaBase(l.url);
     if (!base) {
       return NextResponse.json({ ok: false, message: 'Não achei na Guru a oferta desse link de checkout.' }, { status: 404 });
     }
@@ -90,23 +116,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       );
     }
 
+    const contato = { nome: c?.name, email: c?.email, telefone: c?.phone };
+    const assinatura = ehAssinatura(l.url);
+    const r = assinatura
+      ? await gerarLinkComCupom({ base, valor, contactId, contato })
+      : { ...(await gerarLinkComDesconto({ base, valor, contactId, contato })), cupom: null };
+
     const agente = await getTeamContext();
-    const r = await gerarLinkComDesconto({
-      base,
-      valor,
-      contactId,
-      contato: { nome: contato?.name, email: contato?.email, telefone: contato?.phone },
-    });
     console.log('[link-desconto]', {
       por: agente?.fullName ?? agente?.userId,
       contactId,
-      curso: p.name,
+      curso: l.nome,
       de: base.valor,
       valor,
-      ofertaDinamica: r.id,
+      cupom: r.cupom,
       reaproveitado: r.reaproveitado,
     });
-    return NextResponse.json({ ok: true, link: r.link, de: base.valor, por: valor, reaproveitado: r.reaproveitado });
+    return NextResponse.json({
+      ok: true,
+      link: r.link,
+      de: base.valor,
+      por: valor,
+      cupom: r.cupom,
+      ciclos: base.ciclos ?? null,
+      intervalo: base.intervalo ?? null,
+      semEmail: assinatura && !c?.email,
+      reaproveitado: r.reaproveitado,
+    });
   } catch (err) {
     console.error('[API link-desconto POST]', err);
     return NextResponse.json({ ok: false, message: 'Falha ao gerar o link na Guru.' }, { status: 500 });
