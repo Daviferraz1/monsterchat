@@ -476,6 +476,23 @@ export function MessageInput({
       )}
       <div className="flex gap-2 items-end">
         <div className="flex flex-col flex-1 min-w-0 relative">
+          {/* Celular não tem Tab: a continuação vira uma barra para tocar, como a sugestão do
+              teclado. onMouseDown evita tirar o foco da caixa (o teclado continua aberto). */}
+          {continuacao && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setText(text + continuacao);
+                limparCompletar();
+                textareaRef.current?.focus();
+              }}
+              className="hidden [@media(pointer:coarse)]:flex absolute bottom-full left-0 right-0 mb-1 items-center gap-2 px-3 py-2 rounded-lg border bg-popover shadow-sm text-left text-sm z-[90]"
+            >
+              <span className="shrink-0 text-[10px] font-semibold uppercase text-primary">Completar</span>
+              <span className="truncate text-muted-foreground">…{continuacao.trim()}</span>
+            </button>
+          )}
           {(rapidasBotao || porBarra) && (
             <MensagensRapidas
               ref={rapidasRef}
@@ -647,7 +664,7 @@ export function MessageInput({
                   <>
                     {text}
                     <span className="text-muted-foreground/70">{continuacao}</span>
-                    <span className="ml-1.5 align-middle text-[10px] px-1 py-px rounded border border-muted-foreground/30 text-muted-foreground/70">
+                    <span className="ml-1.5 align-middle text-[10px] px-1 py-px rounded border border-muted-foreground/30 text-muted-foreground/70 [@media(pointer:coarse)]:hidden">
                       Tab
                     </span>
                   </>
@@ -663,7 +680,7 @@ export function MessageInput({
                 }}
                 onKeyDown={(e) => {
                   if (porBarra && rapidasRef.current?.tecla(e)) return;
-                  // Tab aceita a continuação da IA (com o cursor no fim); Esc descarta.
+                  // Tab aceita a continuação (com o cursor no fim); Esc descarta. No celular, a barra "Completar".
                   const ta = e.currentTarget;
                   if (continuacao && e.key === 'Tab' && !e.shiftKey && ta.selectionStart === text.length) {
                     e.preventDefault();
