@@ -7,6 +7,9 @@ import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { transcodeToMp3 } from '@/lib/audio/transcodeToMp3';
 import { Send, Smile, Paperclip, Mic, Video, Camera, Loader2, MessageCircle, Check, Plus, X, FileText, Square } from 'lucide-react';
 
+/** Prefixo do gatilho de sugestão para mensagem só de mídia (ver ChatWindow). */
+export const MARCADOR_MIDIA = '[mídia:';
+
 function formatSeconds(total: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
@@ -211,7 +214,9 @@ export function MessageInput({
               wasUsed,
               wasEdited: !wasUsed,
               editedResponse: messageSent,
-              questionContext: lastInboundBody?.trim() || undefined,
+              // Marcador de áudio/imagem não é pergunta: sem ele a API busca o texto na conversa.
+              questionContext:
+                lastInboundBody?.trim() && !lastInboundBody.startsWith(MARCADOR_MIDIA) ? lastInboundBody.trim() : undefined,
             }),
           });
         } catch {

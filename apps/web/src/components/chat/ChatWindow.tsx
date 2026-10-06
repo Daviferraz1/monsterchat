@@ -10,6 +10,7 @@ import { ChatHeader } from './ChatHeader';
 import { useParams } from 'next/navigation';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 import { RefreshCw, Bot, CheckCheck, RotateCcw } from 'lucide-react';
+import { MARCADOR_MIDIA } from './MessageInput';
 
 export function ChatWindow() {
   const params = useParams();
@@ -136,10 +137,17 @@ export function ChatWindow() {
     };
   }, [messages]);
 
+  // O que dispara a sugestão da IA. Áudio e foto sem legenda também disparam: antes só
+  // texto contava, e quem mandava só um áudio nunca recebia sugestão (nem transcrição,
+  // que é feita junto). O marcador leva o id para não pedir de novo quando a
+  // transcrição for gravada na mensagem.
   const lastInboundBody = useMemo(() => {
     for (let i = visibleMessages.length - 1; i >= 0; i--) {
       const m = visibleMessages[i];
-      if (m.direction === 'inbound' && m.body?.trim()) return m.body;
+      if (m.direction !== 'inbound') continue;
+      if (m.body?.trim()) return m.body;
+      if (m.content_type === 'audio' && m.media_url) return `${MARCADOR_MIDIA}áudio ${m.id}]`;
+      if (m.content_type === 'image' && m.media_url) return `${MARCADOR_MIDIA}imagem ${m.id}]`;
     }
     return null;
   }, [visibleMessages]);
