@@ -10,6 +10,8 @@ interface MensagemRapida {
   grupo: string;
   busca: string;
   texto: string;
+  /** Imagem que vai anexada (o texto vira a legenda). */
+  imagem?: string;
 }
 
 export interface MensagensRapidasHandle {
@@ -49,7 +51,7 @@ export const MensagensRapidas = forwardRef<
     nomeContato?: string | null;
     consulta?: string;
     comBusca: boolean;
-    onEscolher: (texto: string) => void;
+    onEscolher: (texto: string, imagem?: string) => void;
     onFechar: () => void;
   }
 >(function MensagensRapidas({ conversationId, nomeContato, consulta = '', comBusca, onEscolher, onFechar }, ref) {
@@ -83,7 +85,7 @@ export const MensagensRapidas = forwardRef<
   }, [conversationId]);
 
   const lista = useMemo(() => (gerais ? [...doAluno, ...gerais] : null), [gerais, doAluno]);
-  const escolher = (m: MensagemRapida) => onEscolher(preencherNome(m.texto, nomeContato));
+  const escolher = (m: MensagemRapida) => onEscolher(preencherNome(m.texto, nomeContato), m.imagem);
 
   const termo = normalizar(comBusca ? busca : consulta);
   const filtradas = useMemo(() => {
@@ -154,14 +156,23 @@ export const MensagensRapidas = forwardRef<
                 className={`w-full text-left px-3 py-1.5 text-sm ${i === ativo ? 'bg-muted' : 'hover:bg-muted/60'}`}
               >
                 <span className="block truncate">{m.titulo}</span>
-                <span className="block text-[10px] text-muted-foreground">{m.grupo}</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  {m.grupo}
+                  {m.imagem ? ' · 📎 com imagem' : ''}
+                </span>
               </button>
             </li>
           ))}
         </ul>
-        <pre className="flex-1 overflow-y-auto p-3 text-xs whitespace-pre-wrap break-words font-sans text-muted-foreground">
-          {selecionada ? preencherNome(selecionada.texto, nomeContato) : ''}
-        </pre>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {selecionada?.imagem && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={selecionada.imagem} alt="Imagem que vai anexada" className="max-h-40 rounded border" />
+          )}
+          <pre className="text-xs whitespace-pre-wrap break-words font-sans text-muted-foreground">
+            {selecionada ? preencherNome(selecionada.texto, nomeContato) : ''}
+          </pre>
+        </div>
       </div>
     </div>
   );
