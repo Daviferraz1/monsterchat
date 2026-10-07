@@ -22,12 +22,15 @@ export interface MensagemRapida {
   /** Palavras extras para a busca (concurso, cargo, slug). */
   busca: string;
   texto: string;
+  /** Imagem anexada junto (o texto vira a legenda). Caminho do próprio site ou URL https. */
+  imagem?: string;
 }
 
 export interface RespostaEquipe {
   id: string;
   titulo: string;
   texto: string;
+  imagem?: string;
 }
 
 const CHAVE_EQUIPE = 'respostas_rapidas';
@@ -47,9 +50,19 @@ export const RESPOSTAS_INICIAIS: RespostaEquipe[] = [
   },
   {
     id: 'acesso',
-    titulo: 'Não recebi o acesso',
+    titulo: 'Não recebi o acesso / não acho o e-mail',
     texto:
-      '{nome}, o acesso é enviado para o e-mail usado na compra. Dá uma olhada na caixa de entrada, no spam e na aba Promoções. Se não encontrar, me passa o e-mail da compra que eu confiro aqui pra você 😊',
+      '{nome}, o acesso chega no e-mail usado na compra, enviado por *noreply@monsterquestoes.com.br* com o assunto *Bem-vindo(a) ao Monster Study, seu acesso foi liberado!*\n\nNo Gmail ele costuma cair na aba *Atualizações* ou no *Spam*. O jeito mais rápido é pesquisar *monsterquestoes* na busca do Gmail.\n\nSe não encontrar, me passa o e-mail da compra que eu confiro aqui pra você 😊',
+  },
+  {
+    // Caso mais comum (conversa da Maysa, 07/10/2026): a senha provisória já não vale porque
+    // ela criou outra e não guardou, e o link de acesso do WhatsApp só entra poucas vezes.
+    // O que resolve é ela mesma criar a senha pelo "Esqueceu a senha?" e achar o e-mail.
+    id: 'senha',
+    titulo: 'Senha incorreta / criar senha nova (com guia em imagem)',
+    imagem: '/guias/guia-email-acesso.png',
+    texto:
+      '{nome}, vamos criar uma senha nova pra você 😊\n\n1. Entre em *monsterstudy.com.br* e toque em *Esqueceu a senha?*\n2. Digite o e-mail da compra\n3. No Gmail, pesquise *Redefinição de Senha* (se não aparecer, veja em *Atualizações* e no *Spam*)\n4. Abra o e-mail mais recente, toque no botão e crie a senha\n\nDepois é só entrar com o seu e-mail e essa senha. Guarda ela, tá? Assim você não precisa pedir outro e-mail ou link a cada acesso.',
   },
   {
     id: 'pagamento',
@@ -204,7 +217,14 @@ export async function mensagensGerais(forcar = false): Promise<MensagemRapida[]>
     mensagensEditais().catch(() => [] as MensagemRapida[]),
   ]);
   const itens: MensagemRapida[] = [
-    ...equipe.map((r) => ({ id: `equipe:${r.id}`, titulo: r.titulo, grupo: 'Equipe' as const, busca: '', texto: r.texto })),
+    ...equipe.map((r) => ({
+      id: `equipe:${r.id}`,
+      titulo: r.titulo,
+      grupo: 'Equipe' as const,
+      busca: r.imagem ? 'imagem print guia' : '',
+      texto: r.texto,
+      ...(r.imagem ? { imagem: r.imagem } : {}),
+    })),
     ...cursos.sort((a, b) => a.grupo.localeCompare(b.grupo) || a.titulo.localeCompare(b.titulo, 'pt-BR')),
     ...editais.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR')),
   ];

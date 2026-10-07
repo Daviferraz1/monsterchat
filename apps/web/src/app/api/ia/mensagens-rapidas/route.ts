@@ -52,6 +52,8 @@ export async function PUT(request: NextRequest) {
         id: String(r.id || `r${Date.now()}${i}`).slice(0, 60),
         titulo: String(r.titulo ?? '').trim().slice(0, 120),
         texto: String(r.texto ?? '').trim().slice(0, 4000),
+        // Só caminho do próprio site (/guias/...) ou https: a imagem é baixada pelo navegador do atendente.
+        ...(typeof r.imagem === 'string' && /^(\/|https:\/\/)\S{3,500}$/.test(r.imagem.trim()) ? { imagem: r.imagem.trim() } : {}),
       }))
       .filter((r) => r.titulo && r.texto);
     await gravarRespostasEquipe(itens);

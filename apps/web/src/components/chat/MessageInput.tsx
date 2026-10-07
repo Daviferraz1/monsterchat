@@ -364,12 +364,23 @@ export function MessageInput({
     }
   }, [suggestionResult?.suggestion]);
 
-  const escolherRapida = (texto: string) => {
+  const escolherRapida = async (texto: string, imagem?: string) => {
     // Pela barra, o "/busca" some; pelo botão, soma ao que já estava escrito.
     setText((prev) => (porBarra || !prev.trim() ? texto : `${prev.trimEnd()}\n\n${texto}`));
     setRapidasBotao(false);
     setBarraFechada(false);
     requestAnimationFrame(() => textareaRef.current?.focus());
+    // Resposta com imagem (ex.: guia de como achar o e-mail): anexa e o texto vira a legenda,
+    // igual a quando o atendente cola um print. Nada é enviado até ele apertar Enviar.
+    if (imagem) {
+      try {
+        const blob = await (await fetch(imagem)).blob();
+        const nome = imagem.split('/').pop()?.split('?')[0] || 'imagem.png';
+        setPendingFile(new File([blob], nome, { type: blob.type || 'image/png' }));
+      } catch {
+        setError('Não consegui anexar a imagem dessa resposta; anexe pelo + se precisar.');
+      }
+    }
   };
 
   return (

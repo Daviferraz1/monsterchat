@@ -8,6 +8,8 @@ interface Resposta {
   id: string;
   titulo: string;
   texto: string;
+  /** Imagem anexada junto (o texto vira a legenda): /guias/arquivo.png ou https://… */
+  imagem?: string;
 }
 
 /**
@@ -28,7 +30,7 @@ export default function RespostasRapidasPage() {
       .finally(() => setCarregando(false));
   }, []);
 
-  const alterar = (i: number, campo: 'titulo' | 'texto', valor: string) => {
+  const alterar = (i: number, campo: 'titulo' | 'texto' | 'imagem', valor: string) => {
     setItens((l) => l.map((r, j) => (j === i ? { ...r, [campo]: valor } : r)));
     setMudou(true);
     setMsg(null);
@@ -135,6 +137,18 @@ export default function RespostasRapidasPage() {
                   rows={Math.min(12, Math.max(3, r.texto.split('\n').length + 1))}
                   className="w-full text-sm border rounded-lg px-3 py-2 font-sans"
                 />
+                <div className="flex items-center gap-2">
+                  <input
+                    value={r.imagem ?? ''}
+                    onChange={(e) => alterar(i, 'imagem', e.target.value)}
+                    placeholder="Imagem anexada (opcional): /guias/arquivo.png ou https://…"
+                    className="flex-1 min-w-0 text-xs border rounded-lg px-3 py-1.5 text-gray-600"
+                  />
+                  {r.imagem && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={r.imagem} alt="" className="h-10 w-10 object-cover rounded border" />
+                  )}
+                </div>
               </li>
             ))}
           </ul>
