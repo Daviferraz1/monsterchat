@@ -38,15 +38,23 @@ function acharDesconto(curso: string, lista: DescontoAluno[]): DescontoAluno | u
 
 /** Compra paga (não reembolsada) com este e-mail: base local primeiro, Guru ao vivo se não achar. */
 async function ehAluno(email: string): Promise<{ aluno: boolean; produtos: string[]; fonte: string }> {
+  // Sem limite de data: vale qualquer compra paga da base (começa em mar/2024).
+  // guru_sales é um log: a venda reembolsada continua com a linha "approved" antiga.
+  // Sem cruzar com o reembolso, 225 de 234 reembolsos contavam como ex-aluno (out/2026).
   const { data } = await supabaseAdmin
     .from('guru_sales')
-    .select('product_names')
+    .select('transaction_id, status, product_names')
     .ilike('contact_email', email)
-    .eq('status', 'approved')
-    .limit(10);
-  if (data?.length) {
-    return { aluno: true, produtos: [...new Set(data.map((r) => String(r.product_names)))], fonte: 'vendas do Guru' };
+    .in('status', ['approved', 'refunded', 'chargeback']);
+  const desfeitas = new Set(
+    (data ?? []).filter((r) => r.status !== 'approved' && r.transaction_id).map((r) => r.transaction_id)
+  );
+  const pagas = (data ?? []).filter((r) => r.status === 'approved' && !desfeitas.has(r.transaction_id));
+  if (pagas.length) {
+    return { aluno: true, produtos: [...new Set(pagas.map((r) => String(r.product_names)))], fonte: 'vendas do Guru' };
   }
+  // Teve compra, mas toda reembolsada: não é ex-aluno, e não adianta olhar a Guru ao vivo.
+  if (data?.length) return { aluno: false, produtos: [], fonte: 'vendas do Guru (compra reembolsada)' };
   const live = await fetchGuruTransactionsLive({ email });
   if (live.ok && live.approved) return { aluno: true, produtos: [], fonte: 'Guru ao vivo' };
   return { aluno: false, produtos: [], fonte: live.ok ? 'Guru ao vivo' : 'vendas do Guru' };
