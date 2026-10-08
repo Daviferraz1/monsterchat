@@ -8,6 +8,7 @@ import { transcodeToMp3 } from '@/lib/audio/transcodeToMp3';
 import { Send, Smile, Paperclip, Mic, Video, Camera, Loader2, MessageCircle, Check, Plus, X, FileText, Square, Zap } from 'lucide-react';
 import { MensagensRapidas, type MensagensRapidasHandle } from './MensagensRapidas';
 import { useAutocompletar } from '@/hooks/useAutocompletar';
+import { trechosComErro, useCorretor } from '@/hooks/useCorretor';
 
 /** Prefixo do gatilho de sugestão para mensagem só de mídia (ver ChatWindow). */
 export const MARCADOR_MIDIA = '[mídia:';
@@ -160,6 +161,9 @@ export function MessageInput({
     descartar: descartarCompletar,
     limpar: limparCompletar,
   } = useAutocompletar(text, !pendingFile && !porBarra && !rapidasBotao, contactName);
+  // Ortografia: sublinhado vermelho na camada atrás da caixa (o do navegador só
+  // aparece para quem tem o dicionário de português ligado).
+  const errosOrtografia = useCorretor(text, !porBarra);
 
   // Auto-expand textarea conforme o texto (até TEXTAREA_MAX_HEIGHT)
   useEffect(() => {
@@ -671,13 +675,28 @@ export function MessageInput({
                 aria-hidden
                 className="pointer-events-none absolute inset-0 py-2.5 px-3 leading-normal whitespace-pre-wrap break-words overflow-hidden text-transparent"
               >
-                {continuacao && (
+                {(continuacao || errosOrtografia.length > 0) && (
                   <>
-                    {text}
-                    <span className="text-muted-foreground/70">{continuacao}</span>
-                    <span className="ml-1.5 align-middle text-[10px] px-1 py-px rounded border border-muted-foreground/30 text-muted-foreground/70 [@media(pointer:coarse)]:hidden">
-                      Tab
-                    </span>
+                    {trechosComErro(text, errosOrtografia).map((p, i) =>
+                      p.erro ? (
+                        <span
+                          key={i}
+                          className="underline decoration-wavy decoration-red-500 decoration-[1.5px] underline-offset-[3px] [text-decoration-skip-ink:none]"
+                        >
+                          {p.t}
+                        </span>
+                      ) : (
+                        <span key={i}>{p.t}</span>
+                      )
+                    )}
+                    {continuacao && (
+                      <>
+                        <span className="text-muted-foreground/70">{continuacao}</span>
+                        <span className="ml-1.5 align-middle text-[10px] px-1 py-px rounded border border-muted-foreground/30 text-muted-foreground/70 [@media(pointer:coarse)]:hidden">
+                          Tab
+                        </span>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -713,7 +732,7 @@ export function MessageInput({
                 style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
                 disabled={busy}
                 rows={1}
-                spellCheck
+                spellCheck={false}
                 lang="pt-BR"
                 aria-label="Mensagem"
               />
