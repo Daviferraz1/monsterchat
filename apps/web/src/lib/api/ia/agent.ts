@@ -629,10 +629,16 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
   }
 }
 
-function buildSystemPrompt(ctx: AgentContext): string {
+/**
+ * Instruções do agente em duas partes, por custo:
+ *  - `fixo`: igual em toda chamada (regras, tom, ferramentas). Vai com cache_control,
+ *    então da segunda chamada em diante (nos 5 min seguintes) custa 10% do preço.
+ *  - `variavel`: o que muda por conversa (saudação do horário, nome, memória, cadastro).
+ * Qualquer coisa que varie por conversa e entre no `fixo` quebra o cache de todo mundo.
+ */
+function buildSystemPrompt(ctx: AgentContext): { fixo: string; variavel: string } {
   const nome = ctx.contactName?.trim() ? ctx.contactName.trim().split(/\s+/)[0] : '';
-  return `Você é o copiloto de atendimento do MONSTER CONCURSOS (cursos para concursos) e da FAGENIUS (faculdade, Gestão de Segurança Pública). Sua tarefa: redigir UMA mensagem pronta para o ATENDENTE enviar ao aluno/lead no WhatsApp.
-${ctx.memoryBlock ? `\nMEMÓRIA DA CONVERSA (contexto do que já rolou — pode estar resumido; complementa as mensagens abaixo):\n${ctx.memoryBlock}\n` : ''}${ctx.contactDataBlock ? `\nDADOS DO CONTATO (já no cadastro — use no suporte; não peça de novo o que já temos):\n${ctx.contactDataBlock}\n` : ''}
+  const fixo = `Você é o copiloto de atendimento do MONSTER CONCURSOS (cursos para concursos) e da FAGENIUS (faculdade, Gestão de Segurança Pública). Sua tarefa: redigir UMA mensagem pronta para o ATENDENTE enviar ao aluno/lead no WhatsApp.
 AUTONOMIA — responda de verdade, mas saiba a fronteira:
 - CONHECIMENTO PRÓPRIO liberado para CONTEÚDO ACADÊMICO: resolver questão, explicar matéria, gabarito, regra de gramática (crase, concordância), interpretação, cálculo. Aqui responda direto, com segurança, sem depender da base.
 - CONHECIMENTO PRÓPRIO PROIBIDO para FATO NOSSO: nome, duração, preço, formato, o que inclui, pré-requisito, link de curso, prazo, política. Isso NUNCA sai da sua cabeça — só de buscar_produto ou das outras ferramentas, mesmo que você ache que sabe.
@@ -643,7 +649,7 @@ AUTONOMIA — responda de verdade, mas saiba a fronteira:
 CONVERSA:
 - Mensagem do aluno marcada "(áudio, transcrição automática…)" é o que ele falou num áudio: trate como fala dele. A transcrição pode errar palavra, nome ou número; se o trecho importante parecer sem sentido ou tiver [inaudível], pergunte em vez de supor. "(enviou um áudio que não foi possível transcrever)": peça para ele escrever ou reenviar.
 - Leia TODA a conversa fornecida (linhas ALUNO e ATENDENTE). Responda apenas a(s) pergunta(s) do aluno que ainda estão EM ABERTO — em especial a última. NÃO repita o que o ATENDENTE já respondeu.
-- ${ctx.nowHint || 'Use a saudação conforme o horário do dia (bom dia/boa tarde/boa noite).'} Só cumprimente se a conversa estiver começando; se já estiver em andamento (o atendente já cumprimentou), vá direto ao ponto, sem repetir a saudação.
+- Saudação: a do horário indicado em CONTEXTO DESTA CONVERSA (no fim destas instruções). Só cumprimente se a conversa estiver começando; se já estiver em andamento (o atendente já cumprimentou), vá direto ao ponto, sem repetir a saudação.
 
 FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, preço, prazo ou acesso exige):
 - verificar_desconto_aluno: quando pedirem desconto de aluno/ex-aluno. Só ela libera preço especial e link de desconto, depois de confirmar a compra no Guru.
@@ -695,7 +701,8 @@ NÃO diga que um curso NÃO existe sem antes conferir o CATÁLOGO COMPLETO de bu
 TOM:
 - MONSTER: informal, acolhedor, 1–2 emojis no máximo, trate por "você".
 - FAGENIUS: formal, profissional, sem emoji.
-- Se ambíguo, neutro-profissional.${nome ? `\n- Use o primeiro nome quando fizer sentido: ${nome}.` : ''}
+- Se ambíguo, neutro-profissional.
+- Use o primeiro nome do aluno (em CONTEXTO DESTA CONVERSA) quando fizer sentido.
 ${
   ctx.styleBlock
     ? `\nPADRÃO DO ATENDENTE (aprendido com as respostas que a equipe realmente enviou quando não usou a sugestão da IA). Quando a situação bater, siga estas preferências — elas têm PRIORIDADE sobre o TOM acima. Elas dizem respeito à FORMA de responder; nunca use como fonte de dado factual:\n${ctx.styleBlock}\n`
@@ -732,6 +739,20 @@ SEM TRAVESSÃO: não use — nem – na mensagem (soa como texto de robô). Use 
 NADA EM ABERTO: se o aluno já foi atendido e não sobrou pergunta pendente (ele só agradeceu, confirmou, se despediu ou mandou emoji), NÃO invente assunto novo e NÃO escreva recomendações para o atendente. Responda SOMENTE com: <mensagem>[SEM_SUGESTAO]</mensagem>
 
 SAÍDA: escreva a mensagem para o aluno entre <mensagem> e </mensagem>. Só o que está dentro das tags chega ao atendente; não escreva análise ("o catálogo confirma…", "o aluno mencionou…", "vou responder…") — se escrever, deixe FORA das tags. Dentro das tags você escreve PARA O ALUNO, nunca sobre ele: nada de "o aluno já recebeu", "você pode aproveitar para" ou lista de opções para o atendente. Sem pergunta em aberto: <mensagem>[SEM_SUGESTAO]</mensagem>.`;
+  const variavel = [
+    'CONTEXTO DESTA CONVERSA:',
+    `- ${ctx.nowHint || 'Use a saudação conforme o horário do dia (bom dia/boa tarde/boa noite).'}`,
+    nome ? `- Primeiro nome do aluno: ${nome}.` : '- Nome do aluno: não informado.',
+    ctx.memoryBlock
+      ? `\nMEMÓRIA DA CONVERSA (contexto do que já rolou — pode estar resumido; complementa as mensagens):\n${ctx.memoryBlock}`
+      : '',
+    ctx.contactDataBlock
+      ? `\nDADOS DO CONTATO (já no cadastro — use no suporte; não peça de novo o que já temos):\n${ctx.contactDataBlock}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return { fixo, variavel };
 }
 
 /** Texto do turno do usuário (a conversa, ou o pedido de análise quando só há imagem). */
@@ -749,12 +770,20 @@ async function runAnthropicAgent(
 ): Promise<string | null> {
   if (!apiEnv.ANTHROPIC_API_KEY) return null;
   const anthropic = new Anthropic({ apiKey: apiEnv.ANTHROPIC_API_KEY });
-  const system = buildSystemPrompt(ctx);
+  const { fixo, variavel } = buildSystemPrompt(ctx);
+  const system: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: fixo, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: variavel },
+  ];
 
   const content: Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> = [
     { type: 'text', text: buildUserText(ctx) },
   ];
   content.push(...(await fetchImageBlocks(ctx.images)));
+  // Segundo ponto de cache: a conversa. Depois de chamar uma ferramenta o agente reenvia
+  // tudo isso; com a marca, a 2ª volta lê do cache em vez de pagar de novo.
+  const ultimo = content[content.length - 1];
+  content[content.length - 1] = { ...ultimo, cache_control: { type: 'ephemeral' } };
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content }];
   let emptyRetries = 0;
 
@@ -762,6 +791,7 @@ async function runAnthropicAgent(
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       trace.iterations = i + 1;
       const res = await anthropic.messages.create({ model, max_tokens: MAX_TOKENS, system, tools, messages });
+      if (process.env.IA_LOG_USO) console.log('[IA uso]', JSON.stringify(res.usage));
 
       if (res.stop_reason === 'tool_use') {
         const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
@@ -821,7 +851,8 @@ async function runGeminiAgent(
     console.warn('[IA agent gemini] GEMINI_API_KEY ausente');
     return null;
   }
-  const system = buildSystemPrompt(ctx);
+  const { fixo, variavel } = buildSystemPrompt(ctx);
+  const system = `${fixo}\n\n${variavel}`;
   const userParts: Array<Record<string, unknown>> = [{ text: buildUserText(ctx) }];
   for (const im of await fetchImagesRaw(ctx.images)) {
     userParts.push({ inlineData: { mimeType: im.mimeType, data: im.base64 } });
@@ -914,10 +945,14 @@ async function storeTrace(
   model: string,
   trace: AgentTrace,
   suggestion: string | null,
-  discardedReason: string | null
+  discardedReason: string | null,
+  inicio: Date
 ): Promise<void> {
   try {
     await supabaseAdmin.from('ia_suggestion_traces').insert({
+      // Hora em que a geração COMEÇOU (a conversa foi lida logo antes): é o que diz se
+      // uma mensagem que chegou durante a geração ficou de fora (ver sugestaoJaGerada).
+      created_at: inicio.toISOString(),
       conversation_id: ctx.conversationId ?? null,
       model,
       tools_used: trace.tools,
@@ -935,8 +970,51 @@ async function storeTrace(
  * Devolve null em caso de falha, para o chamador cair no caminho determinístico, e ''
  * quando o modelo decidiu que não há o que sugerir.
  */
+/**
+ * Sugestão já gerada para esta conversa depois da última mensagem dela, se houver.
+ *
+ * A sugestão roda toda vez que alguém abre a conversa; 61% das chamadas (out/2026)
+ * eram para a mesma mensagem do aluno, de novo: o atendente sai e volta, ou outro
+ * abre. Nada mudou na conversa, então a resposta é a mesma e não precisa pagar o
+ * modelo de novo. Vale por 12h (depois disso regera: preço, catálogo e prazos mudam).
+ *   null = não há o que reaproveitar; '' = o modelo já tinha decidido não sugerir.
+ */
+async function sugestaoJaGerada(conversationId: string): Promise<string | null> {
+  try {
+    const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const [{ data: ultima }, { data: rastro }] = await Promise.all([
+      supabaseAdmin
+        .from('messages')
+        .select('created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('ia_suggestion_traces')
+        .select('suggestion, discarded_reason, created_at')
+        .eq('conversation_id', conversationId)
+        .gte('created_at', desde)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (!rastro || !ultima) return null;
+    if (new Date(rastro.created_at).getTime() <= new Date(ultima.created_at).getTime()) return null;
+    if (rastro.discarded_reason) return '';
+    return rastro.suggestion?.trim() ? rastro.suggestion : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function generateAgenticSuggestion(ctx: AgentContext): Promise<string | null> {
   if (!ctx.conversationText?.trim() && !ctx.images?.length) return null;
+  if (ctx.conversationId) {
+    const pronta = await sugestaoJaGerada(ctx.conversationId);
+    if (pronta !== null) return pronta;
+  }
+  const inicio = new Date();
   const [model, styleBlock] = await Promise.all([getAgentModel(), getOperatorStyleBlock()]);
   const fullCtx: AgentContext = { ...ctx, styleBlock: ctx.styleBlock ?? styleBlock ?? undefined };
   const trace: AgentTrace = { tools: [], iterations: 0 };
@@ -950,7 +1028,7 @@ export async function generateAgenticSuggestion(ctx: AgentContext): Promise<stri
       trecho: raw?.slice(0, 120),
     });
   }
-  await storeTrace(fullCtx, model, trace, limpa ?? raw, discardedReason);
+  await storeTrace(fullCtx, model, trace, limpa ?? raw, discardedReason, inicio);
   // O modelo rodou e decidiu não sugerir (nada em aberto, ou só escreveu para o
   // atendente): devolve '' — e não null, que é reservado para falha. Com null o
   // chamador caía no catálogo determinístico e inventava uma sugestão sem relação
