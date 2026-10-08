@@ -20,6 +20,8 @@ interface InboxFiltersProps {
   onFiltersChange: (filters: InboxFiltersProps['filters']) => void;
   /** Quantidade de conversas não respondidas (badge vermelho no chip). */
   notRepliedCount?: number;
+  /** Conversas com pergunta real do aluno sem resposta. */
+  perguntasCount?: number;
 }
 
 /**
@@ -29,7 +31,7 @@ interface InboxFiltersProps {
  * que importa. Só os dois atalhos que a equipe usa o dia inteiro ficam à vista —
  * o resto vira seletor dentro do painel, que ocupa duas linhas em vez de oito.
  */
-export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: InboxFiltersProps) {
+export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0, perguntasCount = 0 }: InboxFiltersProps) {
   const { departments, me } = useTeamDirectory();
   const [open, setOpen] = useState(false);
 
@@ -48,7 +50,9 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
   const marcadas = filters.unread === 'marked';
   const statusValue = marcadas
     ? 'marked'
-    : replied === 'replied'
+    : replied === 'pergunta'
+      ? 'pergunta'
+      : replied === 'replied'
       ? 'replied'
       : replied === 'not_replied'
         ? 'not_replied'
@@ -63,6 +67,7 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
       all: { status: undefined, replied: 'all', unread: 'all' },
       open: { status: 'open', replied: 'all', unread: 'all' },
       not_replied: { status: undefined, replied: 'not_replied', unread: 'all' },
+      pergunta: { status: undefined, replied: 'pergunta', unread: 'all' },
       replied: { status: undefined, replied: 'replied', unread: 'all' },
       marked: { status: undefined, replied: 'all', unread: 'marked' },
       finalized: { status: 'closed', replied: 'all', unread: 'all' },
@@ -124,6 +129,19 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
       <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
+          onClick={() => applyStatus(statusValue === 'pergunta' ? 'all' : 'pergunta')}
+          className={chip(statusValue === 'pergunta')}
+          title="Aluno perguntou algo de verdade e ainda não teve resposta (sem contar obrigado, ok e figurinha)"
+        >
+          ⏳ Pergunta sem resposta
+          {perguntasCount > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-bold rounded-full bg-red-500 text-white">
+              {perguntasCount > 99 ? '99+' : perguntasCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
           onClick={() => applyStatus(statusValue === 'not_replied' ? 'all' : 'not_replied')}
           className={chip(statusValue === 'not_replied')}
         >
@@ -177,6 +195,9 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0 }: 
               </option>
               <option value="open" className="bg-[#1a1a2e]">
                 Abertas
+              </option>
+              <option value="pergunta" className="bg-[#1a1a2e]">
+                Pergunta sem resposta
               </option>
               <option value="not_replied" className="bg-[#1a1a2e]">
                 Não respondido
