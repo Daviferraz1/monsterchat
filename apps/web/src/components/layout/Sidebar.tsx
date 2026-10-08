@@ -23,7 +23,7 @@ export function Sidebar({ isOpen = true, onClose, className = '' }: SidebarProps
     assigned_to?: string;
     channel_id?: string;
     channel_type?: 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
-    replied?: 'all' | 'replied' | 'not_replied';
+    replied?: 'all' | 'replied' | 'not_replied' | 'pergunta';
     department_id?: string;
     assignment?: 'all' | 'mine' | 'unassigned';
     search?: string;

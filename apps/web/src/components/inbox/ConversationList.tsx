@@ -5,6 +5,7 @@ import { ChannelBadge } from '../layout/ChannelBadge';
 import type { Conversation, ChannelType } from '@/types';
 import type { ChannelTypeFilter } from '@/hooks/useConversations';
 import { useLembretes } from '@/hooks/useLembretes';
+import type { Esperando } from '@/hooks/usePerguntasEsperando';
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -13,6 +14,10 @@ interface ConversationListProps {
   channelTypeFilter?: ChannelTypeFilter;
   /** No mobile, fecha o drawer ao clicar em uma conversa */
   onConversationClick?: () => void;
+  /** Conversas com pergunta real sem resposta (selo ⏳). */
+  esperando?: Map<string, Esperando>;
+  /** Filtro "Pergunta sem resposta": só essas, a que espera há mais tempo primeiro. */
+  somentePerguntas?: boolean;
 }
 
 function groupByChannel(conversations: Conversation[]): { channelId: string; channelName: string; channelType: ChannelType; items: Conversation[] }[] {
@@ -40,7 +45,19 @@ function groupByChannel(conversations: Conversation[]): { channelId: string; cha
   }));
 }
 
-export function ConversationList({ conversations, loading, channelTypeFilter = 'all', onConversationClick }: ConversationListProps) {
+export function ConversationList({
+  conversations: todas,
+  loading,
+  channelTypeFilter = 'all',
+  onConversationClick,
+  esperando,
+  somentePerguntas = false,
+}: ConversationListProps) {
+  const conversations = somentePerguntas
+    ? todas
+        .filter((c) => esperando?.has(c.id))
+        .sort((a, b) => (esperando!.get(a.id)!.desde < esperando!.get(b.id)!.desde ? -1 : 1))
+    : todas;
   // Lembrete aberto por conversa (badge ⏰ na lista).
   const lembretes = useLembretes();
   if (loading) {
@@ -70,6 +87,7 @@ export function ConversationList({ conversations, loading, channelTypeFilter = '
             conversation={conversation}
             onSelect={onConversationClick}
             lembrete={lembretes.get(conversation.id)}
+            esperandoDesde={esperando?.get(conversation.id)?.desde}
           />
         ))}
       </div>
@@ -93,6 +111,7 @@ export function ConversationList({ conversations, loading, channelTypeFilter = '
             conversation={conversation}
             onSelect={onConversationClick}
             lembrete={lembretes.get(conversation.id)}
+            esperandoDesde={esperando?.get(conversation.id)?.desde}
           />
           ))}
         </div>

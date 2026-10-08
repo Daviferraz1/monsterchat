@@ -12,6 +12,7 @@ import type { Conversation } from '@/types';
 import type { DigitalGuruMetadata, LeadCampaign } from '@/types';
 import { Megaphone, CheckCheck, RotateCcw, UserRound, MailOpen, Mail, AlarmClock } from 'lucide-react';
 import { quandoLembrete } from '@/hooks/useLembretes';
+import { tempoEsperando } from '@/hooks/usePerguntasEsperando';
 import { useTeamDirectory } from '@/hooks/useTeamDirectory';
 
 const AVATAR_COLORS = [
@@ -42,9 +43,11 @@ interface ConversationItemProps {
   onSelect?: () => void;
   /** Prazo do lembrete aberto do atendente nesta conversa (ISO), se houver. */
   lembrete?: string;
+  /** Desde quando o aluno espera resposta para uma dúvida real (ISO), se for o caso. */
+  esperandoDesde?: string;
 }
 
-export function ConversationItem({ conversation, onSelect, lembrete }: ConversationItemProps) {
+export function ConversationItem({ conversation, onSelect, lembrete, esperandoDesde }: ConversationItemProps) {
   const pathname = usePathname();
   const supabase = useSupabase();
   const contact = conversation.contact;
@@ -272,6 +275,18 @@ export function ConversationItem({ conversation, onSelect, lembrete }: Conversat
                 (conversation.last_message_at ? 'Mensagem' : 'Sem mensagens')}
             </p>
             <div className="flex flex-wrap items-center gap-1.5 mt-1">
+              {esperandoDesde && (
+                <span
+                  className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded border w-fit ${
+                    Date.now() - new Date(esperandoDesde).getTime() >= 60 * 60 * 1000
+                      ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  }`}
+                  title="O aluno fez uma pergunta e ainda não teve resposta"
+                >
+                  ⏳ {tempoEsperando(esperandoDesde)} sem resposta
+                </span>
+              )}
               {lembrete && (
                 <span
                   className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit ${

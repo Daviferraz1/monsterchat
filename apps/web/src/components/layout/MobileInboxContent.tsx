@@ -5,6 +5,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { ConversationList } from '../inbox/ConversationList';
 import { InboxFilters } from '../inbox/InboxFilters';
 import type { AssignmentFilter, ChannelTypeFilter, RepliedFilter } from '@/hooks/useConversations';
+import { usePerguntasEsperando } from '@/hooks/usePerguntasEsperando';
 
 export function MobileInboxContent() {
   const [filters, setFilters] = useState<{
@@ -18,6 +19,8 @@ export function MobileInboxContent() {
     search?: string;
   }>({});
   const { conversations, loading, notRepliedCount, hasMore, loadMore } = useConversations(filters);
+  // Dúvida real do aluno sem resposta: selo na conversa e chip com contador.
+  const esperando = usePerguntasEsperando();
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#0d0d1a]" style={{ color: '#e2e8f0' }}>
@@ -29,12 +32,15 @@ export function MobileInboxContent() {
         filters={filters}
         onFiltersChange={setFilters}
         notRepliedCount={notRepliedCount}
+        perguntasCount={esperando.size}
       />
       <div className="flex-1 overflow-y-auto min-h-0" style={{ scrollbarColor: '#333 transparent' }}>
         <ConversationList
           conversations={conversations}
           loading={loading}
           channelTypeFilter={filters.channel_type}
+          esperando={esperando}
+          somentePerguntas={filters.replied === 'pergunta'}
         />
         {hasMore && !loading && (
           <div className="p-3 flex justify-center">

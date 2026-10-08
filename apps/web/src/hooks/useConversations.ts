@@ -11,7 +11,8 @@ import {
 import type { Conversation } from '@/types';
 
 export type ChannelTypeFilter = 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
-export type RepliedFilter = 'all' | 'replied' | 'not_replied';
+/** 'pergunta' = não respondido E com dúvida real do aluno (ver usePerguntasEsperando). */
+export type RepliedFilter = 'all' | 'replied' | 'not_replied' | 'pergunta';
 /** Só as que o atendente marcou para voltar depois. */
 export type UnreadFilter = 'all' | 'marked';
 /** Fila: todas as visíveis, só as minhas, ou as que ainda não têm dono. */
@@ -149,7 +150,7 @@ export function useConversations(filters?: {
       }
       // "Não respondido" = última mensagem foi do contato e não foi respondida (e não finalizada).
       // "Respondido" = o complemento (já respondida ou finalizada).
-      if (repliedFilter === 'not_replied') {
+      if (repliedFilter === 'not_replied' || repliedFilter === 'pergunta') {
         list = list.filter((c) => needsReply(c as Conversation));
       } else if (repliedFilter === 'replied') {
         list = list.filter((c) => !needsReply(c as Conversation));
