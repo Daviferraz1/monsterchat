@@ -391,19 +391,30 @@ type SaleRow = {
   sold_at: string;
   payment_method: string | null;
   payment_total: number | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
 };
 
-async function lookupSales(ctx: AgentContext, email?: string): Promise<SaleRow[]> {
-  const select = 'product_names, status, sold_at, payment_method, payment_total';
-  if (ctx.contactId) {
-    const { data } = await supabaseAdmin
-      .from('guru_sales')
-      .select(select)
-      .eq('contact_id', ctx.contactId)
-      .order('sold_at', { ascending: false })
-      .limit(3);
-    if (data?.length) return data as SaleRow[];
-  }
+/** "5511987654321", "11987654321" e "1187654321" viram o mesmo número (DDD + 9 + número). */
+function telefoneCanonico(t: string | null | undefined): string {
+  let d = (t ?? '').replace(/\D/g, '');
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2);
+  if (d.length === 10 && /[6-9]/.test(d[2])) d = `${d.slice(0, 2)}9${d.slice(2)}`;
+  return d;
+}
+
+/**
+ * Compras do contato e por onde foram achadas. `via` importa: só contato vinculado
+ * ou e-mail da compra confirmam que a compra é desta pessoa. Pelo telefone é indício
+ * (a compra pode estar em outro nome), e a IA pede o e-mail antes de dizer
+ * "pagamento confirmado" (conversa do Natan, 08/10/2026).
+ */
+async function lookupSales(
+  ctx: AgentContext,
+  email?: string
+): Promise<{ rows: SaleRow[]; via: 'contato' | 'email' | 'telefone' | null }> {
+  const select = 'product_names, status, sold_at, payment_method, payment_total, contact_name, contact_phone';
+  // E-mail informado pelo aluno vem antes: é a confirmação que a equipe pede.
   if (email) {
     const { data } = await supabaseAdmin
       .from('guru_sales')
@@ -411,21 +422,33 @@ async function lookupSales(ctx: AgentContext, email?: string): Promise<SaleRow[]
       .ilike('contact_email', email)
       .order('sold_at', { ascending: false })
       .limit(3);
-    if (data?.length) return data as SaleRow[];
+    if (data?.length) return { rows: data as SaleRow[], via: 'email' };
+  }
+  if (ctx.contactId) {
+    const { data } = await supabaseAdmin
+      .from('guru_sales')
+      .select(select)
+      .eq('contact_id', ctx.contactId)
+      .order('sold_at', { ascending: false })
+      .limit(3);
+    if (data?.length) return { rows: data as SaleRow[], via: 'contato' };
   }
   if (ctx.contactPhone) {
-    const digits = ctx.contactPhone.replace(/\D/g, '').slice(-8);
-    if (digits) {
+    const alvo = telefoneCanonico(ctx.contactPhone);
+    const final = alvo.slice(-8);
+    if (final.length === 8) {
       const { data } = await supabaseAdmin
         .from('guru_sales')
         .select(select)
-        .ilike('contact_phone', `%${digits}%`)
+        .ilike('contact_phone', `%${final}%`)
         .order('sold_at', { ascending: false })
-        .limit(3);
-      if (data?.length) return data as SaleRow[];
+        .limit(20);
+      // Os 8 últimos dígitos só filtram; vale o número inteiro (DDD + número).
+      const mesmos = ((data ?? []) as SaleRow[]).filter((r) => telefoneCanonico(r.contact_phone) === alvo).slice(0, 3);
+      if (mesmos.length) return { rows: mesmos, via: 'telefone' };
     }
   }
-  return [];
+  return { rows: [], via: null };
 }
 
 /** Assinaturas/mensalidades do contato (guru_subscriptions): status da fatura, atraso, link de pagamento. */
@@ -565,8 +588,16 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
     }
     case 'consultar_pagamento': {
       const email = input?.email ? String(input.email) : undefined;
-      const [rows, subs] = await Promise.all([lookupSales(ctx, email), lookupSubscriptions(ctx, email)]);
+      const [{ rows, via }, subs] = await Promise.all([lookupSales(ctx, email), lookupSubscriptions(ctx, email)]);
       const blocks: string[] = [];
+      if (rows.length && via === 'telefone') {
+        const nomes = [...new Set(rows.map((r) => r.contact_name).filter(Boolean))].join(', ');
+        blocks.push(
+          `ATENÇÃO: compra localizada só pelo TELEFONE${nomes ? ` (nome na compra: ${nomes})` : ''}, não pelo e-mail. ` +
+            'NÃO diga que o pagamento está confirmado nem libere acesso ainda: peça o e-mail usado na compra e chame consultar_pagamento com ele. ' +
+            'Pode dizer que localizou uma compra e só precisa confirmar o e-mail.'
+        );
+      }
       if (rows.length) {
         blocks.push(
           'Compras avulsas:\n' +
@@ -658,7 +689,7 @@ FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, pr
 - consultar_conteudo_curso: o que tem no curso (disciplinas, tópicos, aulas) e, com comparar_edital, o edital ao lado.
 - buscar_concurso: fatos do CONCURSO (edital, vagas, cotas/PcD, requisitos, idade, TAF, etapas, prova, datas, banca, salário, situação/autorização). Use SEMPRE antes de responder sobre um concurso — nunca de memória.
 - buscar_produto: preço, link, o que inclui (interesse em curso).
-- consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou.
+- consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou. Só diga "pagamento confirmado" quando a compra aprovada vier pelo e-mail informado ou pelo contato vinculado; se a ferramenta avisar que achou só pelo telefone, peça o e-mail da compra primeiro.
 - consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
 - verificar_acesso_plataforma: diagnostica se o acesso do aluno está liberado na plataforma (Questões + cursos) e o último webhook. Use quando ele diz que comprou e não recebeu acesso / não consegue acessar.
 - buscar_credenciais: acesso/login/senha — só quando o aluno pede E informou o e-mail.
