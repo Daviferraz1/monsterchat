@@ -353,6 +353,25 @@ async function processWhatsAppMessage(
       }
     }
 
+    // Mensagem pronta do site (genérica ou de página de curso) e ninguém escreveu ainda:
+    // a primeira resposta sai na hora (abertura ou apresentação do curso com o link).
+    if (isTextWithBody && !respondidoPorAutomacao) {
+      try {
+        const { responderPrimeiroContato } = await import('../services/primeira-resposta');
+        respondidoPorAutomacao = await responderPrimeiroContato({
+          phoneNumberId: webhookValue?.metadata?.phone_number_id,
+          accessToken,
+          conversationId: conversation.id,
+          telefone: contactRecord.phone || normalized.contactExternalId || '',
+          nome: contactRecord.name ?? null,
+          texto: normalized.body ?? '',
+          mensagemId: messageRecord.id,
+        });
+      } catch (err) {
+        console.error('[WhatsApp Webhook] Primeira resposta:', err);
+      }
+    }
+
     if (respondidoPorAutomacao) {
       console.log('[WhatsApp Webhook] IA não acionada: automação por palavra-chave já respondeu', {
         conversationId: conversation.id,
