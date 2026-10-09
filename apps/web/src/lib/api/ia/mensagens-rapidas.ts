@@ -44,9 +44,22 @@ export const RESPOSTAS_INICIAIS: RespostaEquipe[] = [
   },
   {
     id: 'reembolso',
-    titulo: 'Reembolso / garantia',
+    titulo: 'Reembolso / garantia (cursos preparatórios Monster)',
     texto:
       '{nome}, para solicitar o reembolso é só enviar um e-mail para atendimento@monsterconcursos.com.br com seu nome, CPF, o e-mail usado na compra e o motivo. O prazo para pedir é de até 7 dias após a compra, conforme o Código de Defesa do Consumidor (Art. 49), e nossa equipe responde em até 5 dias úteis.',
+  },
+  {
+    // Fagenius é outro caminho: requerimento no portal (equipe responde assim desde ago/2026).
+    id: 'cancelamento-fagenius',
+    titulo: 'Cancelamento / reembolso do Tecnólogo ou Sequencial (Fagenius)',
+    texto:
+      '{nome}, o cancelamento do curso é feito por requerimento no portal do aluno: entre em *Documentos e Solicitações* > *Requerimentos on-line*, escolha o requerimento de cancelamento e clique em *solicitar requerimento*.\n\nA secretaria analisa o pedido e, se aprovado, o reembolso pode levar até 30 dias. Qualquer dúvida no caminho, me chama aqui 😊',
+  },
+  {
+    id: 'trancamento-tecnologo',
+    titulo: 'Trancamento do Tecnólogo',
+    texto:
+      '{nome}, dá para trancar sim. O pedido é feito por requerimento no portal do aluno, em *Documentos e Solicitações* > *Requerimentos on-line*. O trancamento tem multa de 10% sobre as mensalidades restantes do semestre.',
   },
   {
     id: 'acesso',
