@@ -24,7 +24,7 @@ const FECHAMENTO =
 
 /** Pedido, problema ou pergunta mesmo sem "?". */
 const PEDIDO =
-  /\b(como|qual|quais|quando|onde|quanto|quantos|quantas|porque|por que|pq|sera que|alguem|tem como|da pra|da para|pode me|poderia|gostaria|queria|quero|preciso|nao consigo|nao estou conseguindo|nao abre|nao chegou|nao recebi|nao aparece|erro|problema|ajuda|duvida|link|acesso|senha|login|boleto|pix|pagamento|pagar|valor|preco|desconto|matricula|cancelar|reembolso|certificado|suporte)\b/;
+  /\b(como|qual|quais|quando|onde|quanto|quantos|quantas|porque|por que|pq|sera que|alguem|tem como|da pra|da para|pode me|poderia|gostaria|queria|quero|preciso|teria|existe|aceita|serve|funciona|tem algum|tem alguma|vcs tem|voces tem|aplicativo|app|cnpj|nao consigo|nao estou conseguindo|nao abre|nao chegou|nao recebi|nao aparece|erro|problema|ajuda|duvida|link|acesso|senha|login|boleto|pix|pagamento|pagar|valor|preco|desconto|matricula|cancelar|reembolso|certificado|suporte)\b/;
 
 /** Tipos que não carregam pergunta (reação, figurinha, localização…). */
 const SEM_CONTEUDO = new Set(['reaction', 'sticker', 'location', 'contacts', 'unsupported']);
@@ -47,7 +47,16 @@ export function ehPergunta(m: MensagemAluno): boolean {
   return t.length >= 40;
 }
 
-export function temPerguntaEmAberto(mensagens: MensagemAluno[]): boolean {
+/** "Não", "só isso", "por enquanto não": resposta curta que encerra. */
+const NEGATIVA_CURTA = /^(nao|nao obrigad[oa]|nada|so isso|era so isso|por enquanto nao|por enquanto e so)[\s!.,]*$/;
+
+/**
+ * `nossaUltima`: a última mensagem nossa antes das do aluno. Se ela perguntou algo
+ * ("qual é o seu objetivo?"), a resposta curta do aluno ("Tecnólogo", "Policial de São
+ * Paulo") é a continuação da conversa e precisa de retorno. Sem isso, o piloto e o filtro
+ * tratavam essas respostas como "ok" e elas ficavam paradas (09/10/2026).
+ */
+export function temPerguntaEmAberto(mensagens: MensagemAluno[], nossaUltima?: string | null): boolean {
   // Terminou agradecendo e não perguntou nada explícito: o assunto se fechou
   // ("[foto do comprovante] / Obrigada", "queria o vade / obrigado").
   const comConteudo = mensagens.filter((m) => !SEM_CONTEUDO.has(m.tipo));
@@ -56,5 +65,10 @@ export function temPerguntaEmAberto(mensagens: MensagemAluno[]): boolean {
   if (ultima?.texto && !temInterrogacao && FECHAMENTO.test(normalizar(ultima.texto)) && !ehPergunta(ultima)) {
     return false;
   }
-  return mensagens.some(ehPergunta);
+  if (mensagens.some(ehPergunta)) return true;
+  if (!(nossaUltima ?? '').includes('?')) return false;
+  return comConteudo.some((m) => {
+    const t = normalizar(m.texto ?? '');
+    return /[\p{L}\p{N}]/u.test(t) && !t.startsWith('📎') && !FECHAMENTO.test(t) && !NEGATIVA_CURTA.test(t);
+  });
 }

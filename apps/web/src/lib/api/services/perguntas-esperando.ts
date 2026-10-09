@@ -81,7 +81,8 @@ async function calcular(): Promise<PerguntaEsperando[]> {
         tipo: m.content_type,
         texto: m.content_type === 'audio' ? m.transcricao : m.body,
       }));
-      if (!temPerguntaEmAberto(doAluno)) continue;
+      const nossa = msgs[pendentes.length];
+      if (!temPerguntaEmAberto(doAluno, nossa?.direction === 'outbound' ? nossa.body : null)) continue;
       const trecho = doAluno
         .map((m) => (m.texto ? m.texto.replace(/\s+/g, ' ') : `[${m.tipo}]`))
         .join(' / ')
