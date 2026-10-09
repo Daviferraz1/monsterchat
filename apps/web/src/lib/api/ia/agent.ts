@@ -11,6 +11,7 @@ import { getMatchingProducts, listProducts } from './catalog';
 import type { ProductRow } from './catalog';
 import { getCredentialsByEmail } from '../contacts-credentials';
 import { searchKnowledge } from './knowledge-search';
+import { consultarPortalFagenius } from '@/lib/api/integrations/pincel';
 import { fetchGuruTransactionsLive } from '../integrations/guru-live';
 import { diagnosticarAcesso } from '../integrations/platform-access';
 import { getAgentModel } from './autopilot';
@@ -232,6 +233,19 @@ const tools: Anthropic.Tool[] = [
         email: { type: 'string', description: 'E-mail usado na compra' },
       },
       required: ['email'],
+    },
+  },
+  {
+    name: 'consultar_portal_fagenius',
+    description:
+      'Portal acadêmico da FAGENIUS (Pincel Atômico), onde ficam o TECNÓLOGO e o SEQUENCIAL: se o aluno já foi matriculado, situação, último acesso ao portal, e-mails que o portal enviou (acesso, código de aceite de contrato) e o usuário e a senha inicial do e-mail de acesso. Use quando aluno do Tecnólogo/Sequencial diz que não recebeu o acesso, não consegue entrar no portal ou pede o código do contrato. Precisa do CPF ou do e-mail que o aluno informou.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cpf: { type: 'string', description: 'CPF do aluno (só números)' },
+        email: { type: 'string', description: 'E-mail que o aluno informou' },
+      },
+      required: [],
     },
   },
   {
@@ -732,6 +746,11 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
       if (!creds.length) return 'Nenhum acesso encontrado para esse e-mail.';
       return creds.map((c) => `${c.platformLabel} — Login: ${c.login} | Senha: ${c.password}`).join('\n');
     }
+    case 'consultar_portal_fagenius':
+      return consultarPortalFagenius({
+        cpf: input?.cpf ? String(input.cpf) : undefined,
+        email: input?.email ? String(input.email) : undefined,
+      }).catch((e) => `Não consegui consultar o portal da Fagenius agora (${e instanceof Error ? e.message : 'erro'}). Passe para a equipe.`);
     case 'salvar_dados_contato':
       return salvarDadosContato(ctx, input);
     case 'classificar_lead': {
@@ -784,6 +803,7 @@ FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, pr
 - consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
 - verificar_acesso_plataforma: diagnostica se o acesso do aluno está liberado na plataforma (Questões + cursos) e o último webhook. Use quando ele diz que comprou e não recebeu acesso / não consegue acessar.
 - buscar_credenciais: acesso/login/senha — só quando o aluno pede E informou o e-mail.
+- consultar_portal_fagenius: acesso do TECNÓLOGO/SEQUENCIAL (portal Pincel, NÃO é a plataforma Monster). Aluno diz que não recebeu o e-mail de acesso ou não entra no portal: peça CPF ou e-mail, consulte e mande usuário (matrícula ou CPF), senha inicial e o link https://fagenius.pincelatomico.net.br, avisando para olhar spam/atualizações e trocar a senha no primeiro acesso. Se ele já acessou antes, a senha pode ter sido trocada: oriente "Esqueci minha senha". Se não houver matrícula no portal, confira o pagamento antes de responder.
 - buscar_conhecimento: procedimentos/FAQ de atendimento.
 - classificar_lead: quando NÃO há solução imediata e será preciso contatar o lead depois (o curso/concurso que ele quer não existe no catálogo e ele quer ser avisado no lançamento; pediu retorno futuro). Chame ANTES de redigir e, na mensagem, confirme que vai avisá-lo.
 - salvar_dados_contato: registre no cadastro os dados pessoais que o aluno informar (nome completo, CPF, telefone, endereço, e-mail) — para suporte futuro. Só o que ele fornecer; não fique pedindo à toa.
