@@ -98,6 +98,9 @@ const BLOQUEIOS_RESPOSTA: Array<[RegExp, string]> = [
   [/vou (verificar|confirmar|checar|consultar)|vamos verificar|confirmar com a equipe|encaminh|retorno em breve/, 'promete retorno da equipe'],
 ];
 
+/** "Registrei seu interesse… te aviso quando lançar": promessa permitida se o lead foi registrado. */
+export const PROMETE_AVISO = /(registr\w* (o )?(seu )?(interesse|contato)|(avis|aviso)\w*.{0,80}(lanc|abrir|abrirmos|sair|novidade|disponivel)|(lanc|novidade).{0,80}avis)/;
+
 function bloqueioNaMensagem(textos: string[]): string | null {
   const t = normalizar(textos.join(' \n '));
   for (const [re, motivo] of BLOQUEIOS_ALUNO) if (re.test(t)) return motivo;
@@ -114,7 +117,11 @@ function bloqueioNaResposta(resposta: string): string | null {
  * Segunda opinião antes de enviar: um modelo barato lê a conversa e a resposta e
  * diz se dá para mandar sem revisão humana. Na dúvida, não manda.
  */
-async function classificar(conversa: string, resposta: string): Promise<{ seguro: boolean; assunto: string; motivo: string }> {
+export async function classificar(
+  conversa: string,
+  resposta: string,
+  leadRegistrado = false
+): Promise<{ seguro: boolean; assunto: string; motivo: string }> {
   if (!apiEnv.ANTHROPIC_API_KEY) return { seguro: false, assunto: 'outros', motivo: 'sem chave da Anthropic' };
   const anthropic = new Anthropic({ apiKey: apiEnv.ANTHROPIC_API_KEY });
   const r = await anthropic.messages.create({
@@ -128,10 +135,17 @@ Só é SEGURO enviar se TODAS forem verdade:
 - Não confirma pagamento, não libera acesso, não fala de reembolso, cancelamento, trancamento ou desconto.
 - Não afirma que um curso habilita para um cargo com requisito de escolaridade (isso vai para a equipe).
 - O aluno não está irritado nem reclamando.
-- Não promete que a equipe vai verificar ou retornar.
+- Não promete que a equipe vai verificar ou retornar. EXCEÇÃO: "registrei seu interesse e te aviso quando lançar/abrir o curso" é permitido quando o lead foi registrado (indicado abaixo da resposta).
 
 Responda APENAS com JSON: {"seguro": true|false, "assunto": "apresentacao|preco|acesso|conteudo|concurso|cumprimento|outros", "motivo": "frase curta"}`,
-    messages: [{ role: 'user', content: `CONVERSA:\n${conversa}\n\nRESPOSTA QUE SERIA ENVIADA:\n${resposta}` }],
+    messages: [
+      {
+        role: 'user',
+        content: `CONVERSA:\n${conversa}\n\nRESPOSTA QUE SERIA ENVIADA:\n${resposta}${
+          leadRegistrado ? '\n\n(O lead FOI registrado para aviso de lançamento: a promessa de avisar é real e permitida.)' : ''
+        }`,
+      },
+    ],
   });
   const txt = r.content[0]?.type === 'text' ? r.content[0].text : '';
   try {
@@ -280,8 +294,22 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
     .reverse()
     .map((m) => `${m.direction === 'inbound' ? 'ALUNO' : 'ATENDENTE'}: ${(m.content_type === 'audio' ? m.transcricao : m.body) ?? `[${m.content_type}]`}`)
     .join('\n');
+  // "Te aviso quando lançar" só vale se a IA registrou o lead (classificar_lead) nesta
+  // sugestão; sem o registro, a promessa ficaria vazia.
+  let leadRegistrado = false;
+  if (PROMETE_AVISO.test(normalizar(texto))) {
+    const { data: rastro } = await supabaseAdmin
+      .from('ia_suggestion_traces')
+      .select('tools_used')
+      .eq('conversation_id', c.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    leadRegistrado = ((rastro?.tools_used as string[] | null) ?? []).includes('classificar_lead');
+    if (!leadRegistrado) return fechar({ decisao: 'equipe', motivo: 'promete avisar no lançamento sem ter registrado o lead', texto });
+  }
   const regra = bloqueioNaResposta(texto);
-  const revisao = regra ? { seguro: false, assunto: 'outros', motivo: regra } : await classificar(conversa, texto);
+  const revisao = regra ? { seguro: false, assunto: 'outros', motivo: regra } : await classificar(conversa, texto, leadRegistrado);
   if (!revisao.seguro) return fechar({ decisao: 'equipe', assunto: revisao.assunto, motivo: revisao.motivo, texto });
 
   if (cfg.modo === 'ensaio' || simular) return fechar({ decisao: 'enviaria', assunto: revisao.assunto, texto });
