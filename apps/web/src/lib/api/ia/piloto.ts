@@ -137,7 +137,10 @@ Só é SEGURO enviar se TODAS forem verdade:
 - O assunto é um destes: apresentação de curso, preço e formas de pagamento, o que o curso inclui, como acessar a plataforma ou recuperar a senha, dúvida simples sobre concurso/edital respondida com informação objetiva, cumprimento ou encerramento cordial, ou a REGRA PADRÃO DE DISPENSA DE DISCIPLINA do Tecnólogo/Sequencial (o aluno pede pelo portal depois da matrícula, a coordenação analisa cada pedido, não há garantia e a dispensa não reduz a duração do curso) — dizer isso é a resposta oficial, não promessa de retorno.
 - A resposta responde de fato o que o aluno perguntou, sem inventar nada.
 - Não confirma pagamento, não libera acesso, não fala de reembolso, cancelamento, trancamento ou desconto.
-- Não afirma que um curso habilita para um cargo com requisito de escolaridade (isso vai para a equipe).
+- Não afirma que um curso habilita para um cargo com requisito de escolaridade (isso vai para a equipe), com UMA exceção abaixo.
+
+FATO OFICIAL, SEGURO DE ENVIAR (não é motivo para barrar): "o Tecnólogo em Gestão Pública é graduação de nível superior reconhecida pelo MEC e é aceito em concursos que exigem nível superior em qualquer área, como Investigador e Escrivão da PCMG". Isso está no catálogo e no site; a equipe diz isso todo dia.
+Continua indo para a equipe: Sequencial apresentado como válido para cargo de nível superior ou para a PCMG, curso para cargo que exige formação em área específica (Direito, Enfermagem…), aluno que ainda não concluiu o ensino médio.
 - O aluno não está irritado nem reclamando.
 - Não promete que a equipe vai verificar ou retornar. EXCEÇÃO: "registrei seu interesse e te aviso quando lançar/abrir o curso" é permitido quando o lead foi registrado (indicado abaixo da resposta).
 
@@ -277,7 +280,8 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
   };
 
   if (seguidas >= cfg.max_seguidas) return fechar({ decisao: 'equipe', motivo: `piloto já respondeu ${seguidas} vezes seguidas` });
-  if (!temPerguntaEmAberto(pendentes.map((m, i) => ({ tipo: m.content_type, texto: textos[i] || null })))) {
+  const nossaUltima = msgs[pendentes.length]?.direction === 'outbound' ? msgs[pendentes.length].body : null;
+  if (!temPerguntaEmAberto(pendentes.map((m, i) => ({ tipo: m.content_type, texto: textos[i] || null })), nossaUltima)) {
     return fechar({ decisao: 'nada', motivo: 'só agradecimento, ok ou reação' });
   }
   const midia = pendentes.find(
