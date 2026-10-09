@@ -395,6 +395,38 @@ type SaleRow = {
   contact_phone?: string | null;
 };
 
+/**
+ * O status da Guru traduzido para a IA, com o que dizer ao aluno. O código cru
+ * ("billet_printed") mais o comprovante que o aluno mandou fizeram a IA escrever
+ * "pagamento identificado" para um boleto ainda não compensado (09/10/2026).
+ * Prazo de compensação: o do próprio checkout da Guru ("até 3 dias úteis").
+ */
+function statusExplicado(status: string | null, metodo: string | null): string {
+  const pix = /pix/i.test(metodo ?? '');
+  switch (status) {
+    case 'approved':
+    case 'paid':
+    case 'completed':
+      return 'PAGO (aprovado). Pode confirmar o pagamento.';
+    case 'billet_printed':
+    case 'waiting_payment':
+      return pix
+        ? 'PIX GERADO, AINDA NÃO CONFIRMADO. NÃO diga que o pagamento foi identificado nem confirmado. PIX costuma confirmar em poucos minutos; se o aluno pagou e não confirmou em 1 hora, a equipe precisa verificar.'
+        : 'BOLETO GERADO, AINDA NÃO COMPENSADO. NÃO diga que o pagamento foi identificado nem confirmado (comprovante do aluno não é compensação). Diga que o boleto leva até 3 dias úteis para compensar depois do pagamento e que o acesso é liberado automaticamente, com aviso no e-mail da compra.';
+    case 'abandoned':
+      return 'CHECKOUT ABANDONADO: não houve pagamento.';
+    case 'expired':
+    case 'canceled':
+      return 'BOLETO/PIX VENCIDO OU CANCELADO: não foi pago; se quiser comprar, precisa gerar de novo.';
+    case 'refunded':
+      return 'REEMBOLSADO.';
+    case 'chargeback':
+      return 'ESTORNADO (chargeback).';
+    default:
+      return status ?? 'N/A';
+  }
+}
+
 /** "5511987654321", "11987654321" e "1187654321" viram o mesmo número (DDD + 9 + número). */
 function telefoneCanonico(t: string | null | undefined): string {
   let d = (t ?? '').replace(/\D/g, '');
@@ -413,7 +445,7 @@ async function lookupSales(
   ctx: AgentContext,
   email?: string
 ): Promise<{ rows: SaleRow[]; via: 'contato' | 'email' | 'telefone' | null }> {
-  const select = 'product_names, status, sold_at, payment_method, payment_total, contact_name, contact_phone';
+  const select = 'product_names, status, sold_at, created_at, payment_method, payment_total, contact_name, contact_phone';
   // E-mail informado pelo aluno vem antes: é a confirmação que a equipe pede.
   if (email) {
     const { data } = await supabaseAdmin
@@ -421,6 +453,7 @@ async function lookupSales(
       .select(select)
       .ilike('contact_email', email)
       .order('sold_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(3);
     if (data?.length) return { rows: data as SaleRow[], via: 'email' };
   }
@@ -430,6 +463,7 @@ async function lookupSales(
       .select(select)
       .eq('contact_id', ctx.contactId)
       .order('sold_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(3);
     if (data?.length) return { rows: data as SaleRow[], via: 'contato' };
   }
@@ -605,7 +639,7 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
               .map((s) => {
                 const total = s.payment_total != null ? ` | Valor: R$ ${Number(s.payment_total).toFixed(2)}` : '';
                 const pay = s.payment_method ? ` | Pagamento: ${s.payment_method}` : '';
-                return `Produto: ${s.product_names} | Status: ${s.status ?? 'N/A'} | Data: ${new Date(s.sold_at).toLocaleDateString('pt-BR')}${pay}${total}`;
+                return `Produto: ${s.product_names} | Status: ${statusExplicado(s.status, s.payment_method)} | Data: ${new Date(s.sold_at).toLocaleDateString('pt-BR')}${pay}${total}`;
               })
               .join('\n')
         );
@@ -690,6 +724,7 @@ FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, pr
 - consultar_conteudo_curso: o que tem no curso (disciplinas, tópicos, aulas) e, com comparar_edital, o edital ao lado.
 - buscar_concurso: fatos do CONCURSO (edital, vagas, cotas/PcD, requisitos, idade, TAF, etapas, prova, datas, banca, salário, situação/autorização). Use SEMPRE antes de responder sobre um concurso — nunca de memória.
 - buscar_produto: preço, link, o que inclui (interesse em curso).
+- Pagamento: o que vale é o STATUS do sistema, não o comprovante que o aluno manda. Boleto gerado/aguardando: diga que compensa em até 3 dias úteis e que o acesso é liberado automaticamente depois (aviso no e-mail); nunca "pagamento identificado" antes do status pago.
 - consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou. Só diga "pagamento confirmado" quando a compra aprovada vier pelo e-mail informado ou pelo contato vinculado; se a ferramenta avisar que achou só pelo telefone, peça o e-mail da compra primeiro.
 - consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
 - verificar_acesso_plataforma: diagnostica se o acesso do aluno está liberado na plataforma (Questões + cursos) e o último webhook. Use quando ele diz que comprou e não recebeu acesso / não consegue acessar.
