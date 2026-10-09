@@ -383,28 +383,11 @@ async function processWhatsAppMessage(
         conversationId: conversation.id,
       });
     } else {
-      const { isAutopilotEnabled } = await import('../ia/autopilot');
-      const enabled = await isAutopilotEnabled();
-      if (!enabled) {
-        console.log('[WhatsApp Webhook] IA não acionada: piloto desativado (ative em Configurações > IA)', {
-          conversationId: conversation.id,
-        });
-      } else {
-        console.log('[WhatsApp Webhook] Acionando IA para conversa', { conversationId: conversation.id });
-        const { handleIAReply } = await import('../ia/reply');
-        handleIAReply({
-          conversationId: conversation.id,
-          channelId,
-          accessToken,
-          contactPhone: contactRecord.phone || normalized.contactExternalId || '',
-          contactName: contactRecord.name ?? undefined,
-          contactMetadata: contactRecord.metadata ?? undefined,
-          contactId: contactRecord.id,
-          messageBody: normalized.body ?? '',
-        }).catch((err) => {
-          console.error('[WhatsApp Webhook] IA reply:', err);
-        });
-      }
+      // A resposta automática não sai daqui: o piloto (lib/api/ia/piloto.ts) roda por cron a
+      // cada minuto, espera o aluno terminar de escrever e só responde assunto seguro.
+      console.log('[WhatsApp Webhook] Mensagem registrada; piloto automático avalia pelo cron', {
+        conversationId: conversation.id,
+      });
     }
 
     console.log('WhatsApp message processed', {

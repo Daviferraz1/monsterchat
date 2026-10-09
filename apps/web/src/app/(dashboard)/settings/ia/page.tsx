@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Bot, BookOpen, Loader2, BarChart3, MessageSquare, Database, Package, MessageCircle, Users, Sparkles, Zap } from 'lucide-react';
+import { PilotoPainel } from '@/components/ia/PilotoPainel';
 
 interface IAStats {
   conversationsAnalyzed: number;
@@ -246,15 +247,15 @@ export default function IAPage() {
           IA Atendimento
         </h1>
         <p className="text-gray-600 mt-1 text-sm">
-          Com piloto ativo, a IA responde direto ao aluno no WhatsApp. Escalonamento para humano quando necessário. Catálogo de produtos alimenta as respostas.
+          Com o piloto ativo, a IA responde sozinha ao aluno no WhatsApp, com o mesmo agente das sugestões, só nos assuntos seguros. O resto fica para a equipe.
         </p>
 
         <div className="mt-4 rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/5 p-4">
           <h2 className="text-sm font-semibold text-gray-900 mb-1">Como ativar a IA para responder aos alunos</h2>
           <ol className="text-sm text-gray-700 list-decimal list-inside space-y-1">
             <li>Abra <strong>Configurações</strong> (menu) → <strong>IA Atendimento</strong>.</li>
-            <li>Ative o <strong>Piloto automático</strong> (toggle abaixo).</li>
-            <li>Com o piloto ativo, toda mensagem de texto recebida no WhatsApp será respondida pela IA (com base no catálogo e nas regras). O aluno não precisa fazer nada — a IA responde direto.</li>
+            <li>Ative o <strong>Piloto automático</strong> (toggle abaixo). Ele começa em <strong>Ensaio</strong>: só registra o que enviaria.</li>
+            <li>Confira as decisões na lista abaixo do toggle; quando estiver confiável, troque o modo para <strong>Ativo</strong> e escolha o horário.</li>
           </ol>
           <p className="text-xs text-gray-600 mt-2">Certifique-se de ter produtos no <strong>Catálogo</strong> e variáveis <code className="bg-white/60 px-1 rounded">ANTHROPIC_API_KEY</code> e Supabase configuradas no ambiente.</p>
         </div>
@@ -339,7 +340,7 @@ export default function IAPage() {
               IA responde
             </h2>
             <p className="text-gray-600 text-sm mb-4">
-              Quando ativo, a IA responde direto ao aluno no WhatsApp (com base no catálogo e nas regras de atendimento). Se o operador enviar uma mensagem manual, a IA para de responder naquela conversa até ser reativada.
+              Usa o mesmo agente das sugestões (catálogo, regras, dados do aluno, áudio transcrito). Só responde assunto seguro e para quando um atendente entra na conversa.
             </p>
             {loading ? (
               <div className="flex items-center gap-2 text-gray-600">
@@ -361,6 +362,7 @@ export default function IAPage() {
                 {saving && <Loader2 className="w-4 h-4 animate-spin text-gray-500" />}
               </label>
             )}
+            <PilotoPainel />
             {error && (
               <p className="mt-3 text-sm text-red-600" role="alert">
                 {error}
