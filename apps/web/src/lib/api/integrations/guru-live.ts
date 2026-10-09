@@ -68,7 +68,12 @@ function txSummary(t: Record<string, unknown>): string {
   const parts: string[] = [];
   if (product) parts.push(product);
   parts.push(`status: ${status}`);
-  if (ordered) parts.push(`data: ${String(ordered).slice(0, 10)}`);
+  if (ordered) {
+    // A Guru manda data como timestamp em segundos (1791565133) ou texto ISO.
+    const n = Number(ordered);
+    const d = Number.isFinite(n) && n > 1e9 ? new Date(n * 1000) : new Date(String(ordered));
+    parts.push(`data: ${isNaN(d.getTime()) ? String(ordered).slice(0, 10) : d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
+  }
   if (method) parts.push(`pagamento: ${method}`);
   if (total != null) parts.push(`valor: R$ ${total.toFixed(2)}`);
   return parts.join(' | ');
@@ -81,6 +86,8 @@ export interface GuruLiveResult {
   /** true se há ao menos 1 transação paga/aprovada (ou assinatura ativa) para o contato. */
   approved?: boolean;
   error?: string;
+  /** Como as transações foram achadas. 'telefone' não confirma identidade. */
+  via?: 'cpf' | 'email' | 'telefone';
 }
 
 const APPROVED_STATUS = new Set(['approved', 'paid', 'completed', 'active', 'authorized']);
@@ -90,9 +97,17 @@ function isApprovedTx(t: Record<string, unknown>): boolean {
   return APPROVED_STATUS.has(s);
 }
 
+/**
+ * E-mail e CPF vão como filtro para a própria Guru (contact_email / contact_doc), que
+ * devolve todas as transações daquele contato. Antes a consulta baixava só a primeira
+ * página (50 de ~4.400 transações em 180 dias) e filtrava aqui: quase toda compra que
+ * não fosse das últimas horas ficava de fora (out/2026). Telefone a Guru não filtra;
+ * aí varre até 10 páginas.
+ */
 export async function fetchGuruTransactionsLive(params: {
   email?: string | null;
   phone?: string | null;
+  cpf?: string | null;
 }): Promise<GuruLiveResult> {
   const userToken = apiEnv.DIGITAL_GURU_USER_TOKEN;
   const baseUrl = apiEnv.DIGITAL_GURU_API_BASE_URL?.trim().replace(/\/$/, '');
@@ -101,7 +116,8 @@ export async function fetchGuruTransactionsLive(params: {
   const email = normEmail(params.email);
   let phone = normPhone(params.phone);
   if (phone && !phone.startsWith('55') && phone.length >= 10) phone = '55' + phone;
-  if (!email && !phone) return { ok: false, configured: true, summaries: [], error: 'sem e-mail/telefone' };
+  const cpf = (params.cpf ?? '').replace(/\D/g, '');
+  if (!email && !phone && cpf.length !== 11) return { ok: false, configured: true, summaries: [], error: 'sem e-mail/CPF/telefone' };
 
   const end = toDateOnly(new Date());
   const startDate = new Date();
@@ -109,20 +125,50 @@ export async function fetchGuruTransactionsLive(params: {
   const sp = new URLSearchParams();
   sp.set('ordered_at_ini', toDateOnly(startDate));
   sp.set('ordered_at_end', end);
-  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${sp.toString()}`;
-
-  try {
+  const sep = baseUrl.includes('?') ? '&' : '?';
+  const pagina = async (extra: string, cursor?: string) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
+    const url = `${baseUrl}${sep}${sp.toString()}${extra}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${userToken}`, Accept: 'application/json' },
       signal: controller.signal,
     }).finally(() => clearTimeout(timer));
-    if (!res.ok) return { ok: false, configured: true, summaries: [], error: `HTTP ${res.status}` };
-    const data = await res.json().catch(() => ({}));
-    let txs = extractArray(data);
-    if (email || phone) txs = txs.filter((t) => matches(t, email, phone));
-    return { ok: true, configured: true, summaries: txs.slice(0, 5).map(txSummary), approved: txs.some(isApprovedTx) };
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return { txs: extractArray(data), cursor: (data.next_cursor as string | null) ?? null };
+  };
+
+  try {
+    let txs: Array<Record<string, unknown>> = [];
+    let via: GuruLiveResult['via'];
+    if (cpf.length === 11) {
+      txs.push(...(await pagina(`&contact_doc=${cpf}`)).txs);
+      if (txs.length) via = 'cpf';
+    }
+    if (email) {
+      const porEmail = (await pagina(`&contact_email=${encodeURIComponent(email)}`)).txs;
+      if (porEmail.length && !via) via = 'email';
+      txs.push(...porEmail);
+    }
+    if (!txs.length && phone) {
+      via = 'telefone';
+      let cursor: string | null | undefined;
+      for (let i = 0; i < 10; i++) {
+        const p = await pagina('', cursor ?? undefined);
+        txs.push(...p.txs.filter((t) => matches(t, '', phone)));
+        cursor = p.cursor;
+        if (!cursor) break;
+      }
+    }
+    const vistos = new Set<string>();
+    txs = txs.filter((t) => {
+      const id = String(t.id ?? '');
+      if (!id || vistos.has(id)) return !id;
+      vistos.add(id);
+      return true;
+    });
+    return { ok: true, configured: true, summaries: txs.slice(0, 5).map(txSummary), approved: txs.some(isApprovedTx), via: txs.length ? via : undefined };
   } catch (err) {
     const isAbort = err instanceof Error && err.name === 'AbortError';
     return { ok: false, configured: true, summaries: [], error: isAbort ? 'timeout' : 'erro de rede' };

@@ -188,6 +188,10 @@ const tools: Anthropic.Tool[] = [
           type: 'string',
           description: 'E-mail da compra, se o aluno informar. Opcional — sem ele, busca pelo contato atual.',
         },
+        cpf: {
+          type: 'string',
+          description: 'CPF usado na compra, se o aluno informar (só números). Busca direto na Guru.',
+        },
       },
       required: [],
     },
@@ -200,6 +204,7 @@ const tools: Anthropic.Tool[] = [
       type: 'object',
       properties: {
         email: { type: 'string', description: 'E-mail da compra, se o aluno informar (ajuda a localizar).' },
+        cpf: { type: 'string', description: 'CPF usado na compra, se o aluno informar (só números).' },
       },
       required: [],
     },
@@ -485,8 +490,16 @@ async function lookupSales(
   return { rows: [], via: null };
 }
 
-/** Assinaturas/mensalidades do contato (guru_subscriptions): status da fatura, atraso, link de pagamento. */
-async function lookupSubscriptions(ctx: AgentContext, email?: string): Promise<string[]> {
+/**
+ * Assinaturas/mensalidades do contato (guru_subscriptions): status da fatura, atraso, link
+ * de pagamento. Como em lookupSales, `via` 'telefone' não confirma identidade: era por aqui
+ * que a IA dizia "pagamento confirmado" a quem mandou um e-mail que não bate (Claudilene,
+ * 09/10/2026).
+ */
+async function lookupSubscriptions(
+  ctx: AgentContext,
+  email?: string
+): Promise<{ rows: string[]; via: 'contato' | 'email' | 'telefone' | null }> {
   const select =
     'product_name, last_status, current_invoice_status, current_invoice_value, current_invoice_charge_at, current_invoice_payment_url, is_overdue, days_overdue';
   const fmt = (rows: Array<Record<string, any>>): string[] =>
@@ -507,7 +520,7 @@ async function lookupSubscriptions(ctx: AgentContext, email?: string): Promise<s
       .eq('contact_id', ctx.contactId)
       .order('updated_at', { ascending: false })
       .limit(3);
-    if (data?.length) return fmt(data);
+    if (data?.length) return { rows: fmt(data), via: 'contato' };
   }
   if (email) {
     const { data } = await supabaseAdmin
@@ -516,21 +529,26 @@ async function lookupSubscriptions(ctx: AgentContext, email?: string): Promise<s
       .ilike('subscriber_email', email)
       .order('updated_at', { ascending: false })
       .limit(3);
-    if (data?.length) return fmt(data);
+    if (data?.length) return { rows: fmt(data), via: 'email' };
   }
   if (ctx.contactPhone) {
-    const digits = ctx.contactPhone.replace(/\D/g, '').slice(-8);
-    if (digits) {
+    const alvo = telefoneCanonico(ctx.contactPhone);
+    const final = alvo.slice(-8);
+    if (final.length === 8) {
       const { data } = await supabaseAdmin
         .from('guru_subscriptions')
-        .select(select)
-        .ilike('subscriber_phone', `%${digits}%`)
+        .select(`${select}, subscriber_phone`)
+        .ilike('subscriber_phone', `%${final}%`)
         .order('updated_at', { ascending: false })
-        .limit(3);
-      if (data?.length) return fmt(data);
+        .limit(20);
+      // Os 8 últimos dígitos só filtram; vale o número inteiro (DDD + número).
+      const mesmos = ((data ?? []) as Array<Record<string, any>>)
+        .filter((r) => telefoneCanonico(r.subscriber_phone) === alvo)
+        .slice(0, 3);
+      if (mesmos.length) return { rows: fmt(mesmos), via: 'telefone' };
     }
   }
-  return [];
+  return { rows: [], via: null };
 }
 
 /** Registra/atualiza dados pessoais do contato (merge em contacts.metadata.dados). Idempotente. */
@@ -622,14 +640,40 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
     }
     case 'consultar_pagamento': {
       const email = input?.email ? String(input.email) : undefined;
-      const [{ rows, via }, subs] = await Promise.all([lookupSales(ctx, email), lookupSubscriptions(ctx, email)]);
+      const cpf = input?.cpf ? String(input.cpf).replace(/\D/g, '') : '';
+      const [vendas, assin] = await Promise.all([lookupSales(ctx, email), lookupSubscriptions(ctx, email)]);
       const blocks: string[] = [];
-      if (rows.length && via === 'telefone') {
-        const nomes = [...new Set(rows.map((r) => r.contact_name).filter(Boolean))].join(', ');
+      // CPF: a base local não tem; vai direto na Guru, que filtra pelo documento.
+      let cpfConfirmou = false;
+      if (cpf.length === 11) {
+        const live = await fetchGuruTransactionsLive({ cpf });
+        cpfConfirmou = live.ok && live.summaries.length > 0;
         blocks.push(
-          `ATENÇÃO: compra localizada só pelo TELEFONE${nomes ? ` (nome na compra: ${nomes})` : ''}, não pelo e-mail. ` +
-            'NÃO diga que o pagamento está confirmado nem libere acesso ainda: peça o e-mail usado na compra e chame consultar_pagamento com ele. ' +
-            'Pode dizer que localizou uma compra e só precisa confirmar o e-mail.'
+          cpfConfirmou
+            ? `Compra(s) localizada(s) pelo CPF informado (Guru ao vivo, identificação confirmada):\n${live.summaries.join('\n')}`
+            : 'Nenhuma compra encontrada na Guru para o CPF informado (últimos 180 dias).'
+        );
+      }
+      // Achado só pelo telefone (venda ou assinatura): a IA recebe o aviso e mais nada. Nem
+      // nome, nem e-mail, nem status, que ela usava para dizer "pagamento confirmado" (09/10/2026).
+      // Com o CPF confirmado, o telefone só reforça e os dados podem ir.
+      const soTelefone = !cpfConfirmou && (vendas.via === 'telefone' || assin.via === 'telefone');
+      const rows = vendas.via === 'telefone' && !cpfConfirmou ? [] : vendas.rows;
+      const subs = assin.via === 'telefone' && !cpfConfirmou ? [] : assin.rows;
+      if (soTelefone && !rows.length && !subs.length) {
+        blocks.push(
+          (email || cpf
+            ? 'ATENÇÃO: o e-mail/CPF informado NÃO bate com nenhuma compra paga; existe compra ou assinatura ligada ao TELEFONE deste WhatsApp. '
+            : 'ATENÇÃO: compra ou assinatura localizada só pelo TELEFONE deste WhatsApp, não pelo e-mail. ') +
+            'NÃO diga que o pagamento está confirmado, NÃO libere acesso e NÃO revele nome, e-mail ou dados da compra. ' +
+            'Peça para o aluno conferir o e-mail usado na compra ou informar o CPF da compra, e consulte de novo com ele.'
+        );
+      } else if (soTelefone) {
+        blocks.push(
+          'ATENÇÃO: além do que foi achado pelo e-mail abaixo, há compra ou assinatura ligada só ao TELEFONE deste WhatsApp, ' +
+            'que NÃO foi confirmada. Responda só com base no que veio pelo e-mail, sem revelar dados da outra compra. ' +
+            'Se o aluno diz que pagou e pelo e-mail não aparece pago, a resposta TEM de terminar pedindo para ele conferir ' +
+            'o e-mail usado no pagamento ou informar o CPF da compra.'
         );
       }
       if (rows.length) {
@@ -652,7 +696,8 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
     }
     case 'consultar_guru_online': {
       const email = input?.email ? String(input.email) : undefined;
-      const result = await fetchGuruTransactionsLive({ email, phone: ctx.contactPhone });
+      const cpf = input?.cpf ? String(input.cpf) : undefined;
+      const result = await fetchGuruTransactionsLive({ email, cpf, phone: ctx.contactPhone });
       if (!result.configured) {
         return 'Consulta ao vivo no Guru não está configurada (falta DIGITAL_GURU_USER_TOKEN/URL). Use os dados locais (consultar_pagamento).';
       }
@@ -660,9 +705,18 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
         return `Não consegui consultar o Guru ao vivo agora (${result.error ?? 'erro'}). Use os dados locais (consultar_pagamento) e, se precisar, avise que vai confirmar e retornar.`;
       }
       if (!result.summaries.length) {
-        return 'Guru (ao vivo): nenhuma transação encontrada para este e-mail/telefone nos últimos 180 dias.';
+        return 'Guru (ao vivo): nenhuma transação encontrada para este e-mail/CPF/telefone nos últimos 180 dias.';
       }
-      return 'Guru (ao vivo, últimos 180 dias):\n' + result.summaries.join('\n');
+      if (result.via === 'telefone') {
+        return (
+          (email || cpf
+            ? 'ATENÇÃO: o e-mail/CPF informado NÃO bate com nenhuma compra na Guru; há compra ligada só ao TELEFONE deste WhatsApp. '
+            : 'ATENÇÃO: compra localizada só pelo TELEFONE deste WhatsApp. ') +
+          'NÃO diga que o pagamento está confirmado, NÃO libere acesso e NÃO revele nome, e-mail ou dados da compra. ' +
+          'Peça para conferir o e-mail usado na compra ou informar o CPF, e consulte de novo.'
+        );
+      }
+      return `Guru (ao vivo, últimos 180 dias; localizado por ${result.via === 'cpf' ? 'CPF' : 'e-mail'}, identificação confirmada):\n` + result.summaries.join('\n');
     }
     case 'verificar_acesso_plataforma': {
       const r = await diagnosticarAcesso({
@@ -724,6 +778,7 @@ FERRAMENTAS (conteúdo acadêmico dispensa; QUALQUER afirmação sobre curso, pr
 - consultar_conteudo_curso: o que tem no curso (disciplinas, tópicos, aulas) e, com comparar_edital, o edital ao lado.
 - buscar_concurso: fatos do CONCURSO (edital, vagas, cotas/PcD, requisitos, idade, TAF, etapas, prova, datas, banca, salário, situação/autorização). Use SEMPRE antes de responder sobre um concurso — nunca de memória.
 - buscar_produto: preço, link, o que inclui (interesse em curso).
+- Identificar compra só por E-MAIL, CPF ou TELEFONE do próprio WhatsApp. NUNCA por nome, e nunca diga "localizei uma compra no seu nome". Se o e-mail não bater, peça para conferir o e-mail ou informar o CPF (consultar_pagamento com cpf); não revele o e-mail, o nome ou outro dado da compra a quem ainda não se identificou.
 - Pagamento: o que vale é o STATUS do sistema, não o comprovante que o aluno manda. Boleto gerado/aguardando: diga que compensa em até 3 dias úteis e que o acesso é liberado automaticamente depois (aviso no e-mail); nunca "pagamento identificado" antes do status pago.
 - consultar_pagamento: situação no sistema (compras avulsas + assinaturas/mensalidades, com atraso e link de fatura). Quando o aluno fala de pagamento/boleto/mensalidade ou diz que comprou. Só diga "pagamento confirmado" quando a compra aprovada vier pelo e-mail informado ou pelo contato vinculado; se a ferramenta avisar que achou só pelo telefone, peça o e-mail da compra primeiro.
 - consultar_guru_online: confere o pagamento DIRETO no Guru em tempo real (mais confiável). Use se o local não bater ou o aluno contestar; pode demorar alguns segundos.
@@ -872,6 +927,7 @@ async function runAnthropicAgent(
           trace.tools.push(tu.name);
           try {
             out = await execTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, ctx);
+            if (process.env.IA_LOG_FERRAMENTAS) console.log('[IA ferramenta]', tu.name, JSON.stringify(tu.input), '→', out.slice(0, 600));
           } catch (err) {
             console.error('[IA agent] tool', tu.name, err);
             out = 'Erro ao executar a ferramenta.';
