@@ -10,6 +10,7 @@ interface Config {
   espera_seg: number;
   max_seguidas: number;
   janela_min: number;
+  espera_com_atendente_min: number;
 }
 
 interface Decisao {
@@ -112,7 +113,8 @@ export function PilotoPainel() {
 
       <p className="text-xs text-gray-600">
         Responde depois de {Math.round(cfg.espera_seg / 60)} min de silêncio do aluno (junta as mensagens), no máximo{' '}
-        {cfg.max_seguidas} vezes seguidas, e nunca em conversa em que um atendente escreveu nas últimas 2h. Pagamento,
+        {cfg.max_seguidas} vezes seguidas. Em conversa em que um atendente escreveu nas últimas 2h, só entra se o aluno
+        ficar {cfg.espera_com_atendente_min} min sem resposta. Pagamento,
         liberação de acesso, reembolso, cancelamento, desconto, escolaridade x cargo, reclamação, foto e áudio sem
         transcrição vão sempre para a equipe.
       </p>

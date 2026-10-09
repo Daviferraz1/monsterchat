@@ -34,6 +34,8 @@ export interface PilotoConfig {
   espera_seg: number;
   max_seguidas: number;
   janela_min: number;
+  /** Conversa com atendente ativo (últimas 2h): o piloto só entra depois deste tempo sem resposta. */
+  espera_com_atendente_min: number;
 }
 
 const CHAVE = 'piloto_config';
@@ -43,6 +45,7 @@ export const PILOTO_PADRAO: PilotoConfig = {
   espera_seg: 120,
   max_seguidas: 3,
   janela_min: 60,
+  espera_com_atendente_min: 10,
 };
 
 export async function lerConfigPiloto(): Promise<PilotoConfig> {
@@ -58,6 +61,7 @@ export async function gravarConfigPiloto(cfg: Partial<PilotoConfig>): Promise<Pi
     espera_seg: Math.min(900, Math.max(30, Number(cfg.espera_seg ?? atual.espera_seg))),
     max_seguidas: Math.min(10, Math.max(1, Number(cfg.max_seguidas ?? atual.max_seguidas))),
     janela_min: Math.min(720, Math.max(10, Number(cfg.janela_min ?? atual.janela_min))),
+    espera_com_atendente_min: Math.min(120, Math.max(3, Number(cfg.espera_com_atendente_min ?? atual.espera_com_atendente_min))),
   };
   await supabaseAdmin.from('ia_settings').upsert({ key: CHAVE, value: novo }, { onConflict: 'key' });
   return novo;
@@ -130,7 +134,7 @@ export async function classificar(
     system: `Você revisa respostas que a IA de atendimento da Monster Concursos (cursos preparatórios) e da Fagenius (Tecnólogo, Sequencial) vai enviar SOZINHA ao aluno no WhatsApp, sem revisão humana.
 
 Só é SEGURO enviar se TODAS forem verdade:
-- O assunto é um destes: apresentação de curso, preço e formas de pagamento, o que o curso inclui, como acessar a plataforma ou recuperar a senha, dúvida simples sobre concurso/edital respondida com informação objetiva, cumprimento ou encerramento cordial.
+- O assunto é um destes: apresentação de curso, preço e formas de pagamento, o que o curso inclui, como acessar a plataforma ou recuperar a senha, dúvida simples sobre concurso/edital respondida com informação objetiva, cumprimento ou encerramento cordial, ou a REGRA PADRÃO DE DISPENSA DE DISCIPLINA do Tecnólogo/Sequencial (o aluno pede pelo portal depois da matrícula, a coordenação analisa cada pedido, não há garantia e a dispensa não reduz a duração do curso) — dizer isso é a resposta oficial, não promessa de retorno.
 - A resposta responde de fato o que o aluno perguntou, sem inventar nada.
 - Não confirma pagamento, não libera acesso, não fala de reembolso, cancelamento, trancamento ou desconto.
 - Não afirma que um curso habilita para um cargo com requisito de escolaridade (isso vai para a equipe).
@@ -242,10 +246,6 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
   if (!simular && (c.metadata?.piloto as { ultima_msg?: string } | undefined)?.ultima_msg === ultima.id) {
     return { decisao: 'pular', motivo: 'já tratada' };
   }
-  // Gente na conversa nas últimas 2h: é da equipe.
-  if (msgs.some((m) => m.agent_user_id && agora - new Date(m.created_at).getTime() < 2 * 3600_000)) {
-    return { decisao: 'pular', motivo: 'atendente na conversa nas últimas 2h' };
-  }
 
   let seguidas = 0;
   for (const m of msgs) {
@@ -259,6 +259,15 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
   }
   pendentes.reverse();
   const textos = pendentes.map((m) => (m.content_type === 'audio' ? m.transcricao ?? '' : m.body ?? ''));
+
+  // Atendente ativo (escreveu nas últimas 2h): a conversa é dele, e o piloto só entra
+  // como reserva, se o aluno ficar `espera_com_atendente_min` sem resposta. Antes ele
+  // nunca entrava, e ficava de fora de metade das conversas do dia (09/10/2026).
+  const atendenteAtivo = msgs.some((m) => m.agent_user_id && agora - new Date(m.created_at).getTime() < 2 * 3600_000);
+  const esperandoMin = (agora - new Date(pendentes[0].created_at).getTime()) / 60_000;
+  if (atendenteAtivo && esperandoMin < cfg.espera_com_atendente_min) {
+    return { decisao: 'pular', motivo: `atendente ativo; aguardando ${cfg.espera_com_atendente_min} min sem resposta` };
+  }
 
   if (!simular) await marcarTratada(c.id, c.metadata, ultima.id);
   const base = { conversationId: c.id, mensagemId: ultima.id, modo: cfg.modo } as const;
