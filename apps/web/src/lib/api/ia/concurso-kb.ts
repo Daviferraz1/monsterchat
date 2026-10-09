@@ -432,25 +432,57 @@ export async function searchConcursoKb(pergunta: string, concurso?: string, uf?:
 
   const texto = [c, p].filter(Boolean).join(' ');
   const embedding = await embedText(texto, 'RETRIEVAL_QUERY');
-  const [docs, blog] = await Promise.all([
+  const cargo = cargoDaPergunta(texto);
+  const [docs, blog, doCargo] = await Promise.all([
     match(texto, embedding, ['ficha', 'edital'], 6, uf),
     match(texto, embedding, ['blog'], 3, uf),
+    // Pergunta com cargo: busca mais fundo para achar o edital DESSE cargo, que pode
+    // estar abaixo do edital atual de outro cargo do mesmo órgão.
+    cargo ? match(texto, embedding, ['ficha', 'edital'], 20, uf) : Promise.resolve([] as KbHit[]),
   ]);
 
   // Edital curado (ref = id do "Edital") do MESMO órgão do primeiro colocado —
-  // o da edição atual antes do de edição passada, mas nunca trocando de
-  // concurso (um registro "atual" da PMMG chegou a ganhar da PM Bahia).
+  // o do cargo perguntado e, entre eles, o da edição atual antes do de edição
+  // passada, mas nunca trocando de concurso (um registro "atual" da PMMG chegou a
+  // ganhar da PM Bahia). Sem olhar o cargo, "soldado da PMMG" caía no edital de
+  // Oficial (CFO 2026, atual) e a IA dizia que não havia edital de Soldado, com o
+  // da edição 2024 indexado (out/2026).
   const curados = docs.filter((d) => (d.fonte === 'ficha' || d.fonte === 'edital') && EDITAL_COM_PDF.test(d.ref));
   const orgao = (h?: KbHit) => (h?.orgao ?? '').trim().toLowerCase();
-  const mesmoOrgao = curados.filter((d) => orgao(d) === orgao(curados[0]));
-  const edital = mesmoOrgao.find((d) => d.edicao !== 'anterior') ?? curados[0];
+  const mesmoOrgao = [...curados, ...doCargo.filter((d) => (d.fonte === 'ficha' || d.fonte === 'edital') && EDITAL_COM_PDF.test(d.ref))]
+    .filter((d) => orgao(d) === orgao(curados[0]));
+  const doCargoPerguntado = cargo ? mesmoOrgao.filter((d) => cargo.test(d.cargo ?? '')) : [];
+  const pool = doCargoPerguntado.length ? doCargoPerguntado : mesmoOrgao;
+  const edital = pool.find((d) => d.edicao !== 'anterior') ?? pool[0] ?? curados[0];
 
   let trechos: KbHit[] = [];
   if (edital) {
     const candidatos = await match(texto, embedding, ['trecho'], 120, uf);
     trechos = candidatos.filter((t) => t.ref.startsWith(`${edital.ref}#`)).slice(0, 4);
   }
-  return [...docs.slice(0, 4), ...blog.slice(0, 2), ...trechos];
+  // A ficha e o edital do cargo perguntado vêm na frente, mesmo de edição passada.
+  const doEdital = doCargoPerguntado.filter((d) => d.ref === edital?.ref);
+  const resto = docs.filter((d) => !doEdital.some((e) => e.fonte === d.fonte && e.ref === d.ref));
+  return [...doEdital, ...resto].slice(0, 5).concat(blog.slice(0, 2), trechos);
+}
+
+/** Cargo citado na pergunta, como regex para casar com o campo `cargo` da base. */
+function cargoDaPergunta(texto: string): RegExp | null {
+  const t = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const mapa: Array<[RegExp, RegExp]> = [
+    [/\bsoldad/, /soldad/i],
+    [/\b(oficial|oficiais|cfo|cadete)/, /oficia|cadete|cfo/i],
+    [/\binvestigador/, /investigador/i],
+    [/\bescriva/, /escriv/i],
+    [/\bdelegad/, /delegad/i],
+    [/\bperito/, /perito/i],
+    [/\bpapiloscop/, /papiloscop/i],
+    [/\b(guarda|gcm)\b/, /guarda/i],
+    [/\bagente\b/, /agente/i],
+    [/\b(policial penal|agente penitenciario)/, /penal|penitenci/i],
+  ];
+  for (const [pergunta, cargo] of mapa) if (pergunta.test(t)) return cargo;
+  return null;
 }
 
 const ROTULO_FONTE: Record<KbRow['fonte'], string> = {
