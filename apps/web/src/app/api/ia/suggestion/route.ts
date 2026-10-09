@@ -172,9 +172,11 @@ export async function POST(request: NextRequest) {
       agentCtx
     );
 
-    // Conversa começando (nenhum atendente escreveu nas últimas 12h): a resposta abre com
+    // Conversa começando (nada nosso nas últimas 12h): a resposta abre com
     // "Boa noite, Fernanda! 😊". O catálogo e o roteiro de abertura saíam frios, começando
-    // pelo link ou por "Olá!", e o atendente completava a saudação à mão.
+    // pelo link ou por "Olá!", e o atendente completava a saudação à mão. Conta qualquer
+    // mensagem nossa (atendente, piloto, automação): contando só atendente, o piloto
+    // cumprimentava "Boa tarde, Vinicius!" a cada resposta (09/10/2026).
     if (result.suggestion?.trim() && conversationId) {
       const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
       const { count } = await supabaseAdmin
@@ -182,7 +184,6 @@ export async function POST(request: NextRequest) {
         .select('id', { count: 'exact', head: true })
         .eq('conversation_id', conversationId)
         .eq('direction', 'outbound')
-        .not('agent_user_id', 'is', null)
         .gte('created_at', desde);
       if (!count) result.suggestion = comSaudacao(result.suggestion, sauda, contactName);
     }
