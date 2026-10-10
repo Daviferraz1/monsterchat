@@ -5,8 +5,12 @@ import { refreshConversationMemory, buildMemoryBlock } from '@/lib/api/ia/conver
 import { supabaseAdmin } from '@/lib/api/supabase';
 import { transcreverAudiosPendentes } from '@/lib/api/ia/audio-transcription';
 import { comSaudacao, semTravessao } from '@/lib/api/ia/team-templates';
+import { ehAusenciaInstagram, VIA_AUSENCIA } from '@/lib/ausencia-instagram';
 
 export const dynamic = 'force-dynamic';
+
+const ehAusencia = (m: { direction: string; body: string | null; via: string | null }) =>
+  m.via === VIA_AUSENCIA || (m.direction === 'outbound' && ehAusenciaInstagram(m.body));
 
 /**
  * Converte negrito Markdown (**texto** / __texto__) para o formato do WhatsApp (*texto*)
@@ -95,12 +99,14 @@ export async function POST(request: NextRequest) {
       // Áudio entra pela transcrição — antes a IA só via texto e respondia sem saber o que foi dito.
       const { data: convMsgs } = await supabaseAdmin
         .from('messages')
-        .select('direction, body, content_type, metadata->>transcricao')
+        .select('direction, body, content_type, metadata->>transcricao, via:metadata->>via')
         .eq('conversation_id', conversationId)
         .in('content_type', ['text', 'audio'])
         .order('created_at', { ascending: false })
         .limit(20);
-      const ordered = ((convMsgs ?? []) as Array<{ direction: string; body: string | null; content_type: string; transcricao: string | null }>)
+      const ordered = ((convMsgs ?? []) as Array<{ direction: string; body: string | null; content_type: string; transcricao: string | null; via: string | null }>)
+        // A mensagem de ausência do Instagram não é resposta nossa: fora do contexto da IA.
+        .filter((m) => !ehAusencia(m))
         .map((m) => ({
           direction: m.direction,
           body:
@@ -179,13 +185,16 @@ export async function POST(request: NextRequest) {
     // cumprimentava "Boa tarde, Vinicius!" a cada resposta (09/10/2026).
     if (result.suggestion?.trim() && conversationId) {
       const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-      const { count } = await supabaseAdmin
+      const { data: nossas } = await supabaseAdmin
         .from('messages')
-        .select('id', { count: 'exact', head: true })
+        .select('direction, body, via:metadata->>via')
         .eq('conversation_id', conversationId)
         .eq('direction', 'outbound')
-        .gte('created_at', desde);
-      if (!count) result.suggestion = comSaudacao(result.suggestion, sauda, contactName);
+        .gte('created_at', desde)
+        .limit(10);
+      // A mensagem de ausência do Instagram não conta: depois dela a IA ainda cumprimenta.
+      const jaFalamos = ((nossas ?? []) as Array<{ direction: string; body: string | null; via: string | null }>).some((m) => !ehAusencia(m));
+      if (!jaFalamos) result.suggestion = comSaudacao(result.suggestion, sauda, contactName);
     }
     return NextResponse.json({
       confidence: result.confidence,
