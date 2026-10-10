@@ -1,5 +1,5 @@
 /**
- * Piloto automático: a IA responde sozinha ao aluno no WhatsApp, com o MESMO agente
+ * Piloto automático: a IA responde sozinha ao aluno no WhatsApp e no direct do Instagram, com o MESMO agente
  * das sugestões (ferramentas, regras, lições, transcrição de áudio, saudação) e só
  * nos assuntos seguros. Roda a cada minuto (cron /api/ia/cron/piloto).
  *
@@ -22,10 +22,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../supabase';
 import { apiEnv } from '../env';
 import { sendWhatsAppText } from '../services/whatsapp';
+import { sendInstagramText } from '../services/instagram';
 import { createMessage } from '../services/message';
 import { updateConversation } from '../services/conversation';
 import { isAutopilotEnabled } from './autopilot';
-import { temPerguntaEmAberto } from '@/lib/pergunta-em-aberto';
+import { temAssuntoEmAberto } from '@/lib/pergunta-em-aberto';
+import { ehAusenciaInstagram, VIA_AUSENCIA } from '@/lib/ausencia-instagram';
 
 export interface PilotoConfig {
   modo: 'ensaio' | 'ativo';
@@ -131,7 +133,7 @@ export async function classificar(
   const r = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 200,
-    system: `Você revisa respostas que a IA de atendimento da Monster Concursos (cursos preparatórios) e da Fagenius (Tecnólogo, Sequencial) vai enviar SOZINHA ao aluno no WhatsApp, sem revisão humana.
+    system: `Você revisa respostas que a IA de atendimento da Monster Concursos (cursos preparatórios) e da Fagenius (Tecnólogo, Sequencial) vai enviar SOZINHA ao aluno no WhatsApp ou no direct do Instagram, sem revisão humana.
 
 Só é SEGURO enviar se TODAS forem verdade:
 - O assunto é um destes: apresentação de curso, preço e formas de pagamento, o que o curso inclui, como acessar a plataforma ou recuperar a senha, dúvida simples sobre concurso/edital respondida com informação objetiva, cumprimento ou encerramento cordial, ou a REGRA PADRÃO DE DISPENSA DE DISCIPLINA do Tecnólogo/Sequencial (o aluno pede pelo portal depois da matrícula, a coordenação analisa cada pedido, não há garantia e a dispensa não reduz a duração do curso) — dizer isso é a resposta oficial, não promessa de retorno.
@@ -228,6 +230,39 @@ interface Conversa {
 }
 
 const ORCAMENTO_MS = 240_000;
+const CANAIS = ['whatsapp', 'instagram'];
+/** O direct do Instagram recusa texto acima de 1000 caracteres. */
+const LIMITE_INSTAGRAM = 1000;
+
+/** Resposta digitada por gente: pelo MonsterChat ou direto no app do Instagram (echo). */
+const ehHumano = (m: Msg) => Boolean(m.agent_user_id) || m.via === 'instagram_app';
+
+/** Aviso nosso no lugar de um anexo que o Instagram não entrega (reel, post, foto de visualização única). */
+const ehAnexoNaoEntregue = (m: Msg) => /^(📎|📸)/.test(m.body ?? '');
+
+/** Quebra em parágrafos inteiros até o limite; parágrafo maior que o limite é cortado no espaço. */
+function emPartes(texto: string, limite: number): string[] {
+  const partes: string[] = [];
+  let atual = '';
+  for (const paragrafo of texto.split(/\n{2,}/)) {
+    let p = paragrafo.trim();
+    if (!p) continue;
+    if (atual && atual.length + 2 + p.length > limite) {
+      partes.push(atual);
+      atual = '';
+    }
+    while (p.length > limite) {
+      const corte = p.lastIndexOf(' ', limite);
+      const fim = corte > limite / 2 ? corte : limite;
+      partes.push(p.slice(0, fim).trim());
+      p = p.slice(fim).trim();
+    }
+    atual = atual ? `${atual}\n\n${p}` : p;
+  }
+  if (atual) partes.push(atual);
+  return partes;
+}
+
 const MAX_POR_RODADA = 8;
 
 /**
@@ -243,7 +278,10 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
     .eq('conversation_id', c.id)
     .order('created_at', { ascending: false })
     .limit(30);
-  const msgs = (data ?? []) as Msg[];
+  // A mensagem de ausência do Instagram não é resposta: sai da conta, senão a conversa
+  // parece respondida e a pergunta do aluno fica parada. O texto também é conferido porque
+  // as gravadas antes de 10/10/2026 entraram como resposta de atendente.
+  const msgs = ((data ?? []) as Msg[]).filter((m) => m.via !== VIA_AUSENCIA && !(m.direction === 'outbound' && ehAusenciaInstagram(m.body)));
   const ultima = msgs[0];
   if (!ultima || ultima.direction !== 'inbound') return { decisao: 'pular', motivo: 'última mensagem não é do aluno' };
   if (!simular && (c.metadata?.piloto as { ultima_msg?: string } | undefined)?.ultima_msg === ultima.id) {
@@ -252,7 +290,7 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
 
   let seguidas = 0;
   for (const m of msgs) {
-    if (m.agent_user_id) break;
+    if (ehHumano(m)) break;
     if (m.direction === 'outbound' && m.via === 'piloto_ia') seguidas++;
   }
   const pendentes: Msg[] = [];
@@ -266,7 +304,7 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
   // Atendente ativo (escreveu nas últimas 2h): a conversa é dele, e o piloto só entra
   // como reserva, se o aluno ficar `espera_com_atendente_min` sem resposta. Antes ele
   // nunca entrava, e ficava de fora de metade das conversas do dia (09/10/2026).
-  const atendenteAtivo = msgs.some((m) => m.agent_user_id && agora - new Date(m.created_at).getTime() < 2 * 3600_000);
+  const atendenteAtivo = msgs.some((m) => ehHumano(m) && agora - new Date(m.created_at).getTime() < 2 * 3600_000);
   const esperandoMin = (agora - new Date(pendentes[0].created_at).getTime()) / 60_000;
   if (atendenteAtivo && esperandoMin < cfg.espera_com_atendente_min) {
     return { decisao: 'pular', motivo: `atendente ativo; aguardando ${cfg.espera_com_atendente_min} min sem resposta` };
@@ -281,13 +319,16 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
 
   if (seguidas >= cfg.max_seguidas) return fechar({ decisao: 'equipe', motivo: `piloto já respondeu ${seguidas} vezes seguidas` });
   const nossaUltima = msgs[pendentes.length]?.direction === 'outbound' ? msgs[pendentes.length].body : null;
-  if (!temPerguntaEmAberto(pendentes.map((m, i) => ({ tipo: m.content_type, texto: textos[i] || null })), nossaUltima)) {
+  if (!temAssuntoEmAberto(pendentes.map((m, i) => ({ tipo: m.content_type, texto: textos[i] || null })), nossaUltima)) {
     return fechar({ decisao: 'nada', motivo: 'só agradecimento, ok ou reação' });
   }
   const midia = pendentes.find(
-    (m) => ['image', 'document', 'video'].includes(m.content_type) || (m.content_type === 'audio' && !m.transcricao?.trim())
+    (m) =>
+      ['image', 'document', 'video'].includes(m.content_type) ||
+      (m.content_type === 'audio' && !m.transcricao?.trim()) ||
+      ehAnexoNaoEntregue(m)
   );
-  const bloqueio = midia ? 'foto, documento ou áudio sem transcrição' : bloqueioNaMensagem(textos);
+  const bloqueio = midia ? 'foto, documento, anexo ou áudio sem transcrição' : bloqueioNaMensagem(textos);
   if (bloqueio) return fechar({ decisao: 'equipe', motivo: bloqueio });
 
   // Mesmo caminho da sugestão do atendente: agente, regras, saudação, sem travessão.
@@ -327,28 +368,40 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
 
   if (cfg.modo === 'ensaio' || simular) return fechar({ decisao: 'enviaria', assunto: revisao.assunto, texto });
 
-  const para = c.contact?.phone || c.contact?.external_id || '';
+  const instagram = c.channel?.type === 'instagram';
+  // No Instagram o destinatário é o IGSID (external_id); telefone não serve.
+  const para = (instagram ? c.contact?.external_id : c.contact?.phone || c.contact?.external_id) || '';
   if (!c.channel?.external_id || !c.channel.access_token || !para) {
-    return fechar({ decisao: 'equipe', motivo: 'canal ou telefone ausente', texto });
+    return fechar({ decisao: 'equipe', motivo: 'canal ou destinatário ausente', texto });
   }
+  // O direct não tem negrito: os asteriscos do WhatsApp apareceriam no texto.
+  const final = instagram ? texto.replace(/\*([^*\n]+)\*/g, '$1') : texto;
+  const partes = instagram ? emPartes(final, LIMITE_INSTAGRAM) : [final];
+  let enviadas = 0;
   try {
-    const envio = await sendWhatsAppText({ phoneNumberId: c.channel.external_id, accessToken: c.channel.access_token, to: para, text: texto });
-    await createMessage({
-      conversationId: c.id,
-      direction: 'outbound',
-      senderType: 'bot',
-      contentType: 'text',
-      body: texto,
-      externalId: envio.messages?.[0]?.id,
-      status: 'sent',
-      metadata: { via: 'piloto_ia', assunto: revisao.assunto },
-    });
+    for (const parte of partes) {
+      const externalId = instagram
+        ? (await sendInstagramText({ pageId: c.channel.external_id, accessToken: c.channel.access_token, recipientId: para, text: parte })).message_id
+        : (await sendWhatsAppText({ phoneNumberId: c.channel.external_id, accessToken: c.channel.access_token, to: para, text: parte })).messages?.[0]?.id;
+      enviadas++;
+      await createMessage({
+        conversationId: c.id,
+        direction: 'outbound',
+        senderType: 'bot',
+        contentType: 'text',
+        body: parte,
+        externalId,
+        status: 'sent',
+        metadata: { via: 'piloto_ia', assunto: revisao.assunto },
+      });
+    }
     // Sem lastAgentReplyAt: resposta automática não conta como atendimento humano.
-    await updateConversation(c.id, { lastMessageAt: new Date().toISOString(), lastMessagePreview: `🤖 ${texto.slice(0, 110)}` });
-    return fechar({ decisao: 'enviou', assunto: revisao.assunto, texto });
+    await updateConversation(c.id, { lastMessageAt: new Date().toISOString(), lastMessagePreview: `🤖 ${final.slice(0, 110)}` });
+    return fechar({ decisao: 'enviou', assunto: revisao.assunto, texto: final });
   } catch (err) {
     console.error('[Piloto] falha ao enviar:', err);
-    return fechar({ decisao: 'equipe', motivo: 'falha ao enviar pelo WhatsApp', texto });
+    const canal = instagram ? 'Instagram' : 'WhatsApp';
+    return fechar({ decisao: 'equipe', motivo: enviadas ? `falha no meio do envio pelo ${canal} (${enviadas} de ${partes.length} partes saíram)` : `falha ao enviar pelo ${canal}`, texto: final });
   }
 }
 
@@ -375,9 +428,9 @@ export async function rodarPiloto(): Promise<ResultadoPiloto> {
       .gte('last_message_at', new Date(agora - cfg.janela_min * 60_000).toISOString())
       .lte('last_message_at', new Date(agora - cfg.espera_seg * 1000).toISOString())
       .limit(200);
-    const zap = ((convs ?? []) as unknown as Conversa[]).filter((c) => c.channel?.type === 'whatsapp');
-    res.candidatas = zap.length;
-    for (const c of zap) {
+    const doPiloto = ((convs ?? []) as unknown as Conversa[]).filter((c) => CANAIS.includes(c.channel?.type ?? ''));
+    res.candidatas = doPiloto.length;
+    for (const c of doPiloto) {
       if (res.tratadas >= MAX_POR_RODADA || Date.now() - inicio > ORCAMENTO_MS) break;
       const d = await tratarConversa(c, cfg);
       if (d.decisao === 'pular') continue;

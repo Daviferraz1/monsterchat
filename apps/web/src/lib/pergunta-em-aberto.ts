@@ -72,3 +72,38 @@ export function temPerguntaEmAberto(mensagens: MensagemAluno[], nossaUltima?: st
     return /[\p{L}\p{N}]/u.test(t) && !t.startsWith('📎') && !FECHAMENTO.test(t) && !NEGATIVA_CURTA.test(t);
   });
 }
+
+const SAUDACAO = /\b(bom dia|boa tarde|boa noite)\b/g;
+
+/** "Vou analisar", "no aguardo", "pronto": o aluno ficou de voltar, não espera resposta. */
+const ADIAMENTO =
+  /\b((vou|irei|deixa eu) (analisar|verificar|verficar|ver|pensar|olhar|conferir|avaliar)|(no|fico no|ficarei no) aguardo|aguardando|pronto)\b/;
+
+/**
+ * Versão do piloto: vale tudo que não seja claramente um fechamento.
+ *
+ * O aluno raramente escreve em forma de pergunta: manda "Rio real" (quer o curso da Guarda
+ * Municipal de Rio Real), "Pmmg", "Tecnólogo", "Em 10x". `temPerguntaEmAberto` joga isso
+ * fora como se fosse "ok", e o piloto deixava o interessado sem resposta (10/10/2026).
+ * Aqui a pergunta é invertida: só fica de fora o que agradece, encerra ou adia. Se mesmo
+ * assim não houver o que dizer, a IA devolve vazio e o piloto não envia nada.
+ *
+ * O selo e o filtro "Pergunta sem resposta" do inbox continuam na versão estrita.
+ */
+export function temAssuntoEmAberto(mensagens: MensagemAluno[], nossaUltima?: string | null): boolean {
+  if (temPerguntaEmAberto(mensagens, nossaUltima)) return true;
+  // "Boa noite, quero saber mais sobre o tecnólogo": a saudação não é despedida.
+  const limpo = (m: MensagemAluno) => normalizar(m.texto ?? '').replace(SAUDACAO, ' ').trim();
+  const comConteudo = mensagens.filter((m) => !SEM_CONTEUDO.has(m.tipo) && (m.texto ?? '').trim());
+  const ultima = comConteudo[comConteudo.length - 1];
+  if (!ultima) return false;
+  const temInterrogacao = mensagens.some((m) => (m.texto ?? '').includes('?'));
+  if (!temInterrogacao && (FECHAMENTO.test(limpo(ultima)) || ADIAMENTO.test(limpo(ultima)))) return false;
+  return comConteudo.some((m) => {
+    const bruto = (m.texto ?? '').trim();
+    if (/^(📎|📸)/u.test(bruto)) return false; // aviso nosso de anexo que a API não entrega
+    const t = limpo(m);
+    if ((t.match(/[a-z0-9]/g) ?? []).length < 3) return false;
+    return !FECHAMENTO.test(t) && !NEGATIVA_CURTA.test(t) && !ADIAMENTO.test(t);
+  });
+}

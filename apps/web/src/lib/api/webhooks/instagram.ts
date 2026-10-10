@@ -11,6 +11,7 @@ import { extractEmailFromText } from '../utils';
 import { supabaseAdmin } from '../supabase';
 import { processInstagramComment, type InstagramCommentEvent } from '../services/instagram-comments';
 import { enviarFollowupsPendentes } from '../services/instagram-followup';
+import { ehAusenciaInstagram, VIA_AUSENCIA } from '@/lib/ausencia-instagram';
 
 interface InstagramWebhookEntry {
   id: string;
@@ -350,6 +351,22 @@ async function processInstagramEcho(
   // pega e a mensagem duplicaria. Aqui olhamos se já existe saída igual nos últimos 2 minutos.
   if (await hasRecentOutboundDuplicate(conversation.id, normalized.body, normalized.contentType)) {
     console.debug('[Instagram Echo] Já gravada (saída idêntica recente), ignorando duplicata.');
+    return;
+  }
+
+  // Mensagem de ausência do Instagram: fica no histórico como automática e não mexe na
+  // conversa. Não é resposta de atendente, e a prévia continua sendo a pergunta do aluno.
+  if (ehAusenciaInstagram(normalized.body)) {
+    await createMessage({
+      conversationId: conversation.id,
+      direction: 'outbound',
+      senderType: 'bot',
+      contentType: 'text',
+      body: normalized.body,
+      externalId: message.mid,
+      status: 'sent',
+      metadata: { ...(normalized.rawPayload as object), via: VIA_AUSENCIA },
+    });
     return;
   }
 
