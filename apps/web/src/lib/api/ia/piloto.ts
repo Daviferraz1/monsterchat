@@ -1,5 +1,5 @@
 /**
- * Piloto automático: a IA responde sozinha ao aluno no WhatsApp e no direct do Instagram, com o MESMO agente
+ * Piloto automático: a IA responde sozinha ao aluno no WhatsApp, no direct do Instagram e no Messenger da Página, com o MESMO agente
  * das sugestões (ferramentas, regras, lições, transcrição de áudio, saudação) e só
  * nos assuntos seguros. Roda a cada minuto (cron /api/ia/cron/piloto).
  *
@@ -23,6 +23,7 @@ import { supabaseAdmin } from '../supabase';
 import { apiEnv } from '../env';
 import { sendWhatsAppText } from '../services/whatsapp';
 import { sendInstagramText } from '../services/instagram';
+import { sendMessengerText, LIMITE_MESSENGER } from '../services/messenger';
 import { marcarLinks, origemDoContato } from '../rastreio-links';
 import { createMessage } from '../services/message';
 import { updateConversation } from '../services/conversation';
@@ -140,7 +141,7 @@ export async function classificar(
   const r = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 200,
-    system: `Você revisa respostas que a IA de atendimento da Monster Concursos (cursos preparatórios) e da Fagenius (Tecnólogo, Sequencial) vai enviar SOZINHA ao aluno no WhatsApp ou no direct do Instagram, sem revisão humana.
+    system: `Você revisa respostas que a IA de atendimento da Monster Concursos (cursos preparatórios) e da Fagenius (Tecnólogo, Sequencial) vai enviar SOZINHA ao aluno no WhatsApp, no direct do Instagram ou no Messenger, sem revisão humana.
 
 Só é SEGURO enviar se TODAS forem verdade:
 - O assunto é um destes: apresentação de curso, preço e formas de pagamento, o que o curso inclui, como acessar a plataforma ou recuperar a senha, dúvida simples sobre concurso/edital respondida com informação objetiva, cumprimento ou encerramento cordial, ou a REGRA PADRÃO DE DISPENSA DE DISCIPLINA do Tecnólogo/Sequencial (o aluno pede pelo portal depois da matrícula, a coordenação analisa cada pedido, não há garantia e a dispensa não reduz a duração do curso) — dizer isso é a resposta oficial, não promessa de retorno.
@@ -237,12 +238,12 @@ interface Conversa {
 }
 
 const ORCAMENTO_MS = 240_000;
-const CANAIS = ['whatsapp', 'instagram'];
+const CANAIS = ['whatsapp', 'instagram', 'facebook'];
 /** O direct do Instagram recusa texto acima de 1000 caracteres. */
 const LIMITE_INSTAGRAM = 1000;
 
-/** Resposta digitada por gente: pelo MonsterChat ou direto no app do Instagram (echo). */
-const ehHumano = (m: Msg) => Boolean(m.agent_user_id) || m.via === 'instagram_app';
+/** Resposta digitada por gente: pelo MonsterChat ou direto no app do Instagram/Facebook (echo). */
+const ehHumano = (m: Msg) => Boolean(m.agent_user_id) || m.via === 'instagram_app' || m.via === 'facebook_app';
 
 /** Aviso nosso no lugar de um anexo que o Instagram não entrega (reel, post, foto de visualização única). */
 const ehAnexoNaoEntregue = (m: Msg) => /^(📎|📸)/.test(m.body ?? '');
@@ -375,22 +376,26 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
 
   if (cfg.modo === 'ensaio' || simular) return fechar({ decisao: 'enviaria', assunto: revisao.assunto, texto });
 
-  const instagram = c.channel?.type === 'instagram';
-  // No Instagram o destinatário é o IGSID (external_id); telefone não serve.
-  const para = (instagram ? c.contact?.external_id : c.contact?.phone || c.contact?.external_id) || '';
+  const tipo = c.channel?.type === 'instagram' || c.channel?.type === 'facebook' ? c.channel.type : 'whatsapp';
+  // Instagram e Messenger são a mesma plataforma de mensagens da Meta: mesmas regras de envio.
+  const meta = tipo !== 'whatsapp';
+  // Neles o destinatário é o ID com escopo (IGSID/PSID, em external_id); telefone não serve.
+  const para = (meta ? c.contact?.external_id : c.contact?.phone || c.contact?.external_id) || '';
   if (!c.channel?.external_id || !c.channel.access_token || !para) {
     return fechar({ decisao: 'equipe', motivo: 'canal ou destinatário ausente', texto });
   }
   // O direct não tem negrito: os asteriscos do WhatsApp apareceriam no texto.
   // Mesma marcação do envio pelo inbox: acerta o utm_medium para o canal e marca link cru.
-  const marcado = marcarLinks(texto, { canal: instagram ? 'instagram' : 'whatsapp', autor: 'ia', origem: origemDoContato(c.contact?.metadata) });
-  const final = instagram ? marcado.replace(/\*([^*\n]+)\*/g, '$1') : marcado;
-  const partes = instagram ? emPartes(final, LIMITE_INSTAGRAM) : [final];
+  const marcado = marcarLinks(texto, { canal: tipo, autor: 'ia', origem: origemDoContato(c.contact?.metadata) });
+  const final = meta ? marcado.replace(/\*([^*\n]+)\*/g, '$1') : marcado;
+  const partes = tipo === 'instagram' ? emPartes(final, LIMITE_INSTAGRAM) : tipo === 'facebook' ? emPartes(final, LIMITE_MESSENGER) : [final];
   let enviadas = 0;
   try {
     for (const parte of partes) {
-      const externalId = instagram
+      const externalId = tipo === 'instagram'
         ? (await sendInstagramText({ pageId: c.channel.external_id, accessToken: c.channel.access_token, recipientId: para, text: parte })).message_id
+        : tipo === 'facebook'
+        ? (await sendMessengerText({ pageId: c.channel.external_id, accessToken: c.channel.access_token, recipientId: para, text: parte })).message_id
         : (await sendWhatsAppText({ phoneNumberId: c.channel.external_id, accessToken: c.channel.access_token, to: para, text: parte })).messages?.[0]?.id;
       enviadas++;
       await createMessage({
@@ -409,7 +414,7 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
     return fechar({ decisao: 'enviou', assunto: revisao.assunto, texto: final });
   } catch (err) {
     console.error('[Piloto] falha ao enviar:', err);
-    const canal = instagram ? 'Instagram' : 'WhatsApp';
+    const canal = tipo === 'instagram' ? 'Instagram' : tipo === 'facebook' ? 'Messenger' : 'WhatsApp';
     return fechar({ decisao: 'equipe', motivo: enviadas ? `falha no meio do envio pelo ${canal} (${enviadas} de ${partes.length} partes saíram)` : `falha ao enviar pelo ${canal}`, texto: final });
   }
 }

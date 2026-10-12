@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../supabase';
 
 export async function getChannelByExternalId(
-  type: 'whatsapp' | 'instagram',
+  type: 'whatsapp' | 'instagram' | 'facebook',
   externalId: string
 ) {
   const id = String(externalId).trim();
@@ -22,7 +22,7 @@ export async function getChannelByExternalId(
 
 /** Busca canal por external_id mesmo inativo (para mensagens de erro mais claras). */
 export async function getChannelByExternalIdMaybeInactive(
-  type: 'whatsapp' | 'instagram',
+  type: 'whatsapp' | 'instagram' | 'facebook',
   externalId: string
 ) {
   const id = String(externalId).trim();

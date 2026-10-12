@@ -1,4 +1,4 @@
-import { MessageCircle, Instagram, ShoppingBag } from 'lucide-react';
+import { MessageCircle, Instagram, ShoppingBag, Facebook } from 'lucide-react';
 import type { ChannelType } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +10,7 @@ interface ChannelBadgeProps {
 export function ChannelBadge({ type, className }: ChannelBadgeProps) {
   const isWhatsApp = type === 'whatsapp' || type === 'whatsapp_baileys';
   const isGuru = type === 'guru';
+  const isFacebook = type === 'facebook';
 
   return (
     <div
@@ -19,7 +20,9 @@ export function ChannelBadge({ type, className }: ChannelBadgeProps) {
           ? 'bg-green-500 text-white'
           : isGuru
             ? 'bg-violet-600 text-white'
-            : 'bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 text-white',
+            : isFacebook
+              ? 'bg-blue-600 text-white'
+              : 'bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 text-white',
         className
       )}
     >
@@ -27,6 +30,8 @@ export function ChannelBadge({ type, className }: ChannelBadgeProps) {
         <MessageCircle className="w-4 h-4" />
       ) : isGuru ? (
         <ShoppingBag className="w-4 h-4" />
+      ) : isFacebook ? (
+        <Facebook className="w-4 h-4" />
       ) : (
         <Instagram className="w-4 h-4" />
       )}

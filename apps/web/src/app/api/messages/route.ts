@@ -8,6 +8,7 @@ import {
   sendWhatsAppDocument,
 } from '@/lib/api/services/whatsapp';
 import { sendInstagramText, sendInstagramMedia, INSTAGRAM_MEDIA_LIMITS, type InstagramMediaType } from '@/lib/api/services/instagram';
+import { sendMessengerText, sendMessengerMedia, LIMITE_MESSENGER, type MessengerMediaType } from '@/lib/api/services/messenger';
 import { createMessage } from '@/lib/api/services/message';
 import { apiEnv } from '@/lib/api/env';
 import { getTeamContext } from '@/lib/api/team';
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
     // Links da Monster/Fagenius saem com UTM (origem = chat, autor, origem do lead)
     // e são gravados já marcados: o histórico mostra exatamente o que o aluno recebeu.
     const rastreio = {
-      canal: (channel.type === 'instagram' ? 'instagram' : 'whatsapp') as 'instagram' | 'whatsapp',
+      canal: (channel.type === 'instagram' || channel.type === 'facebook' ? channel.type : 'whatsapp') as 'instagram' | 'facebook' | 'whatsapp',
       // Sem cadastro na equipe, identifica pelo início do id do usuário (o relatório traduz).
       autor: slugAutor(agent?.fullName, agentUserId ? `atendente-${agentUserId.slice(0, 8)}` : 'atendente'),
       origem: origemDoContato(contact.metadata),
@@ -211,6 +212,40 @@ export async function POST(request: NextRequest) {
           externalId = response.message_id;
           status = 'sent';
         }
+      } else if (channel.type === 'facebook') {
+        const fbBase = {
+          pageId: channel.external_id,
+          accessToken: channel.access_token,
+          recipientId: contact.external_id,
+        };
+        if ((hasMedia ? displayText : textoEnviado || '').length > LIMITE_MESSENGER) {
+          return NextResponse.json(
+            { error: `O Messenger aceita no máximo ${LIMITE_MESSENGER} caracteres por mensagem.`, hint: 'Divida o texto em duas mensagens.' },
+            { status: 400 }
+          );
+        }
+
+        if (hasMedia && contentType) {
+          // 'document' aqui é o nome interno; na Meta o tipo se chama 'file'.
+          const mediaType = (contentType === 'document' ? 'file' : contentType) as MessengerMediaType;
+          const response = await sendMessengerMedia({ ...fbBase, mediaType, mediaUrl: media_url });
+          externalId = response.message_id;
+          status = 'sent';
+
+          // Como no direct do Instagram, o Messenger não aceita legenda junto do anexo: vai como
+          // mensagem separada. Se só a legenda falhar, o anexo já foi — apenas registra.
+          if (displayText?.trim()) {
+            try {
+              await sendMessengerText({ ...fbBase, text: displayText });
+            } catch (captionErr) {
+              console.error('[Messenger send] Anexo enviado, mas a legenda falhou:', captionErr);
+            }
+          }
+        } else {
+          const response = await sendMessengerText({ ...fbBase, text: textoEnviado || '' });
+          externalId = response.message_id;
+          status = 'sent';
+        }
       } else {
         return NextResponse.json(
           { error: 'Unsupported channel type' },
@@ -286,6 +321,55 @@ export async function POST(request: NextRequest) {
           },
           { status: 403 }
         );
+      }
+
+      // Messenger: os erros que o atendente consegue resolver sozinho. Vêm antes do tratamento
+      // genérico de token porque a mensagem da Meta sobre a janela cita "access token"/"session".
+      if (channel?.type === 'facebook') {
+        const subcode = error?.response?.data?.error?.error_subcode;
+        // (#10) subcode 2018278: fora da janela de 24h. Sem a tag HUMAN_AGENT aprovada não há como enviar.
+        if (subcode === 2018278 || /outside of allowed window|fora da janela|24.?hour/i.test(errorMessage)) {
+          await registrarFalha('Messenger fora da janela de 24h');
+          return NextResponse.json(
+            {
+              error: 'Não é possível enviar essa mensagem agora.',
+              hint: 'O Messenger só deixa a Página responder até 24 horas depois da última mensagem da pessoa. Quando ela escrever de novo, a conversa reabre.',
+            },
+            { status: 400 }
+          );
+        }
+        // (#551) a pessoa bloqueou a Página ou apagou a conversa.
+        if (metaCodeRaw === 551 || subcode === 1545041) {
+          await registrarFalha('Messenger destinatário indisponível');
+          return NextResponse.json(
+            { error: 'Essa pessoa não está disponível no Messenger.', hint: 'Ela pode ter bloqueado a Página ou desativado a conta. Não há como enviar por aqui.' },
+            { status: 400 }
+          );
+        }
+        // (#200)/(#230): pages_messaging com Acesso Padrão só fala com quem tem função no app.
+        if (metaCodeRaw === 200 || metaCodeRaw === 230 || /advanced access|acesso avançado|does not have a role|pages_messaging/i.test(errorMessage)) {
+          console.error('[Messenger send] Permissão pages_messaging bloqueando o envio:', { errorMessage });
+          await registrarFalha('Messenger sem pages_messaging avançado');
+          return NextResponse.json(
+            {
+              error: 'O app da Meta ainda não tem permissão para falar com clientes pelo Messenger.',
+              hint:
+                'A permissão pages_messaging precisa estar com Acesso Avançado; com Acesso Padrão a Meta só entrega mensagem para quem tem função no app (administrador, desenvolvedor ou testador). ' +
+                'No painel da Meta (developers.facebook.com) → seu app → Análise do app → Permissões e recursos → pages_messaging → "Solicitar acesso avançado". Veja o GUIA_MESSENGER.md.',
+            },
+            { status: 403 }
+          );
+        }
+        if (/must be called with a Page Access Token/i.test(errorMessage)) {
+          await registrarFalha('Messenger sem Page Access Token');
+          return NextResponse.json(
+            {
+              error: 'O token do canal não é o Token de Acesso da Página.',
+              hint: 'O Messenger exige o Page Access Token da própria Página. Em Configurações → Canais, edite o canal Facebook e cole o token da Página (ou dê ao usuário do sistema acesso à Página e a permissão pages_show_list, que o app deriva o token sozinho).',
+            },
+            { status: 401 }
+          );
+        }
       }
 
       // Instagram + anexo: a Meta recusa formato fora da lista dela com erro genérico. O áudio

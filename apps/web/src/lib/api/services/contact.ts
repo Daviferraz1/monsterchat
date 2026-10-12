@@ -3,7 +3,7 @@ import { normalizePhoneCanonical } from '../utils';
 import type { LeadCampaign } from '@/types';
 
 export interface ContactData {
-  channelType: 'whatsapp' | 'instagram';
+  channelType: 'whatsapp' | 'instagram' | 'facebook';
   externalId: string;
   name?: string;
   phone?: string;

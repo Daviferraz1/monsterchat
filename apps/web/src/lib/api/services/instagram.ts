@@ -35,7 +35,7 @@ function pageTokenCacheKey(pageId: string, token: string) {
  * Troca um token de usuário do sistema (ou de usuário) pelo Page Access Token da Página.
  * Requer a permissão `pages_show_list`. Page token de usuário do sistema não expira.
  */
-async function resolvePageAccessToken(pageId: string, token: string): Promise<string | null> {
+export async function resolvePageAccessToken(pageId: string, token: string): Promise<string | null> {
   const key = pageTokenCacheKey(pageId, token);
   const cached = pageTokenCache.get(key);
   if (cached) return cached;
@@ -57,7 +57,7 @@ async function resolvePageAccessToken(pageId: string, token: string): Promise<st
 }
 
 /** A Meta pede um Page Access Token e o token enviado era de usuário do sistema. */
-function needsPageAccessToken(err: unknown): boolean {
+export function needsPageAccessToken(err: unknown): boolean {
   if (!axios.isAxiosError(err)) return false;
   const error = err.response?.data?.error;
   return error?.code === 190 && /Page Access Token/i.test(String(error?.message ?? ''));

@@ -422,7 +422,7 @@ async function processInstagramEcho(
 }
 
 /** Saída idêntica gravada há menos de 2 minutos — provável echo do que nós mesmos enviamos. */
-async function hasRecentOutboundDuplicate(
+export async function hasRecentOutboundDuplicate(
   conversationId: string,
   body: string | undefined,
   contentType: string

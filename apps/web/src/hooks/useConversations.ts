@@ -10,7 +10,7 @@ import {
 } from '@/lib/queries';
 import type { Conversation } from '@/types';
 
-export type ChannelTypeFilter = 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram';
+export type ChannelTypeFilter = 'all' | 'whatsapp' | 'whatsapp_baileys' | 'instagram' | 'facebook';
 /** 'pergunta' = não respondido E com dúvida real do aluno (ver usePerguntasEsperando). */
 export type RepliedFilter = 'all' | 'replied' | 'not_replied' | 'pergunta';
 /** Só as que o atendente marcou para voltar depois. */
