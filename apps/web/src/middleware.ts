@@ -22,6 +22,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/health',
   '/api/webhooks/whatsapp',
   '/api/webhooks/instagram',
+  '/api/webhooks/messenger',
   '/api/ponto/controlid',
   '/api/lead-tracking',
   '/api/ia/cron/', // qualquer cron (protegido por CRON_SECRET no próprio handler)

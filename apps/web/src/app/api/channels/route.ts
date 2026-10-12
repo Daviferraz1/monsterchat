@@ -44,7 +44,7 @@ export async function GET() {
 }
 
 /**
- * POST /api/channels - Cria um novo canal (WhatsApp ou Instagram)
+ * POST /api/channels - Cria um novo canal (WhatsApp, Instagram ou Facebook Messenger)
  */
 export async function POST(request: NextRequest) {
   if (isSupabasePlaceholder()) {
@@ -81,14 +81,14 @@ export async function POST(request: NextRequest) {
 
     if (!isBaileys && (!externalId || !accessToken)) {
       return NextResponse.json(
-        { error: 'Para WhatsApp ou Instagram, external_id e access_token são obrigatórios' },
+        { error: 'Para WhatsApp, Instagram ou Facebook, external_id e access_token são obrigatórios' },
         { status: 400 }
       );
     }
 
-    if (!['whatsapp', 'instagram', 'whatsapp_baileys'].includes(type)) {
+    if (!['whatsapp', 'instagram', 'whatsapp_baileys', 'facebook'].includes(type)) {
       return NextResponse.json(
-        { error: 'type deve ser "whatsapp", "instagram" ou "whatsapp_baileys"' },
+        { error: 'type deve ser "whatsapp", "instagram", "facebook" ou "whatsapp_baileys"' },
         { status: 400 }
       );
     }

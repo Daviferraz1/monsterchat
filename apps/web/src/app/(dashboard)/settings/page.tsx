@@ -5,7 +5,7 @@ import { MessageCircle, Settings, Megaphone, Bot, Mail, ChevronRight, Users, Ins
 
 const CONFIG_ITEMS = [
   { href: '/settings/equipe', icon: Users, title: 'Equipe e departamentos', description: 'Quem atende, o que cada um vê e para onde transferir conversas' },
-  { href: '/settings/channels', icon: Settings, title: 'Canais', description: 'WhatsApp, Instagram e canais conectados' },
+  { href: '/settings/channels', icon: Settings, title: 'Canais', description: 'WhatsApp, Instagram, Facebook Messenger e canais conectados' },
   { href: '/settings/instagram', icon: Instagram, title: 'Automação Instagram', description: 'Palavra-chave no comentário → link no direct' },
   { href: '/settings/whatsapp', icon: MessageCircle, title: 'Automação WhatsApp', description: 'Palavra-chave na mensagem → material enviado na hora' },
   { href: '/settings/campanhas', icon: Megaphone, title: 'Campanhas', description: 'Campanhas e anúncios' },

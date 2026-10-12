@@ -262,6 +262,9 @@ export function InboxFilters({ filters, onFiltersChange, notRepliedCount = 0, pe
               <option value="instagram" className="bg-[#1a1a2e]">
                 Instagram
               </option>
+              <option value="facebook" className="bg-[#1a1a2e]">
+                Facebook
+              </option>
             </select>
           </div>
 

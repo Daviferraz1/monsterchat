@@ -7,7 +7,7 @@
  * atendente ou pela IA ganha:
  *
  *   utm_source=monsterchat
- *   utm_medium=whatsapp | instagram
+ *   utm_medium=whatsapp | instagram | facebook
  *   utm_campaign=<slug da página ou da oferta>
  *   utm_content=<quem enviou: slug do atendente ou "ia">
  *   utm_term=<de onde o lead veio antes do chat: utm_source do contato ou "organico">
@@ -20,7 +20,7 @@
  */
 
 export interface RastreioChat {
-  canal: 'whatsapp' | 'instagram';
+  canal: 'whatsapp' | 'instagram' | 'facebook';
   /** Quem enviou, já em slug (use `slugAutor`). */
   autor: string;
   /** utm_source da origem do contato (metadata.campaign), se houver. */

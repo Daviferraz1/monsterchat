@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { MessageCircle, Instagram, Plus, Loader2, RefreshCw, Pencil, Trash2, Bell, QrCode, Bot, ChevronRight } from 'lucide-react';
+import { MessageCircle, Instagram, Facebook, Plus, Loader2, RefreshCw, Pencil, Trash2, Bell, QrCode, Bot, ChevronRight } from 'lucide-react';
 import { useNotificationSoundEnabled } from '@/hooks/useNotificationSoundEnabled';
 
 const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3001') : 'http://localhost:3001';
 
 interface Channel {
   id: string;
-  type: 'whatsapp' | 'instagram' | 'whatsapp_baileys';
+  type: 'whatsapp' | 'instagram' | 'whatsapp_baileys' | 'facebook';
   name: string;
   external_id: string;
   business_account_id: string | null;
@@ -33,7 +33,7 @@ export default function ChannelsPage() {
 
   const [soundEnabled, setSoundEnabled] = useNotificationSoundEnabled();
   const [form, setForm] = useState({
-    type: 'whatsapp' as 'whatsapp' | 'instagram' | 'whatsapp_baileys',
+    type: 'whatsapp' as 'whatsapp' | 'instagram' | 'whatsapp_baileys' | 'facebook',
     name: '',
     external_id: '',
     business_account_id: '',
@@ -172,7 +172,7 @@ export default function ChannelsPage() {
 
   const handleUpdateToken = async (channelId: string) => {
     const newToken = window.prompt(
-      'Cole o novo Access Token do WhatsApp (token expirado pode ser renovado em developers.facebook.com):'
+      'Cole o novo Access Token do canal (token expirado pode ser renovado em developers.facebook.com):'
     );
     if (!newToken?.trim()) return;
     setError(null);
@@ -365,7 +365,7 @@ export default function ChannelsPage() {
 
         <h2 className="text-xl font-bold mb-2">Canais</h2>
         <p className="text-muted-foreground mb-4">
-          Cadastre seu canal do WhatsApp (e depois Instagram) para receber e enviar mensagens. Sem um canal ativo, o webhook não associa mensagens ao inbox.
+          Cadastre seus canais (WhatsApp, Instagram e Facebook Messenger) para receber e enviar mensagens. Sem um canal ativo, o webhook não associa mensagens ao inbox.
         </p>
 
         {/* Formulário */}
@@ -378,12 +378,13 @@ export default function ChannelsPage() {
             <label className="block text-sm font-medium mb-1">Tipo</label>
             <select
               value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'whatsapp' | 'instagram' | 'whatsapp_baileys' }))}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'whatsapp' | 'instagram' | 'whatsapp_baileys' | 'facebook' }))}
               className="w-full px-3 py-2 border rounded-md bg-background"
             >
               <option value="whatsapp">WhatsApp (API Meta)</option>
               <option value="whatsapp_baileys">WhatsApp (QR / Baileys)</option>
               <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook Messenger (Página)</option>
             </select>
             {form.type === 'whatsapp_baileys' && (
               <p className="text-xs text-muted-foreground mt-1">
@@ -407,7 +408,11 @@ export default function ChannelsPage() {
           {form.type !== 'whatsapp_baileys' && (
           <div>
             <label className="block text-sm font-medium mb-1">
-              {form.type === 'whatsapp' ? 'ID do número de telefone (Phone Number ID)' : 'ID da Página do Facebook (Page ID) — para enviar mensagens'}
+              {form.type === 'whatsapp'
+                ? 'ID do número de telefone (Phone Number ID)'
+                : form.type === 'facebook'
+                  ? 'ID da Página do Facebook (Page ID)'
+                  : 'ID da Página do Facebook (Page ID) — para enviar mensagens'}
             </label>
             <input
               type="text"
@@ -422,6 +427,11 @@ export default function ChannelsPage() {
                 <p>Para <strong>enviar</strong> mensagens use o ID da <strong>Página do Facebook</strong> (não o de &quot;Contas do Instagram&quot;).</p>
                 <p>No Meta Business Suite: <strong>Configurações → Contas → Páginas</strong> (não &quot;Contas do Instagram&quot;) → abra a página vinculada ao Instagram → o ID dessa página vai no campo acima.</p>
               </div>
+            )}
+            {form.type === 'facebook' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                O mesmo ID serve para receber e enviar. No Meta Business Suite: <strong>Configurações → Contas → Páginas</strong> → abra a Página → copie o ID. O token abaixo é o <strong>Token de Acesso da Página</strong> com a permissão <code className="bg-muted px-1 rounded">pages_messaging</code> (passo a passo no GUIA_MESSENGER.md).
+              </p>
             )}
           </div>
           )}
@@ -518,6 +528,8 @@ export default function ChannelsPage() {
                 <span className="flex items-center justify-center w-9 h-9 rounded-full bg-muted">
                   {ch.type === 'whatsapp' || ch.type === 'whatsapp_baileys' ? (
                     <MessageCircle className="w-5 h-5 text-green-600" />
+                  ) : ch.type === 'facebook' ? (
+                    <Facebook className="w-5 h-5 text-blue-600" />
                   ) : (
                     <Instagram className="w-5 h-5 text-pink-500" />
                   )}
@@ -640,7 +652,11 @@ export default function ChannelsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    {editingChannel.type === 'instagram' ? 'ID da Página do Facebook (Page ID) — para enviar' : 'External ID'}
+                    {editingChannel.type === 'instagram'
+                      ? 'ID da Página do Facebook (Page ID) — para enviar'
+                      : editingChannel.type === 'facebook'
+                        ? 'ID da Página do Facebook (Page ID)'
+                        : 'External ID'}
                   </label>
                   <input
                     type="text"

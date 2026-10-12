@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { apiEnv } from '@/lib/api/env';
 import { verifyWebhookSignature } from '@/lib/api/utils';
 import { handleInstagramWebhook } from '@/lib/api/webhooks/instagram';
+import { handleMessengerWebhook } from '@/lib/api/webhooks/messenger';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -69,7 +70,13 @@ export async function POST(request: NextRequest) {
     console.log('[Instagram Webhook Route] Body parsed, processing...');
 
     try {
-      await handleInstagramWebhook(body);
+      // A Página do Facebook (Messenger) manda object "page"; se o app da Meta apontar os dois
+      // objetos para esta mesma URL, cada um vai para o seu handler.
+      if (body?.object === 'page') {
+        await handleMessengerWebhook(body);
+      } else {
+        await handleInstagramWebhook(body);
+      }
       console.log('[Instagram Webhook Route] Processing finished OK');
     } catch (error) {
       console.error('[Instagram Webhook Route] Error processing webhook:', error);
