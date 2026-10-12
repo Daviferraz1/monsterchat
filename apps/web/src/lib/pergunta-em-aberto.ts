@@ -9,6 +9,8 @@
  * pergunta para a conversa contar.
  */
 
+import { ehAusenciaInstagram } from './ausencia-instagram';
+
 export interface MensagemAluno {
   tipo: string; // content_type: text, audio, image, reaction, sticker…
   texto: string | null; // corpo, ou a transcrição do áudio
@@ -94,7 +96,9 @@ export function temAssuntoEmAberto(mensagens: MensagemAluno[], nossaUltima?: str
   if (temPerguntaEmAberto(mensagens, nossaUltima)) return true;
   // "Boa noite, quero saber mais sobre o tecnólogo": a saudação não é despedida.
   const limpo = (m: MensagemAluno) => normalizar(m.texto ?? '').replace(SAUDACAO, ' ').trim();
-  const comConteudo = mensagens.filter((m) => !SEM_CONTEUDO.has(m.tipo) && (m.texto ?? '').trim());
+  // Resposta automática do WhatsApp Business do próprio aluno ("Agradecemos sua mensagem.
+  // Não estamos disponíveis no momento...") não é assunto: ninguém escreveu aquilo.
+  const comConteudo = mensagens.filter((m) => !SEM_CONTEUDO.has(m.tipo) && (m.texto ?? '').trim() && !ehAusenciaInstagram(m.texto));
   const ultima = comConteudo[comConteudo.length - 1];
   if (!ultima) return false;
   const temInterrogacao = mensagens.some((m) => (m.texto ?? '').includes('?'));
