@@ -23,6 +23,7 @@ import { supabaseAdmin } from '../supabase';
 import { apiEnv } from '../env';
 import { sendWhatsAppText } from '../services/whatsapp';
 import { sendInstagramText } from '../services/instagram';
+import { marcarLinks, origemDoContato } from '../rastreio-links';
 import { createMessage } from '../services/message';
 import { updateConversation } from '../services/conversation';
 import { isAutopilotEnabled } from './autopilot';
@@ -225,7 +226,7 @@ export interface DecisaoPiloto {
 interface Conversa {
   id: string;
   metadata: Record<string, unknown> | null;
-  contact: { phone?: string; external_id?: string } | null;
+  contact: { phone?: string; external_id?: string; metadata?: unknown } | null;
   channel: { id?: string; type?: string; external_id?: string; access_token?: string } | null;
 }
 
@@ -375,7 +376,9 @@ export async function tratarConversa(c: Conversa, cfg: PilotoConfig, simular = f
     return fechar({ decisao: 'equipe', motivo: 'canal ou destinatário ausente', texto });
   }
   // O direct não tem negrito: os asteriscos do WhatsApp apareceriam no texto.
-  const final = instagram ? texto.replace(/\*([^*\n]+)\*/g, '$1') : texto;
+  // Mesma marcação do envio pelo inbox: acerta o utm_medium para o canal e marca link cru.
+  const marcado = marcarLinks(texto, { canal: instagram ? 'instagram' : 'whatsapp', autor: 'ia', origem: origemDoContato(c.contact?.metadata) });
+  const final = instagram ? marcado.replace(/\*([^*\n]+)\*/g, '$1') : marcado;
   const partes = instagram ? emPartes(final, LIMITE_INSTAGRAM) : [final];
   let enviadas = 0;
   try {
@@ -423,7 +426,7 @@ export async function rodarPiloto(): Promise<ResultadoPiloto> {
     const agora = Date.now();
     const { data: convs } = await supabaseAdmin
       .from('conversations')
-      .select('id, metadata, contact:contacts(phone, external_id), channel:channels(id, type, external_id, access_token)')
+      .select('id, metadata, contact:contacts(phone, external_id, metadata), channel:channels(id, type, external_id, access_token)')
       .neq('status', 'closed')
       .gte('last_message_at', new Date(agora - cfg.janela_min * 60_000).toISOString())
       .lte('last_message_at', new Date(agora - cfg.espera_seg * 1000).toISOString())

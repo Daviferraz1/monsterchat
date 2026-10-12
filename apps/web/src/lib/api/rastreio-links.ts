@@ -13,7 +13,8 @@
  *   utm_term=<de onde o lead veio antes do chat: utm_source do contato ou "organico">
  *
  * Link que já traz utm_source fica intacto (ex.: link de anúncio colado pelo
- * atendente). E-mails (atendimento@monsterconcursos.com.br) não são tocados.
+ * atendente); se a marca for nossa, só o utm_medium é acertado para o canal.
+ * E-mails (atendimento@monsterconcursos.com.br) não são tocados.
  * O site repassa essas UTMs até o checkout (UtmPropagator), então vale tanto
  * para link de página quanto de checkout.
  */
@@ -76,7 +77,13 @@ function marcarUm(bruto: string, r: RastreioChat): string {
   } catch {
     return bruto;
   }
-  if (u.searchParams.has('utm_source')) return bruto;
+  if (u.searchParams.has('utm_source')) {
+    // Link que a IA já montou (salesLinkWithUtm) sai sempre com medium "whatsapp", porque
+    // é gerado antes de se saber o canal. A marca é nossa: no envio acerta para o canal real.
+    if (u.searchParams.get('utm_source') !== 'monsterchat' || u.searchParams.get('utm_medium') === r.canal) return bruto;
+    u.searchParams.set('utm_medium', r.canal);
+    return u.toString() + fim;
+  }
   u.searchParams.set('utm_source', 'monsterchat');
   u.searchParams.set('utm_medium', r.canal);
   u.searchParams.set('utm_campaign', campanha(u));
