@@ -115,7 +115,13 @@ function bloqueioNaMensagem(textos: string[]): string | null {
   return null;
 }
 
+/** Rede de Ensino Monster LTDA (Monster Concursos e FAGENIUS). */
+const CNPJ_OFICIAL = '23540427000188';
+
 function bloqueioNaResposta(resposta: string): string | null {
+  // Em 12/10/2026 a IA respondeu de memória um CNPJ que não existe para a FAGENIUS.
+  const cnpjs = resposta.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g) ?? [];
+  if (cnpjs.some((c) => c.replace(/\D/g, '') !== CNPJ_OFICIAL)) return 'cita um CNPJ que não é o da empresa';
   const t = normalizar(resposta);
   for (const [re, motivo] of BLOQUEIOS_RESPOSTA) if (re.test(t)) return motivo;
   return null;
