@@ -46,6 +46,8 @@ export interface AgentContext {
   contactDataBlock?: string;
   /** Lições de estilo aprendidas com as respostas reais da equipe (ver operator-style.ts). */
   styleBlock?: string;
+  /** Catálogo completo em linhas compactas; vai nas instruções, em bloco com cache próprio. */
+  catalogBlock?: string;
 }
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -166,13 +168,14 @@ const tools: Anthropic.Tool[] = [
   {
     name: 'buscar_produto',
     description:
-      'Retorna os cursos que batem com a busca E o catálogo completo (todos os cursos ativos, com links). Use quando o lead pergunta sobre um curso, preço ou intenção de compra. SEMPRE confira o catálogo completo antes de dizer que um curso não existe — o nome pode diferir do que o aluno digitou (ex.: "PMBA" = "PM Bahia").',
+      'Retorna os detalhes dos cursos que batem com a busca: preço, formas de pagamento, links, o que inclui, duração, FAQ e a apresentação pronta. Use quando o lead pergunta sobre um curso, preço ou intenção de compra. Antes de chamar, ache o curso no CATÁLOGO COMPLETO das instruções — o nome pode diferir do que o aluno digitou (ex.: "PMBA" = "PM Bahia") — e busque pelo nome como está lá.',
     input_schema: {
       type: 'object',
       properties: {
         intencao: {
           type: 'string',
-          description: 'Curso/concurso/cargo de interesse (ex.: "bombeiro militar minas", "guarda municipal")',
+          description:
+            'Nome do curso como aparece no CATÁLOGO COMPLETO (ex.: "Curso PM Bahia - 2.500 Vagas"); se não achou lá, o concurso/cargo de interesse (ex.: "guarda municipal")',
         },
       },
       required: ['intencao'],
@@ -397,11 +400,31 @@ function formatProductForTool(p: ProductRow): string {
   return lines.filter(Boolean).join('\n');
 }
 
-/** Linha compacta para listar o catálogo inteiro (com links) sem inflar demais. */
-function formatProductCompact(p: ProductRow): string {
+/**
+ * Linha do índice do catálogo: só o que serve para ACHAR o curso. Preço e link ficam de
+ * fora de propósito: com eles aqui a IA respondia sem chamar buscar_produto, perdia a
+ * apresentação pronta da equipe e mandou o link à vista para quem pediu o plano em 6x.
+ */
+function formatProductIndex(p: ProductRow): string {
   const concurso = [p.target_exam, p.target_role].filter(Boolean).join(' — ');
-  const sales = p.sales_page_url?.trim();
-  return `• ${p.name} (${p.brand.toUpperCase()})${p.status !== 'available' ? ` [${p.status}]` : ''}${concurso ? ` | ${concurso}` : ''} | ${p.price_display} | vendas: ${sales || '-'} | checkout: ${p.checkout_url}`;
+  return `• ${p.name} (${p.brand.toUpperCase()})${p.status !== 'available' ? ` [${p.status}]` : ''}${concurso ? ` | ${concurso}` : ''}`;
+}
+
+/**
+ * Catálogo completo para as instruções. A ordem é fixa (marca, ordem, nome, slug): qualquer
+ * variação entre duas chamadas quebraria o cache do bloco.
+ */
+async function buildCatalogBlock(brand?: string): Promise<string> {
+  const all = await listProducts({ is_active: true, brand });
+  if (!all.length) return '';
+  const ordenado = [...all].sort(
+    (a, b) =>
+      a.brand.localeCompare(b.brand) ||
+      (a.sort_order ?? 0) - (b.sort_order ?? 0) ||
+      a.name.localeCompare(b.name) ||
+      String(a.slug ?? '').localeCompare(String(b.slug ?? ''))
+  );
+  return `CATÁLOGO COMPLETO (índice de todos os cursos ativos). Confira AQUI antes de dizer que um curso não existe — o nome pode diferir do que o aluno digitou (ex.: "PMBA" = "PM Bahia"). É só um índice para LOCALIZAR o curso: preço, formas de pagamento, links, o que inclui, duração, FAQ e a apresentação pronta vêm SEMPRE de buscar_produto, chamado com o nome do curso como está aqui:\n${ordenado.map(formatProductIndex).join('\n')}`;
 }
 
 type SaleRow = {
@@ -633,24 +656,35 @@ async function execTool(name: string, input: Record<string, unknown>, ctx: Agent
       // por "monster" escondia esses produtos da IA, e "o tecnólogo serve pra
       // PCMG?" ficava sem o FAQ oficial. Só o canal da Fagenius filtra.
       const marcaCatalogo = ctx.brand === 'fagenius' ? 'fagenius' : undefined;
-      const [matches, all] = await Promise.all([
+      const [porSemelhanca, todos] = await Promise.all([
         getMatchingProducts(intencao, marcaCatalogo),
         listProducts({ is_active: true, brand: marcaCatalogo }),
       ]);
+      // A IA busca pelo nome que leu no índice: nome exato vem primeiro, antes da semelhança
+      // (que para "PMMG soldado" põe o curso dos Bombeiros na frente).
+      const limpo = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+      const busca = limpo(intencao);
+      const exatos = todos.filter((p) => busca.includes(limpo(p.name)));
+      const matches = [...exatos, ...porSemelhanca.filter((m) => !exatos.some((e) => e.id === m.id))];
       const parts: string[] = [];
       if (matches.length) {
         parts.push('CURSOS QUE MAIS BATEM COM A BUSCA:');
         parts.push(matches.slice(0, 3).map(formatProductForTool).join('\n\n'));
       }
-      if (all.length) {
+      // O catálogo completo saía aqui, ~9,5 mil tokens a preço cheio em mais da metade das
+      // respostas (13/10/2026). Agora vai nas instruções, em bloco com cache (catalogBlock).
+      // Só volta por aqui se as instruções não o trouxerem.
+      if (ctx.catalogBlock) {
         parts.push(
-          'CATÁLOGO COMPLETO (todos os cursos ativos). Confira AQUI antes de dizer que um curso não existe — o nome pode diferir do que o aluno digitou (ex.: "PMBA" = "PM Bahia"):'
+          matches.length
+            ? 'Não é o que o aluno pediu? Confira o CATÁLOGO COMPLETO nas instruções e busque de novo com o nome exato do curso.'
+            : 'Nenhum curso bateu com a busca. Confira o CATÁLOGO COMPLETO nas instruções (o nome pode diferir do que o aluno digitou, ex.: "PMBA" = "PM Bahia") e busque de novo com o nome exato do curso.'
         );
-        parts.push(all.map(formatProductCompact).join('\n'));
-      } else if (!matches.length) {
-        parts.push('Catálogo vazio.');
+      } else {
+        const bloco = await buildCatalogBlock(marcaCatalogo);
+        parts.push(bloco || (matches.length ? '' : 'Catálogo vazio.'));
       }
-      return parts.join('\n\n');
+      return parts.filter(Boolean).join('\n\n');
     }
     case 'consultar_pagamento': {
       const email = input?.email ? String(input.email) : undefined;
@@ -840,7 +874,7 @@ DESCONTO: nunca prometa nem invente desconto. Pedido de desconto de quem diz ser
 
 NOSSO CURSO SERVE PARA ESTE CONCURSO? (ex.: "o tecnólogo serve pra PCMG?", "o sequencial vale para a PP MG?"): chame buscar_produto do nosso curso (o FAQ dele lista os concursos e cargos em que é aceito) junto com buscar_concurso. O que estiver no FAQ do produto é a posição oficial da casa: responda com clareza ("sim, para Investigador e Escrivão; para Delegado, não"), citando os requisitos que o FAQ traz, e só depois a ressalva leve de que o edital novo é que confirma. Não transforme em "depende" o que o FAQ afirma.
 
-NÃO diga que um curso NÃO existe sem antes conferir o CATÁLOGO COMPLETO de buscar_produto: o aluno costuma usar siglas/abreviações (PMBA = PM Bahia, CBMMG = Bombeiros MG, GCM = Guarda Municipal). Se estiver no catálogo, ofereça-o.
+NÃO diga que um curso NÃO existe sem antes conferir o CATÁLOGO COMPLETO (logo abaixo destas instruções): o aluno costuma usar siglas/abreviações (PMBA = PM Bahia, CBMMG = Bombeiros MG, GCM = Guarda Municipal). Se estiver no catálogo, ofereça-o.
 
 TOM:
 - MONSTER: informal, acolhedor, 1–2 emojis no máximo, trate por "você".
@@ -919,6 +953,10 @@ async function runAnthropicAgent(
   const { fixo, variavel } = buildSystemPrompt(ctx);
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: fixo, cache_control: { type: 'ephemeral' } },
+    // Bloco próprio: quando o catálogo muda, só ele é regravado; as regras acima seguem em cache.
+    ...(ctx.catalogBlock
+      ? [{ type: 'text' as const, text: ctx.catalogBlock, cache_control: { type: 'ephemeral' as const } }]
+      : []),
     { type: 'text', text: variavel },
   ];
 
@@ -999,7 +1037,7 @@ async function runGeminiAgent(
     return null;
   }
   const { fixo, variavel } = buildSystemPrompt(ctx);
-  const system = `${fixo}\n\n${variavel}`;
+  const system = [fixo, ctx.catalogBlock, variavel].filter(Boolean).join('\n\n');
   const userParts: Array<Record<string, unknown>> = [{ text: buildUserText(ctx) }];
   for (const im of await fetchImagesRaw(ctx.images)) {
     userParts.push({ inlineData: { mimeType: im.mimeType, data: im.base64 } });
@@ -1162,8 +1200,16 @@ export async function generateAgenticSuggestion(ctx: AgentContext): Promise<stri
     if (pronta !== null) return pronta;
   }
   const inicio = new Date();
-  const [model, styleBlock] = await Promise.all([getAgentModel(), getOperatorStyleBlock()]);
-  const fullCtx: AgentContext = { ...ctx, styleBlock: ctx.styleBlock ?? styleBlock ?? undefined };
+  const [model, styleBlock, catalogBlock] = await Promise.all([
+    getAgentModel(),
+    getOperatorStyleBlock(),
+    buildCatalogBlock(ctx.brand === 'fagenius' ? 'fagenius' : undefined).catch(() => ''),
+  ]);
+  const fullCtx: AgentContext = {
+    ...ctx,
+    styleBlock: ctx.styleBlock ?? styleBlock ?? undefined,
+    catalogBlock: catalogBlock || undefined,
+  };
   const trace: AgentTrace = { tools: [], iterations: 0 };
   const raw = model.startsWith('gemini')
     ? await runGeminiAgent(fullCtx, model, trace)
