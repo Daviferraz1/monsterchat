@@ -187,7 +187,7 @@ function credenciaisDoEmail(corpo: string): { usuario?: string; senha?: string }
  * enviados e, se houver, usuário e senha inicial do e-mail de acesso.
  */
 export async function consultarPortalFagenius(params: { email?: string; cpf?: string }): Promise<string> {
-  if (!pincelConfigurado()) return 'Consulta ao portal da Fagenius (Pincel) não configurada: faltam PINCEL_USER/PINCEL_PASS.';
+  if (!pincelConfigurado()) return 'Consulta ao portal da Fagenius (Pincel) indisponível agora (faltam PINCEL_USER/PINCEL_PASS). NÃO afirme que a matrícula existe nem qual é o usuário ou a senha: diga que a equipe vai conferir o acesso no portal.';
   const cpf = (params.cpf ?? '').replace(/\D/g, '');
   const email = (params.email ?? '').trim().toLowerCase();
   if (cpf.length !== 11 && !email.includes('@')) return 'Informe o CPF ou o e-mail do aluno para consultar o portal da Fagenius.';
